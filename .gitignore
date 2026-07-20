@@ -1,0 +1,11 @@
+.env
+
+node_modules/
+.next/
+
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+CLAUDE.local.md
