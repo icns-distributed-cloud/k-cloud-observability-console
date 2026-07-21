@@ -85,6 +85,23 @@ class AssignmentItem(BaseModel):
     to_t: Optional[datetime]
 
 
+# ---------- POST /api/v1/jobs/train ----------
+class TrainJobRequest(BaseModel):
+    model_id: int
+    batch: int
+    precision: str
+    priority_pref: str
+
+
+# ---------- POST /api/v1/jobs/infer ----------
+class InferJobRequest(BaseModel):
+    model_id: int
+    batch: int
+    precision: str
+    priority_pref: str
+    sla_target: Decimal
+
+
 # ---------- GET /api/v1/jobs ----------
 class JobSummary(BaseModel):
     id: int
