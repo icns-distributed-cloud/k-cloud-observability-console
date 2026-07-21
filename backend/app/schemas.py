@@ -80,9 +80,7 @@ class ClusterDetail(BaseModel):
 class AssignmentItem(BaseModel):
     id: int
     job_id: int
-    accelerator_id: int
     node_id: int
-    allocated_capacity: Decimal
     from_t: datetime
     to_t: Optional[datetime]
 
@@ -122,5 +120,4 @@ class AcceleratorDetail(BaseModel):
     memory_gb: Decimal
     memory_type: Optional[str]
     tdp_w: int
-    total_capacity: Decimal
     metric_profiles: list[MetricProfilePoint]

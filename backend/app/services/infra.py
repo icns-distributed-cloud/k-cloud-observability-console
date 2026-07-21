@@ -100,10 +100,9 @@ def get_cluster_detail(db: Session, cluster_id: int) -> schemas.ClusterDetail | 
         db.query(models.Cluster)
         .options(
             selectinload(models.Cluster.metric_profiles),
-            selectinload(models.Cluster.nodes)
-            .selectinload(models.Node.accelerators)
-            .selectinload(models.Accelerator.assignments),
+            selectinload(models.Cluster.nodes).selectinload(models.Node.accelerators),
             selectinload(models.Cluster.nodes).selectinload(models.Node.metric_profiles),
+            selectinload(models.Cluster.nodes).selectinload(models.Node.assignments),
         )
         .filter(models.Cluster.id == cluster_id)
         .first()
@@ -112,7 +111,7 @@ def get_cluster_detail(db: Session, cluster_id: int) -> schemas.ClusterDetail | 
         return None
 
     accelerators = [a for node in cluster.nodes for a in node.accelerators]
-    assignments = [a for accel in accelerators for a in accel.assignments]
+    assignments = [a for node in cluster.nodes for a in node.assignments]
     now = datetime.utcnow()
     running_job_ids = {
         a.job_id for a in assignments if a.from_t <= now and (a.to_t is None or a.to_t > now)
@@ -163,8 +162,7 @@ def list_cluster_assignments(db: Session, cluster_id: int) -> list[schemas.Assig
 
     assignments = (
         db.query(models.Assignment)
-        .join(models.Accelerator, models.Assignment.accelerator_id == models.Accelerator.id)
-        .join(models.Node, models.Accelerator.node_id == models.Node.id)
+        .join(models.Node, models.Assignment.node_id == models.Node.id)
         .filter(models.Node.cluster_id == cluster_id)
         .all()
     )
@@ -172,9 +170,7 @@ def list_cluster_assignments(db: Session, cluster_id: int) -> list[schemas.Assig
         schemas.AssignmentItem(
             id=a.id,
             job_id=a.job_id,
-            accelerator_id=a.accelerator_id,
-            node_id=a.accelerator.node_id,
-            allocated_capacity=a.allocated_capacity,
+            node_id=a.node_id,
             from_t=a.from_t,
             to_t=a.to_t,
         )
@@ -220,6 +216,5 @@ def get_accelerator_detail(db: Session, accelerator_id: int) -> schemas.Accelera
         memory_gb=accelerator.memory_gb,
         memory_type=accelerator.memory_type,
         tdp_w=accelerator.tdp_w,
-        total_capacity=accelerator.total_capacity,
         metric_profiles=_as_metric_points(accelerator.metric_profiles),
     )

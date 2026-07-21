@@ -56,6 +56,7 @@ class Node(Base):
     cluster: Mapped["Cluster"] = relationship(back_populates="nodes")
     accelerators: Mapped[list["Accelerator"]] = relationship(back_populates="node")
     metric_profiles: Mapped[list["NodeMetricProfile"]] = relationship(back_populates="node")
+    assignments: Mapped[list["Assignment"]] = relationship(back_populates="node")
 
 
 class Accelerator(Base):
@@ -69,11 +70,9 @@ class Accelerator(Base):
     memory_gb: Mapped[Decimal]
     memory_type: Mapped[Optional[str]]
     tdp_w: Mapped[int]
-    total_capacity: Mapped[Decimal]
 
     node: Mapped["Node"] = relationship(back_populates="accelerators")
     metric_profiles: Mapped[list["AcceleratorMetricProfile"]] = relationship(back_populates="accelerator")
-    assignments: Mapped[list["Assignment"]] = relationship(back_populates="accelerator")
     events: Mapped[list["Event"]] = relationship(back_populates="accelerator")
 
 
@@ -154,13 +153,12 @@ class Assignment(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     job_id: Mapped[int] = mapped_column(ForeignKey("job.id"))
-    accelerator_id: Mapped[int] = mapped_column(ForeignKey("accelerator.id"))
-    allocated_capacity: Mapped[Decimal]
+    node_id: Mapped[int] = mapped_column(ForeignKey("node.id"))
     from_t: Mapped[datetime]
     to_t: Mapped[Optional[datetime]]
 
     job: Mapped["Job"] = relationship(back_populates="assignments")
-    accelerator: Mapped["Accelerator"] = relationship(back_populates="assignments")
+    node: Mapped["Node"] = relationship(back_populates="assignments")
 
 
 class Event(Base):
