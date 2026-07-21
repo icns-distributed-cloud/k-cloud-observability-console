@@ -4,6 +4,7 @@ from sqlalchemy import text
 
 from app.config import settings
 from app.database import engine
+from app.routers import infra
 
 app = FastAPI(title="K-Cloud Observability Console API")
 
@@ -13,6 +14,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(infra.router, prefix="/api/v1")
 
 
 @app.get("/health")
