@@ -21,6 +21,24 @@ def get_cluster_detail(cluster_id: int, db: Session = Depends(get_db)) -> schema
     return detail
 
 
+@router.get("/clusters/{cluster_id}/metric-profiles", response_model=list[schemas.MetricProfilePoint])
+def get_cluster_metric_profiles(
+    cluster_id: int, db: Session = Depends(get_db)
+) -> list[schemas.MetricProfilePoint]:
+    profiles = infra_service.get_cluster_metric_profiles(db, cluster_id)
+    if profiles is None:
+        raise HTTPException(status_code=404, detail="cluster not found")
+    return profiles
+
+
+@router.get("/clusters/{cluster_id}/assignments", response_model=list[schemas.AssignmentItem])
+def list_cluster_assignments(cluster_id: int, db: Session = Depends(get_db)) -> list[schemas.AssignmentItem]:
+    assignments = infra_service.list_cluster_assignments(db, cluster_id)
+    if assignments is None:
+        raise HTTPException(status_code=404, detail="cluster not found")
+    return assignments
+
+
 @router.get("/nodes/{node_id}", response_model=schemas.NodeDetail)
 def get_node_detail(node_id: int, db: Session = Depends(get_db)) -> schemas.NodeDetail:
     detail = infra_service.get_node_detail(db, node_id)
