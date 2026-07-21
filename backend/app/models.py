@@ -1,4 +1,5 @@
 from decimal import Decimal
+from typing import Optional
 
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -64,6 +65,7 @@ class Accelerator(Base):
     model_name: Mapped[str]
     tflops: Mapped[Decimal]
     memory_gb: Mapped[Decimal]
+    memory_type: Mapped[Optional[str]]
     tdp_w: Mapped[int]
     total_capacity: Mapped[Decimal]
 
