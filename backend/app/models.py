@@ -1,7 +1,8 @@
+from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import ForeignKey
+from sqlalchemy import ForeignKey, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -42,6 +43,7 @@ class Cluster(Base):
     region: Mapped["Region"] = relationship(back_populates="clusters")
     nodes: Mapped[list["Node"]] = relationship(back_populates="cluster")
     metric_profiles: Mapped[list["ClusterMetricProfile"]] = relationship(back_populates="cluster")
+    events: Mapped[list["Event"]] = relationship(back_populates="cluster")
 
 
 class Node(Base):
@@ -71,6 +73,8 @@ class Accelerator(Base):
 
     node: Mapped["Node"] = relationship(back_populates="accelerators")
     metric_profiles: Mapped[list["AcceleratorMetricProfile"]] = relationship(back_populates="accelerator")
+    assignments: Mapped[list["Assignment"]] = relationship(back_populates="accelerator")
+    events: Mapped[list["Event"]] = relationship(back_populates="accelerator")
 
 
 class ClusterMetricProfile(Base):
@@ -113,3 +117,65 @@ class AcceleratorMetricProfile(Base):
     unit: Mapped[str]
 
     accelerator: Mapped["Accelerator"] = relationship(back_populates="metric_profiles")
+
+
+class Model(Base):
+    __tablename__ = "model"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str]
+    type: Mapped[str]
+
+    jobs: Mapped[list["Job"]] = relationship(back_populates="model")
+
+
+class Job(Base):
+    __tablename__ = "job"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    model_id: Mapped[int] = mapped_column(ForeignKey("model.id"))
+    type: Mapped[str]
+    status: Mapped[str]
+    batch: Mapped[int]
+    precision: Mapped[str]
+    priority_pref: Mapped[str]
+    sla_target: Mapped[Optional[Decimal]]
+    submitted_at: Mapped[datetime]
+    started_at: Mapped[Optional[datetime]]
+    finished_at: Mapped[Optional[datetime]]
+
+    model: Mapped["Model"] = relationship(back_populates="jobs")
+    assignments: Mapped[list["Assignment"]] = relationship(back_populates="job")
+    events: Mapped[list["Event"]] = relationship(back_populates="job")
+
+
+class Assignment(Base):
+    __tablename__ = "assignment"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("job.id"))
+    accelerator_id: Mapped[int] = mapped_column(ForeignKey("accelerator.id"))
+    allocated_capacity: Mapped[Decimal]
+    from_t: Mapped[datetime]
+    to_t: Mapped[Optional[datetime]]
+
+    job: Mapped["Job"] = relationship(back_populates="assignments")
+    accelerator: Mapped["Accelerator"] = relationship(back_populates="assignments")
+
+
+class Event(Base):
+    __tablename__ = "event"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    type: Mapped[str]
+    job_id: Mapped[Optional[int]] = mapped_column(ForeignKey("job.id"))
+    accelerator_id: Mapped[Optional[int]] = mapped_column(ForeignKey("accelerator.id"))
+    cluster_id: Mapped[Optional[int]] = mapped_column(ForeignKey("cluster.id"))
+    # reallocation table doesn't exist yet — plain column, FK added when that domain is built
+    reallocation_id: Mapped[Optional[int]]
+    payload: Mapped[Optional[dict]] = mapped_column(JSON)
+    occurred_at: Mapped[datetime]
+
+    job: Mapped[Optional["Job"]] = relationship(back_populates="events")
+    accelerator: Mapped[Optional["Accelerator"]] = relationship(back_populates="events")
+    cluster: Mapped[Optional["Cluster"]] = relationship(back_populates="events")
