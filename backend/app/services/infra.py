@@ -1,5 +1,6 @@
 import math
 import time
+from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy.orm import Session, selectinload
@@ -81,10 +82,29 @@ def list_providers(db: Session) -> list[schemas.ProviderTree]:
     ]
 
 
+def _as_metric_points(profiles: list) -> list[schemas.MetricProfilePoint]:
+    return [
+        schemas.MetricProfilePoint(
+            metric_type=p.metric_type,
+            baseline=p.baseline,
+            amplitude=p.amplitude,
+            period_sec=p.period_sec,
+            unit=p.unit,
+        )
+        for p in profiles
+    ]
+
+
 def get_cluster_detail(db: Session, cluster_id: int) -> schemas.ClusterDetail | None:
     cluster = (
         db.query(models.Cluster)
-        .options(selectinload(models.Cluster.nodes).selectinload(models.Node.accelerators))
+        .options(
+            selectinload(models.Cluster.metric_profiles),
+            selectinload(models.Cluster.nodes)
+            .selectinload(models.Node.accelerators)
+            .selectinload(models.Accelerator.assignments),
+            selectinload(models.Cluster.nodes).selectinload(models.Node.metric_profiles),
+        )
         .filter(models.Cluster.id == cluster_id)
         .first()
     )
@@ -92,18 +112,74 @@ def get_cluster_detail(db: Session, cluster_id: int) -> schemas.ClusterDetail | 
         return None
 
     accelerators = [a for node in cluster.nodes for a in node.accelerators]
+    assignments = [a for accel in accelerators for a in accel.assignments]
+    now = datetime.utcnow()
+    running_job_ids = {
+        a.job_id for a in assignments if a.from_t <= now and (a.to_t is None or a.to_t > now)
+    }
+    done_job_ids = {a.job_id for a in assignments if a.to_t is not None and a.to_t <= now}
+    # queued jobs aren't tied to any accelerator yet, so this count is global, not cluster-scoped
+    queued_count = db.query(models.Job).filter(models.Job.status == "queued").count()
+
     return schemas.ClusterDetail(
         id=cluster.id,
         name=cluster.name,
         status=cluster.status,
         is_live=cluster.is_live,
         cost_per_hour=cluster.cost_per_hour,
+        avg_util=_metric_value(cluster.metric_profiles, "utilization"),
+        queued_count=queued_count,
+        running_count=len(running_job_ids),
+        done_count=len(done_job_ids),
         nodes=[
-            schemas.NodeSummary(id=node.id, name=node.name, cluster_id=cluster.id)
+            schemas.NodeSummary(
+                id=node.id,
+                name=node.name,
+                cluster_id=cluster.id,
+                metric_profiles=_as_metric_points(node.metric_profiles),
+            )
             for node in cluster.nodes
         ],
         accelerators=_group_accelerators(accelerators),
     )
+
+
+def get_cluster_metric_profiles(db: Session, cluster_id: int) -> list[schemas.MetricProfilePoint] | None:
+    cluster = (
+        db.query(models.Cluster)
+        .options(selectinload(models.Cluster.metric_profiles))
+        .filter(models.Cluster.id == cluster_id)
+        .first()
+    )
+    if cluster is None:
+        return None
+    return _as_metric_points(cluster.metric_profiles)
+
+
+def list_cluster_assignments(db: Session, cluster_id: int) -> list[schemas.AssignmentItem] | None:
+    cluster = db.query(models.Cluster).filter(models.Cluster.id == cluster_id).first()
+    if cluster is None:
+        return None
+
+    assignments = (
+        db.query(models.Assignment)
+        .join(models.Accelerator, models.Assignment.accelerator_id == models.Accelerator.id)
+        .join(models.Node, models.Accelerator.node_id == models.Node.id)
+        .filter(models.Node.cluster_id == cluster_id)
+        .all()
+    )
+    return [
+        schemas.AssignmentItem(
+            id=a.id,
+            job_id=a.job_id,
+            accelerator_id=a.accelerator_id,
+            node_id=a.accelerator.node_id,
+            allocated_capacity=a.allocated_capacity,
+            from_t=a.from_t,
+            to_t=a.to_t,
+        )
+        for a in assignments
+    ]
 
 
 def get_node_detail(db: Session, node_id: int) -> schemas.NodeDetail | None:
@@ -121,16 +197,7 @@ def get_node_detail(db: Session, node_id: int) -> schemas.NodeDetail | None:
         name=node.name,
         cluster_id=node.cluster_id,
         accelerators=_group_accelerators(node.accelerators),
-        metric_profiles=[
-            schemas.MetricProfilePoint(
-                metric_type=p.metric_type,
-                baseline=p.baseline,
-                amplitude=p.amplitude,
-                period_sec=p.period_sec,
-                unit=p.unit,
-            )
-            for p in node.metric_profiles
-        ],
+        metric_profiles=_as_metric_points(node.metric_profiles),
     )
 
 
@@ -154,14 +221,5 @@ def get_accelerator_detail(db: Session, accelerator_id: int) -> schemas.Accelera
         memory_type=accelerator.memory_type,
         tdp_w=accelerator.tdp_w,
         total_capacity=accelerator.total_capacity,
-        metric_profiles=[
-            schemas.MetricProfilePoint(
-                metric_type=p.metric_type,
-                baseline=p.baseline,
-                amplitude=p.amplitude,
-                period_sec=p.period_sec,
-                unit=p.unit,
-            )
-            for p in accelerator.metric_profiles
-        ],
+        metric_profiles=_as_metric_points(accelerator.metric_profiles),
     )

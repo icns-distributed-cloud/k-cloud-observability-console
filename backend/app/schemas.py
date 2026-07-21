@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
@@ -54,6 +55,7 @@ class NodeSummary(BaseModel):
     id: int
     name: str
     cluster_id: int
+    metric_profiles: list[MetricProfilePoint]
 
 
 class ClusterDetail(BaseModel):
@@ -62,8 +64,43 @@ class ClusterDetail(BaseModel):
     status: str
     is_live: bool
     cost_per_hour: Decimal
+    avg_util: float
+    queued_count: int
+    running_count: int
+    done_count: int
     nodes: list[NodeSummary]
     accelerators: list[AcceleratorGroup]
+
+
+# ---------- GET /api/v1/clusters/{cluster_id}/metric-profiles ----------
+# reuses MetricProfilePoint, response is list[MetricProfilePoint]
+
+
+# ---------- GET /api/v1/clusters/{cluster_id}/assignments ----------
+class AssignmentItem(BaseModel):
+    id: int
+    job_id: int
+    accelerator_id: int
+    node_id: int
+    allocated_capacity: Decimal
+    from_t: datetime
+    to_t: Optional[datetime]
+
+
+# ---------- GET /api/v1/jobs ----------
+class JobSummary(BaseModel):
+    id: int
+    model_id: int
+    model_name: str
+    type: str
+    status: str
+    batch: int
+    precision: str
+    priority_pref: str
+    sla_target: Optional[Decimal]
+    submitted_at: datetime
+    started_at: Optional[datetime]
+    finished_at: Optional[datetime]
 
 
 # ---------- GET /api/v1/nodes/{node_id} ----------
