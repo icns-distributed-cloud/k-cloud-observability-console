@@ -108,6 +108,31 @@ def list_jobs(db: Session, status: str | None = None) -> list[schemas.JobSummary
     return [_to_job_summary(job) for job in query.all()]
 
 
+def get_job_detail(db: Session, job_id: int) -> schemas.JobDetail | None:
+    job = (
+        db.query(models.Job)
+        .options(selectinload(models.Job.model), selectinload(models.Job.training_profile))
+        .filter(models.Job.id == job_id)
+        .first()
+    )
+    if job is None:
+        return None
+
+    profile = job.training_profile
+    training_profile = (
+        schemas.JobTrainingProfilePoint(
+            metric_name=profile.metric_name,
+            start_value=profile.start_value,
+            target_value=profile.target_value,
+            curve_shape=profile.curve_shape,
+            noise_amplitude=profile.noise_amplitude,
+        )
+        if profile is not None
+        else None
+    )
+    return schemas.JobDetail(**_to_job_summary(job).model_dump(), training_profile=training_profile)
+
+
 def submit_job(
     db: Session,
     *,

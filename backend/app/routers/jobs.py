@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app import schemas
@@ -17,6 +17,16 @@ def list_jobs(
     status: str | None = None, db: Session = Depends(get_db), _: None = Depends(_sweep)
 ) -> list[schemas.JobSummary]:
     return jobs_service.list_jobs(db, status=status)
+
+
+@router.get("/jobs/{job_id}", response_model=schemas.JobDetail)
+def get_job_detail(
+    job_id: int, db: Session = Depends(get_db), _: None = Depends(_sweep)
+) -> schemas.JobDetail:
+    detail = jobs_service.get_job_detail(db, job_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="job not found")
+    return detail
 
 
 @router.post("/jobs/train", response_model=schemas.JobSummary, status_code=201)
