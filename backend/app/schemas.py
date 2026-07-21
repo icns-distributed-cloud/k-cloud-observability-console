@@ -118,6 +118,19 @@ class JobSummary(BaseModel):
     finished_at: Optional[datetime]
 
 
+# ---------- GET /api/v1/jobs/{job_id} ----------
+class JobTrainingProfilePoint(BaseModel):
+    metric_name: str
+    start_value: Decimal
+    target_value: Decimal
+    curve_shape: str
+    noise_amplitude: Optional[Decimal]
+
+
+class JobDetail(JobSummary):
+    training_profile: Optional[JobTrainingProfilePoint]
+
+
 # ---------- GET /api/v1/nodes/{node_id} ----------
 class NodeDetail(BaseModel):
     id: int
