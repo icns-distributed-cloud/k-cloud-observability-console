@@ -146,6 +146,7 @@ class Job(Base):
     model: Mapped["Model"] = relationship(back_populates="jobs")
     assignments: Mapped[list["Assignment"]] = relationship(back_populates="job")
     events: Mapped[list["Event"]] = relationship(back_populates="job")
+    training_profile: Mapped[Optional["JobTrainingProfile"]] = relationship(back_populates="job")
 
 
 class Assignment(Base):
@@ -177,3 +178,16 @@ class Event(Base):
     job: Mapped[Optional["Job"]] = relationship(back_populates="events")
     accelerator: Mapped[Optional["Accelerator"]] = relationship(back_populates="events")
     cluster: Mapped[Optional["Cluster"]] = relationship(back_populates="events")
+
+
+class JobTrainingProfile(Base):
+    __tablename__ = "job_training_profile"
+
+    job_id: Mapped[int] = mapped_column(ForeignKey("job.id"), primary_key=True)
+    metric_name: Mapped[str]
+    start_value: Mapped[Decimal]
+    target_value: Mapped[Decimal]
+    curve_shape: Mapped[str]
+    noise_amplitude: Mapped[Optional[Decimal]]
+
+    job: Mapped["Job"] = relationship(back_populates="training_profile")
