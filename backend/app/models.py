@@ -141,13 +141,14 @@ class Job(Base):
     status: Mapped[str]
     batch: Mapped[int]
     precision: Mapped[str]
-    priority_pref: Mapped[str]
+    priority_pref: Mapped[str] = mapped_column(ForeignKey("negotiation_story.priority_pref"))
     sla_target: Mapped[Optional[Decimal]]
     submitted_at: Mapped[datetime]
     started_at: Mapped[Optional[datetime]]
     finished_at: Mapped[Optional[datetime]]
 
     model: Mapped["Model"] = relationship(back_populates="jobs")
+    negotiation_story: Mapped["NegotiationStory"] = relationship(back_populates="jobs")
     assignments: Mapped[list["Assignment"]] = relationship(back_populates="job")
     events: Mapped[list["Event"]] = relationship(back_populates="job")
     training_profile: Mapped[Optional["JobTrainingProfile"]] = relationship(back_populates="job")
@@ -284,6 +285,41 @@ class Reallocation(Base):
     receiver_job: Mapped["Job"] = relationship(foreign_keys=[receiver_job_id])
     node: Mapped["Node"] = relationship(back_populates="reallocations")
     events: Mapped[list["Event"]] = relationship(back_populates="reallocation")
+
+
+class NegotiationStory(Base):
+    __tablename__ = "negotiation_story"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    priority_pref: Mapped[str] = mapped_column(unique=True)
+
+    jobs: Mapped[list["Job"]] = relationship(back_populates="negotiation_story")
+    rounds: Mapped[list["NegotiationRound"]] = relationship(back_populates="story")
+
+
+class NegotiationRound(Base):
+    __tablename__ = "negotiation_round"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    story_id: Mapped[int] = mapped_column(ForeignKey("negotiation_story.id"))
+    round_no: Mapped[int]
+    csc_proposal: Mapped[str]
+    csp_proposal: Mapped[str]
+    note: Mapped[Optional[str]]
+
+    story: Mapped["NegotiationStory"] = relationship(back_populates="rounds")
+    candidates: Mapped[list["FeasibleCandidate"]] = relationship(back_populates="round")
+
+
+class FeasibleCandidate(Base):
+    __tablename__ = "feasible_candidate"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    negotiation_round_id: Mapped[int] = mapped_column(ForeignKey("negotiation_round.id"))
+    combo_desc: Mapped[str]
+    score: Mapped[Decimal]
+
+    round: Mapped["NegotiationRound"] = relationship(back_populates="candidates")
 
 
 class ModelLayer(Base):
