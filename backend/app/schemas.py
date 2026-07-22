@@ -176,6 +176,28 @@ class ReallocationItem(BaseModel):
     downtime_sec: Decimal
 
 
+# ---------- GET /api/v1/jobs/{job_id}/negotiations ----------
+class FeasibleCandidateItem(BaseModel):
+    id: int
+    combo_desc: str
+    score: Decimal
+
+
+class NegotiationRoundItem(BaseModel):
+    id: int
+    round_no: int
+    csc_proposal: str
+    csp_proposal: str
+    note: Optional[str]
+    candidates: list[FeasibleCandidateItem]
+
+
+class NegotiationStoryResponse(BaseModel):
+    id: int
+    priority_pref: str
+    rounds: list[NegotiationRoundItem]
+
+
 # ---------- GET /api/v1/jobs/{job_id}/kqv-allocation ----------
 class JobBenchmarkPoint(BaseModel):
     kqv_gain_pct: Optional[Decimal]
