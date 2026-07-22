@@ -50,6 +50,15 @@ class ProviderTree(BaseModel):
     regions: list[RegionTree]
 
 
+# ---------- GET /api/v1/clusters ----------
+class ClusterListItem(BaseModel):
+    id: int
+    name: str
+    status: str
+    is_live: bool
+    cost_per_hour: Decimal
+
+
 # ---------- GET /api/v1/clusters/{cluster_id} ----------
 class NodeSummary(BaseModel):
     id: int
