@@ -4,7 +4,7 @@ from decimal import Decimal
 from fastapi import Depends
 from sqlalchemy.orm import Session, selectinload
 
-from app import models, schemas
+from app import clock, models, schemas
 from app.database import get_db
 
 DURATION_SEC = {"train": 180, "infer": 30}
@@ -90,7 +90,7 @@ def _admit(db: Session, job: models.Job, node: models.Node, now: datetime, event
 
 
 def sweep_and_backfill(db: Session) -> None:
-    now = datetime.utcnow()
+    now = clock.now()
 
     running_jobs = (
         db.query(models.Job)
@@ -179,7 +179,7 @@ def submit_job(
     priority_pref: str,
     sla_target: Decimal | None,
 ) -> schemas.JobSummary:
-    now = datetime.utcnow()
+    now = clock.now()
     job = models.Job(
         model_id=model_id,
         type=job_type,
