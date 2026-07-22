@@ -1,11 +1,10 @@
 import math
 import time
-from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy.orm import Session, selectinload
 
-from app import models, schemas
+from app import clock, models, schemas
 
 
 def _evaluate(baseline: Decimal, amplitude: Decimal, period_sec: int, now: float | None = None) -> float:
@@ -112,7 +111,7 @@ def get_cluster_detail(db: Session, cluster_id: int) -> schemas.ClusterDetail | 
 
     accelerators = [a for node in cluster.nodes for a in node.accelerators]
     assignments = [a for node in cluster.nodes for a in node.assignments]
-    now = datetime.utcnow()
+    now = clock.now()
     running_job_ids = {
         a.job_id for a in assignments if a.from_t <= now and (a.to_t is None or a.to_t > now)
     }
