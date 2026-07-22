@@ -195,6 +195,42 @@ def get_job_detail(db: Session, job_id: int) -> schemas.JobDetail | None:
     )
 
 
+def get_negotiations(db: Session, job_id: int) -> schemas.NegotiationStoryResponse | None:
+    job = db.query(models.Job).filter(models.Job.id == job_id).first()
+    if job is None:
+        return None
+
+    story = (
+        db.query(models.NegotiationStory)
+        .options(
+            selectinload(models.NegotiationStory.rounds).selectinload(
+                models.NegotiationRound.candidates
+            )
+        )
+        .filter(models.NegotiationStory.priority_pref == job.priority_pref)
+        .first()
+    )
+
+    return schemas.NegotiationStoryResponse(
+        id=story.id,
+        priority_pref=story.priority_pref,
+        rounds=[
+            schemas.NegotiationRoundItem(
+                id=r.id,
+                round_no=r.round_no,
+                csc_proposal=r.csc_proposal,
+                csp_proposal=r.csp_proposal,
+                note=r.note,
+                candidates=[
+                    schemas.FeasibleCandidateItem(id=c.id, combo_desc=c.combo_desc, score=c.score)
+                    for c in r.candidates
+                ],
+            )
+            for r in sorted(story.rounds, key=lambda r: r.round_no)
+        ],
+    )
+
+
 def list_reallocations(db: Session, job_id: int) -> list[schemas.ReallocationItem] | None:
     job = db.query(models.Job).filter(models.Job.id == job_id).first()
     if job is None:

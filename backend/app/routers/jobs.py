@@ -53,6 +53,14 @@ def list_reallocations(job_id: int, db: Session = Depends(get_db)) -> list[schem
     return result
 
 
+@router.get("/jobs/{job_id}/negotiations", response_model=schemas.NegotiationStoryResponse)
+def get_negotiations(job_id: int, db: Session = Depends(get_db)) -> schemas.NegotiationStoryResponse:
+    result = jobs_service.get_negotiations(db, job_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="job not found")
+    return result
+
+
 @router.post("/jobs/train", response_model=schemas.JobSummary, status_code=201)
 def submit_train_job(
     req: schemas.TrainJobRequest, db: Session = Depends(get_db), _: None = Depends(jobs_service.sweep_dependency)
