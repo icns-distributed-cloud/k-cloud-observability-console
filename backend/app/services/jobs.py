@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 
 from fastapi import Depends
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
 from app import clock, models, schemas
@@ -192,6 +193,37 @@ def get_job_detail(db: Session, job_id: int) -> schemas.JobDetail | None:
         training_profile=training_profile,
         cache_profile=cache_profile,
     )
+
+
+def list_reallocations(db: Session, job_id: int) -> list[schemas.ReallocationItem] | None:
+    job = db.query(models.Job).filter(models.Job.id == job_id).first()
+    if job is None:
+        return None
+
+    rows = (
+        db.query(models.Reallocation)
+        .filter(
+            or_(
+                models.Reallocation.donor_job_id == job_id,
+                models.Reallocation.receiver_job_id == job_id,
+            )
+        )
+        .order_by(models.Reallocation.at_t_offset_sec)
+        .all()
+    )
+    return [
+        schemas.ReallocationItem(
+            id=r.id,
+            donor_job_id=r.donor_job_id,
+            receiver_job_id=r.receiver_job_id,
+            node_id=r.node_id,
+            at_t_offset_sec=r.at_t_offset_sec,
+            delta_u_gain=r.delta_u_gain,
+            delta_u_loss=r.delta_u_loss,
+            downtime_sec=r.downtime_sec,
+        )
+        for r in rows
+    ]
 
 
 def get_kqv_allocation(db: Session, job_id: int) -> schemas.KqvAllocationResponse | None:

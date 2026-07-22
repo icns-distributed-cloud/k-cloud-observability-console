@@ -45,6 +45,14 @@ def get_kqv_allocation(job_id: int, db: Session = Depends(get_db)) -> schemas.Kq
     return result
 
 
+@router.get("/jobs/{job_id}/reallocations", response_model=list[schemas.ReallocationItem])
+def list_reallocations(job_id: int, db: Session = Depends(get_db)) -> list[schemas.ReallocationItem]:
+    result = jobs_service.list_reallocations(db, job_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="job not found")
+    return result
+
+
 @router.post("/jobs/train", response_model=schemas.JobSummary, status_code=201)
 def submit_train_job(
     req: schemas.TrainJobRequest, db: Session = Depends(get_db), _: None = Depends(jobs_service.sweep_dependency)
