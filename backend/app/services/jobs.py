@@ -1,9 +1,11 @@
 from datetime import datetime, timedelta
 from decimal import Decimal
 
+from fastapi import Depends
 from sqlalchemy.orm import Session, selectinload
 
 from app import models, schemas
+from app.database import get_db
 
 DURATION_SEC = {"train": 180, "infer": 30}
 REQUIRED_KIND = {"train": "GPU"}  # infer: no kind restriction
@@ -60,16 +62,42 @@ def _pick_free_node(
     return None
 
 
-def _admit(db: Session, job: models.Job, node: models.Node, now: datetime) -> None:
+def _log_event(
+    db: Session,
+    *,
+    type: str,
+    now: datetime,
+    job_id: int | None = None,
+    node_id: int | None = None,
+    cluster_id: int | None = None,
+) -> None:
+    db.add(
+        models.Event(
+            type=type,
+            job_id=job_id,
+            node_id=node_id,
+            cluster_id=cluster_id,
+            occurred_at=now,
+        )
+    )
+
+
+def _admit(db: Session, job: models.Job, node: models.Node, now: datetime, event_type: str) -> None:
     db.add(models.Assignment(job_id=job.id, node_id=node.id, from_t=now, to_t=None))
     job.status = "running"
     job.started_at = now
+    _log_event(db, type=event_type, now=now, job_id=job.id, node_id=node.id, cluster_id=node.cluster_id)
 
 
 def sweep_and_backfill(db: Session) -> None:
     now = datetime.utcnow()
 
-    running_jobs = db.query(models.Job).filter(models.Job.status == "running").all()
+    running_jobs = (
+        db.query(models.Job)
+        .filter(models.Job.status == "running")
+        .options(selectinload(models.Job.assignments).selectinload(models.Assignment.node))
+        .all()
+    )
     for job in running_jobs:
         deadline = job.started_at + timedelta(seconds=DURATION_SEC[job.type])
         if deadline <= now:
@@ -78,6 +106,14 @@ def sweep_and_backfill(db: Session) -> None:
             for assignment in job.assignments:
                 if assignment.to_t is None:
                     assignment.to_t = now
+                    _log_event(
+                        db,
+                        type="FINISH",
+                        now=now,
+                        job_id=job.id,
+                        node_id=assignment.node_id,
+                        cluster_id=assignment.node.cluster_id,
+                    )
 
     live_cluster = _load_live_cluster(db)
     if live_cluster is not None:
@@ -91,13 +127,13 @@ def sweep_and_backfill(db: Session) -> None:
         for job in queued_jobs:
             node = _pick_free_node(live_cluster, job.type, occupied)
             if node is not None:
-                _admit(db, job, node, now)
+                _admit(db, job, node, now, event_type="BACKFILL")
                 occupied.add(node.id)
 
     db.commit()
 
 
-def sweep_dependency(db: Session) -> None:
+def sweep_dependency(db: Session = Depends(get_db)) -> None:
     sweep_and_backfill(db)
 
 
@@ -156,13 +192,14 @@ def submit_job(
     )
     db.add(job)
     db.flush()
+    _log_event(db, type="ARRIVAL", now=now, job_id=job.id)
 
     live_cluster = _load_live_cluster(db)
     if live_cluster is not None:
         occupied = _occupied_node_ids(live_cluster, now)
         node = _pick_free_node(live_cluster, job.type, occupied)
         if node is not None:
-            _admit(db, job, node, now)
+            _admit(db, job, node, now, event_type="START")
 
     db.commit()
     db.refresh(job)
