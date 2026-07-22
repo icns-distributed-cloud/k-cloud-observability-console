@@ -194,6 +194,35 @@ def get_job_detail(db: Session, job_id: int) -> schemas.JobDetail | None:
     )
 
 
+def list_hyperparam_adjustments(
+    db: Session, job_id: int
+) -> list[schemas.HyperparamAdjustmentItem] | None:
+    job = db.query(models.Job).filter(models.Job.id == job_id).first()
+    if job is None:
+        return None
+
+    rows = (
+        db.query(models.HyperparamAdjustment)
+        .filter(models.HyperparamAdjustment.job_id == job_id)
+        .order_by(models.HyperparamAdjustment.seq)
+        .all()
+    )
+    return [
+        schemas.HyperparamAdjustmentItem(
+            id=r.id,
+            seq=r.seq,
+            t_offset_sec=r.t_offset_sec,
+            reward=r.reward,
+            batch_size=r.batch_size,
+            data_shard=r.data_shard,
+            workers=r.workers,
+            lr_multiplier=r.lr_multiplier,
+            action=r.action,
+        )
+        for r in rows
+    ]
+
+
 def submit_job(
     db: Session,
     *,
