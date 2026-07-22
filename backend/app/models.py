@@ -59,6 +59,7 @@ class Node(Base):
     assignments: Mapped[list["Assignment"]] = relationship(back_populates="node")
     events: Mapped[list["Event"]] = relationship(back_populates="node")
     kqv_allocations: Mapped[list["KqvAllocation"]] = relationship(back_populates="node")
+    reallocations: Mapped[list["Reallocation"]] = relationship(back_populates="node")
 
 
 class Accelerator(Base):
@@ -178,8 +179,7 @@ class Event(Base):
     node_id: Mapped[Optional[int]] = mapped_column(ForeignKey("node.id"))
     accelerator_id: Mapped[Optional[int]] = mapped_column(ForeignKey("accelerator.id"))
     cluster_id: Mapped[Optional[int]] = mapped_column(ForeignKey("cluster.id"))
-    # reallocation table doesn't exist yet — plain column, FK added when that domain is built
-    reallocation_id: Mapped[Optional[int]]
+    reallocation_id: Mapped[Optional[int]] = mapped_column(ForeignKey("reallocation.id"))
     payload: Mapped[Optional[dict]] = mapped_column(JSON)
     occurred_at: Mapped[datetime]
 
@@ -187,6 +187,7 @@ class Event(Base):
     node: Mapped[Optional["Node"]] = relationship(back_populates="events")
     accelerator: Mapped[Optional["Accelerator"]] = relationship(back_populates="events")
     cluster: Mapped[Optional["Cluster"]] = relationship(back_populates="events")
+    reallocation: Mapped[Optional["Reallocation"]] = relationship(back_populates="events")
 
 
 class JobTrainingProfile(Base):
@@ -265,6 +266,24 @@ class KqvAllocation(Base):
 
     job: Mapped["Job"] = relationship(back_populates="kqv_allocations")
     node: Mapped["Node"] = relationship(back_populates="kqv_allocations")
+
+
+class Reallocation(Base):
+    __tablename__ = "reallocation"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    donor_job_id: Mapped[int] = mapped_column(ForeignKey("job.id"))
+    receiver_job_id: Mapped[int] = mapped_column(ForeignKey("job.id"))
+    node_id: Mapped[int] = mapped_column(ForeignKey("node.id"))
+    at_t_offset_sec: Mapped[int]
+    delta_u_gain: Mapped[Decimal]
+    delta_u_loss: Mapped[Decimal]
+    downtime_sec: Mapped[Decimal]
+
+    donor_job: Mapped["Job"] = relationship(foreign_keys=[donor_job_id])
+    receiver_job: Mapped["Job"] = relationship(foreign_keys=[receiver_job_id])
+    node: Mapped["Node"] = relationship(back_populates="reallocations")
+    events: Mapped[list["Event"]] = relationship(back_populates="reallocation")
 
 
 class ModelLayer(Base):
