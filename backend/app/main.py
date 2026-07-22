@@ -4,7 +4,7 @@ from sqlalchemy import text
 
 from app.config import settings
 from app.database import engine
-from app.routers import events, infra, jobs, models
+from app.routers import caching, events, infra, jobs, models
 
 app = FastAPI(title="K-Cloud Observability Console API")
 
@@ -19,6 +19,7 @@ app.include_router(infra.router, prefix="/api/v1")
 app.include_router(jobs.router, prefix="/api/v1")
 app.include_router(events.router, prefix="/api/v1")
 app.include_router(models.router, prefix="/api/v1")
+app.include_router(caching.router, prefix="/api/v1")
 
 
 @app.get("/health")
