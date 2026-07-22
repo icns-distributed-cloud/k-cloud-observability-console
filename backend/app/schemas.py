@@ -143,6 +143,28 @@ class JobDetail(JobSummary):
     training_profile: Optional[JobTrainingProfilePoint]
 
 
+# ---------- GET /api/v1/models/{model_id}/layers ----------
+class ModelLayerItem(BaseModel):
+    id: int
+    model_id: int
+    op_name: str
+    shape: str
+    gflops: Decimal
+    mem_mb: Decimal
+    characteristic: str
+
+
+class ModelLayerEdgeItem(BaseModel):
+    id: int
+    from_layer_id: int
+    to_layer_id: int
+
+
+class ModelLayersResponse(BaseModel):
+    layers: list[ModelLayerItem]
+    edges: list[ModelLayerEdgeItem]
+
+
 # ---------- GET /api/v1/nodes/{node_id} ----------
 class NodeDetail(BaseModel):
     id: int
