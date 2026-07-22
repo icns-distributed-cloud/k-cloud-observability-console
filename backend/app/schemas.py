@@ -139,8 +139,27 @@ class JobTrainingProfilePoint(BaseModel):
     noise_amplitude: Optional[Decimal]
 
 
+class JobCacheProfilePoint(BaseModel):
+    vram_target_pct: Decimal
+    vram_transfer_gbps: Decimal
+    dram_target_pct: Decimal
+    dram_transfer_gbps: Decimal
+    ssd_target_pct: Decimal
+    ssd_transfer_gbps: Decimal
+    hit_rate_target_pct: Decimal
+    latency_reduction_pct: Decimal
+
+
 class JobDetail(JobSummary):
     training_profile: Optional[JobTrainingProfilePoint]
+    cache_profile: Optional[JobCacheProfilePoint]
+
+
+# ---------- GET /api/v1/cache-prediction-points ----------
+class CachePredictionPointItem(BaseModel):
+    id: int
+    predicted: Decimal
+    actual: Decimal
 
 
 # ---------- GET /api/v1/models/{model_id}/layers ----------

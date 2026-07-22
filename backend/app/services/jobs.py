@@ -147,7 +147,11 @@ def list_jobs(db: Session, status: str | None = None) -> list[schemas.JobSummary
 def get_job_detail(db: Session, job_id: int) -> schemas.JobDetail | None:
     job = (
         db.query(models.Job)
-        .options(selectinload(models.Job.model), selectinload(models.Job.training_profile))
+        .options(
+            selectinload(models.Job.model),
+            selectinload(models.Job.training_profile),
+            selectinload(models.Job.cache_profile),
+        )
         .filter(models.Job.id == job_id)
         .first()
     )
@@ -166,7 +170,28 @@ def get_job_detail(db: Session, job_id: int) -> schemas.JobDetail | None:
         if profile is not None
         else None
     )
-    return schemas.JobDetail(**_to_job_summary(job).model_dump(), training_profile=training_profile)
+
+    cache = job.cache_profile
+    cache_profile = (
+        schemas.JobCacheProfilePoint(
+            vram_target_pct=cache.vram_target_pct,
+            vram_transfer_gbps=cache.vram_transfer_gbps,
+            dram_target_pct=cache.dram_target_pct,
+            dram_transfer_gbps=cache.dram_transfer_gbps,
+            ssd_target_pct=cache.ssd_target_pct,
+            ssd_transfer_gbps=cache.ssd_transfer_gbps,
+            hit_rate_target_pct=cache.hit_rate_target_pct,
+            latency_reduction_pct=cache.latency_reduction_pct,
+        )
+        if cache is not None
+        else None
+    )
+
+    return schemas.JobDetail(
+        **_to_job_summary(job).model_dump(),
+        training_profile=training_profile,
+        cache_profile=cache_profile,
+    )
 
 
 def submit_job(
