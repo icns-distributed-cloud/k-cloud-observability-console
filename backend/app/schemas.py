@@ -164,6 +164,18 @@ class JobDetail(JobSummary):
     cache_profile: Optional[JobCacheProfilePoint]
 
 
+# ---------- GET /api/v1/jobs/{job_id}/reallocations ----------
+class ReallocationItem(BaseModel):
+    id: int
+    donor_job_id: int
+    receiver_job_id: int
+    node_id: int
+    at_t_offset_sec: int
+    delta_u_gain: Decimal
+    delta_u_loss: Decimal
+    downtime_sec: Decimal
+
+
 # ---------- GET /api/v1/jobs/{job_id}/kqv-allocation ----------
 class JobBenchmarkPoint(BaseModel):
     kqv_gain_pct: Optional[Decimal]
