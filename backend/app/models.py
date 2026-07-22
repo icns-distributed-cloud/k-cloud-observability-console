@@ -149,6 +149,7 @@ class Job(Base):
     assignments: Mapped[list["Assignment"]] = relationship(back_populates="job")
     events: Mapped[list["Event"]] = relationship(back_populates="job")
     training_profile: Mapped[Optional["JobTrainingProfile"]] = relationship(back_populates="job")
+    cache_profile: Mapped[Optional["JobCacheProfile"]] = relationship(back_populates="job")
 
 
 class Assignment(Base):
@@ -195,6 +196,30 @@ class JobTrainingProfile(Base):
     noise_amplitude: Mapped[Optional[Decimal]]
 
     job: Mapped["Job"] = relationship(back_populates="training_profile")
+
+
+class JobCacheProfile(Base):
+    __tablename__ = "job_cache_profile"
+
+    job_id: Mapped[int] = mapped_column(ForeignKey("job.id"), primary_key=True)
+    vram_target_pct: Mapped[Decimal]
+    vram_transfer_gbps: Mapped[Decimal]
+    dram_target_pct: Mapped[Decimal]
+    dram_transfer_gbps: Mapped[Decimal]
+    ssd_target_pct: Mapped[Decimal]
+    ssd_transfer_gbps: Mapped[Decimal]
+    hit_rate_target_pct: Mapped[Decimal]
+    latency_reduction_pct: Mapped[Decimal]
+
+    job: Mapped["Job"] = relationship(back_populates="cache_profile")
+
+
+class CachePredictionPoint(Base):
+    __tablename__ = "cache_prediction_point"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    predicted: Mapped[Decimal]
+    actual: Mapped[Decimal]
 
 
 class ModelLayer(Base):
