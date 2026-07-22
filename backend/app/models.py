@@ -57,6 +57,7 @@ class Node(Base):
     accelerators: Mapped[list["Accelerator"]] = relationship(back_populates="node")
     metric_profiles: Mapped[list["NodeMetricProfile"]] = relationship(back_populates="node")
     assignments: Mapped[list["Assignment"]] = relationship(back_populates="node")
+    events: Mapped[list["Event"]] = relationship(back_populates="node")
 
 
 class Accelerator(Base):
@@ -168,6 +169,7 @@ class Event(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     type: Mapped[str]
     job_id: Mapped[Optional[int]] = mapped_column(ForeignKey("job.id"))
+    node_id: Mapped[Optional[int]] = mapped_column(ForeignKey("node.id"))
     accelerator_id: Mapped[Optional[int]] = mapped_column(ForeignKey("accelerator.id"))
     cluster_id: Mapped[Optional[int]] = mapped_column(ForeignKey("cluster.id"))
     # reallocation table doesn't exist yet — plain column, FK added when that domain is built
@@ -176,6 +178,7 @@ class Event(Base):
     occurred_at: Mapped[datetime]
 
     job: Mapped[Optional["Job"]] = relationship(back_populates="events")
+    node: Mapped[Optional["Node"]] = relationship(back_populates="events")
     accelerator: Mapped[Optional["Accelerator"]] = relationship(back_populates="events")
     cluster: Mapped[Optional["Cluster"]] = relationship(back_populates="events")
 
