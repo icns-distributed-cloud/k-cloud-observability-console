@@ -164,6 +164,25 @@ class JobDetail(JobSummary):
     cache_profile: Optional[JobCacheProfilePoint]
 
 
+# ---------- GET /api/v1/jobs/{job_id}/kqv-allocation ----------
+class JobBenchmarkPoint(BaseModel):
+    kqv_gain_pct: Optional[Decimal]
+    kqv_even_makespan_sec: Optional[Decimal]
+    kqv_opt_makespan_sec: Optional[Decimal]
+
+
+class KqvAllocationItem(BaseModel):
+    id: int
+    node_id: int
+    even_shard: Decimal
+    optimized_shard: Decimal
+
+
+class KqvAllocationResponse(BaseModel):
+    benchmark: Optional[JobBenchmarkPoint]
+    allocations: list[KqvAllocationItem]
+
+
 # ---------- GET /api/v1/jobs/{job_id}/hyperparam-adjustment ----------
 class HyperparamAdjustmentItem(BaseModel):
     id: int

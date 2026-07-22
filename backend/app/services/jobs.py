@@ -194,6 +194,38 @@ def get_job_detail(db: Session, job_id: int) -> schemas.JobDetail | None:
     )
 
 
+def get_kqv_allocation(db: Session, job_id: int) -> schemas.KqvAllocationResponse | None:
+    job = (
+        db.query(models.Job)
+        .options(selectinload(models.Job.benchmark), selectinload(models.Job.kqv_allocations))
+        .filter(models.Job.id == job_id)
+        .first()
+    )
+    if job is None:
+        return None
+
+    benchmark = job.benchmark
+    benchmark_point = (
+        schemas.JobBenchmarkPoint(
+            kqv_gain_pct=benchmark.kqv_gain_pct,
+            kqv_even_makespan_sec=benchmark.kqv_even_makespan_sec,
+            kqv_opt_makespan_sec=benchmark.kqv_opt_makespan_sec,
+        )
+        if benchmark is not None
+        else None
+    )
+
+    return schemas.KqvAllocationResponse(
+        benchmark=benchmark_point,
+        allocations=[
+            schemas.KqvAllocationItem(
+                id=a.id, node_id=a.node_id, even_shard=a.even_shard, optimized_shard=a.optimized_shard
+            )
+            for a in job.kqv_allocations
+        ],
+    )
+
+
 def list_hyperparam_adjustments(
     db: Session, job_id: int
 ) -> list[schemas.HyperparamAdjustmentItem] | None:
