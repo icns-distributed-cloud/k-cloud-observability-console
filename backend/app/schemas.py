@@ -155,6 +155,19 @@ class JobDetail(JobSummary):
     cache_profile: Optional[JobCacheProfilePoint]
 
 
+# ---------- GET /api/v1/jobs/{job_id}/hyperparam-adjustment ----------
+class HyperparamAdjustmentItem(BaseModel):
+    id: int
+    seq: int
+    t_offset_sec: int
+    reward: Decimal
+    batch_size: int
+    data_shard: int
+    workers: int
+    lr_multiplier: Decimal
+    action: str
+
+
 # ---------- GET /api/v1/cache-prediction-points ----------
 class CachePredictionPointItem(BaseModel):
     id: int
