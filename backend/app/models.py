@@ -150,6 +150,7 @@ class Job(Base):
     events: Mapped[list["Event"]] = relationship(back_populates="job")
     training_profile: Mapped[Optional["JobTrainingProfile"]] = relationship(back_populates="job")
     cache_profile: Mapped[Optional["JobCacheProfile"]] = relationship(back_populates="job")
+    hyperparam_adjustments: Mapped[list["HyperparamAdjustment"]] = relationship(back_populates="job")
 
 
 class Assignment(Base):
@@ -212,6 +213,23 @@ class JobCacheProfile(Base):
     latency_reduction_pct: Mapped[Decimal]
 
     job: Mapped["Job"] = relationship(back_populates="cache_profile")
+
+
+class HyperparamAdjustment(Base):
+    __tablename__ = "hyperparam_adjustment"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("job.id"))
+    seq: Mapped[int]
+    t_offset_sec: Mapped[int]
+    reward: Mapped[Decimal]
+    batch_size: Mapped[int]
+    data_shard: Mapped[int]
+    workers: Mapped[int]
+    lr_multiplier: Mapped[Decimal]
+    action: Mapped[str]
+
+    job: Mapped["Job"] = relationship(back_populates="hyperparam_adjustments")
 
 
 class CachePredictionPoint(Base):
