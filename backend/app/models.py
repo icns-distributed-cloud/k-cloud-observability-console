@@ -58,6 +58,7 @@ class Node(Base):
     metric_profiles: Mapped[list["NodeMetricProfile"]] = relationship(back_populates="node")
     assignments: Mapped[list["Assignment"]] = relationship(back_populates="node")
     events: Mapped[list["Event"]] = relationship(back_populates="node")
+    kqv_allocations: Mapped[list["KqvAllocation"]] = relationship(back_populates="node")
 
 
 class Accelerator(Base):
@@ -151,6 +152,8 @@ class Job(Base):
     training_profile: Mapped[Optional["JobTrainingProfile"]] = relationship(back_populates="job")
     cache_profile: Mapped[Optional["JobCacheProfile"]] = relationship(back_populates="job")
     hyperparam_adjustments: Mapped[list["HyperparamAdjustment"]] = relationship(back_populates="job")
+    benchmark: Mapped[Optional["JobBenchmark"]] = relationship(back_populates="job")
+    kqv_allocations: Mapped[list["KqvAllocation"]] = relationship(back_populates="job")
 
 
 class Assignment(Base):
@@ -238,6 +241,30 @@ class CachePredictionPoint(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     predicted: Mapped[Decimal]
     actual: Mapped[Decimal]
+
+
+class JobBenchmark(Base):
+    __tablename__ = "job_benchmark"
+
+    job_id: Mapped[int] = mapped_column(ForeignKey("job.id"), primary_key=True)
+    kqv_gain_pct: Mapped[Optional[Decimal]]
+    kqv_even_makespan_sec: Mapped[Optional[Decimal]]
+    kqv_opt_makespan_sec: Mapped[Optional[Decimal]]
+
+    job: Mapped["Job"] = relationship(back_populates="benchmark")
+
+
+class KqvAllocation(Base):
+    __tablename__ = "kqv_allocation"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("job.id"))
+    node_id: Mapped[int] = mapped_column(ForeignKey("node.id"))
+    even_shard: Mapped[Decimal]
+    optimized_shard: Mapped[Decimal]
+
+    job: Mapped["Job"] = relationship(back_populates="kqv_allocations")
+    node: Mapped["Node"] = relationship(back_populates="kqv_allocations")
 
 
 class ModelLayer(Base):
