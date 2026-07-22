@@ -1,12 +1,19 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from app.config import settings
 from app.database import engine
 from app.routers import caching, events, infra, jobs, models
 
 app = FastAPI(title="K-Cloud Observability Console API")
+
+
+@app.exception_handler(IntegrityError)
+async def integrity_error_handler(request: Request, exc: IntegrityError) -> JSONResponse:
+    return JSONResponse(status_code=400, content={"detail": str(exc.orig)})
 
 app.add_middleware(
     CORSMiddleware,
