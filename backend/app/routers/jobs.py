@@ -8,20 +8,16 @@ from app.services import jobs as jobs_service
 router = APIRouter(tags=["jobs"])
 
 
-def _sweep(db: Session = Depends(get_db)) -> None:
-    jobs_service.sweep_dependency(db)
-
-
 @router.get("/jobs", response_model=list[schemas.JobSummary])
 def list_jobs(
-    status: str | None = None, db: Session = Depends(get_db), _: None = Depends(_sweep)
+    status: str | None = None, db: Session = Depends(get_db), _: None = Depends(jobs_service.sweep_dependency)
 ) -> list[schemas.JobSummary]:
     return jobs_service.list_jobs(db, status=status)
 
 
 @router.get("/jobs/{job_id}", response_model=schemas.JobDetail)
 def get_job_detail(
-    job_id: int, db: Session = Depends(get_db), _: None = Depends(_sweep)
+    job_id: int, db: Session = Depends(get_db), _: None = Depends(jobs_service.sweep_dependency)
 ) -> schemas.JobDetail:
     detail = jobs_service.get_job_detail(db, job_id)
     if detail is None:
@@ -31,7 +27,7 @@ def get_job_detail(
 
 @router.post("/jobs/train", response_model=schemas.JobSummary, status_code=201)
 def submit_train_job(
-    req: schemas.TrainJobRequest, db: Session = Depends(get_db), _: None = Depends(_sweep)
+    req: schemas.TrainJobRequest, db: Session = Depends(get_db), _: None = Depends(jobs_service.sweep_dependency)
 ) -> schemas.JobSummary:
     return jobs_service.submit_job(
         db,
@@ -46,7 +42,7 @@ def submit_train_job(
 
 @router.post("/jobs/infer", response_model=schemas.JobSummary, status_code=201)
 def submit_infer_job(
-    req: schemas.InferJobRequest, db: Session = Depends(get_db), _: None = Depends(_sweep)
+    req: schemas.InferJobRequest, db: Session = Depends(get_db), _: None = Depends(jobs_service.sweep_dependency)
 ) -> schemas.JobSummary:
     return jobs_service.submit_job(
         db,

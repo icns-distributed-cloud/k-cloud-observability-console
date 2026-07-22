@@ -85,6 +85,18 @@ class AssignmentItem(BaseModel):
     to_t: Optional[datetime]
 
 
+# ---------- GET /api/v1/events ----------
+class EventItem(BaseModel):
+    id: int
+    type: str
+    job_id: Optional[int]
+    node_id: Optional[int]
+    accelerator_id: Optional[int]
+    cluster_id: Optional[int]
+    payload: Optional[dict]
+    occurred_at: datetime
+
+
 # ---------- POST /api/v1/jobs/train ----------
 class TrainJobRequest(BaseModel):
     model_id: int
