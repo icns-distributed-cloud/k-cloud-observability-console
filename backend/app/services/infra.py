@@ -81,6 +81,20 @@ def list_providers(db: Session) -> list[schemas.ProviderTree]:
     ]
 
 
+def list_clusters(db: Session) -> list[schemas.ClusterListItem]:
+    clusters = db.query(models.Cluster).all()
+    return [
+        schemas.ClusterListItem(
+            id=cluster.id,
+            name=cluster.name,
+            status=cluster.status,
+            is_live=cluster.is_live,
+            cost_per_hour=cluster.cost_per_hour,
+        )
+        for cluster in clusters
+    ]
+
+
 def _as_metric_points(profiles: list) -> list[schemas.MetricProfilePoint]:
     return [
         schemas.MetricProfilePoint(

@@ -13,6 +13,11 @@ def list_providers(db: Session = Depends(get_db)) -> list[schemas.ProviderTree]:
     return infra_service.list_providers(db)
 
 
+@router.get("/clusters", response_model=list[schemas.ClusterListItem])
+def list_clusters(db: Session = Depends(get_db)) -> list[schemas.ClusterListItem]:
+    return infra_service.list_clusters(db)
+
+
 @router.get("/clusters/{cluster_id}", response_model=schemas.ClusterDetail)
 def get_cluster_detail(cluster_id: int, db: Session = Depends(get_db)) -> schemas.ClusterDetail:
     detail = infra_service.get_cluster_detail(db, cluster_id)
