@@ -127,6 +127,7 @@ class Model(Base):
     type: Mapped[str]
 
     jobs: Mapped[list["Job"]] = relationship(back_populates="model")
+    layers: Mapped[list["ModelLayer"]] = relationship(back_populates="model")
 
 
 class Job(Base):
@@ -194,3 +195,28 @@ class JobTrainingProfile(Base):
     noise_amplitude: Mapped[Optional[Decimal]]
 
     job: Mapped["Job"] = relationship(back_populates="training_profile")
+
+
+class ModelLayer(Base):
+    __tablename__ = "model_layer"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    model_id: Mapped[int] = mapped_column(ForeignKey("model.id"))
+    op_name: Mapped[str]
+    shape: Mapped[str]
+    gflops: Mapped[Decimal]
+    mem_mb: Mapped[Decimal]
+    characteristic: Mapped[str]
+
+    model: Mapped["Model"] = relationship(back_populates="layers")
+
+
+class ModelLayerEdge(Base):
+    __tablename__ = "model_layer_edge"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    from_layer_id: Mapped[int] = mapped_column(ForeignKey("model_layer.id"))
+    to_layer_id: Mapped[int] = mapped_column(ForeignKey("model_layer.id"))
+
+    from_layer: Mapped["ModelLayer"] = relationship(foreign_keys=[from_layer_id])
+    to_layer: Mapped["ModelLayer"] = relationship(foreign_keys=[to_layer_id])
