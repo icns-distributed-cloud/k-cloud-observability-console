@@ -37,12 +37,11 @@ def list_hyperparam_adjustments(
     return result
 
 
-@router.get("/jobs/{job_id}/kqv-allocation", response_model=schemas.KqvAllocationResponse)
-def get_kqv_allocation(job_id: int, db: Session = Depends(get_db)) -> schemas.KqvAllocationResponse:
-    result = jobs_service.get_kqv_allocation(db, job_id)
-    if result is None:
-        raise HTTPException(status_code=404, detail="job not found")
-    return result
+@router.get("/jobs/{job_id}/kqv-benchmark", response_model=schemas.JobKqvBenchmarkResponse | None)
+def get_kqv_benchmark(
+    job_id: int, db: Session = Depends(get_db)
+) -> schemas.JobKqvBenchmarkResponse | None:
+    return jobs_service.get_kqv_benchmark(db, job_id)
 
 
 @router.get("/jobs/{job_id}/reallocations", response_model=list[schemas.ReallocationItem])
@@ -53,12 +52,11 @@ def list_reallocations(job_id: int, db: Session = Depends(get_db)) -> list[schem
     return result
 
 
-@router.get("/jobs/{job_id}/negotiations", response_model=schemas.NegotiationStoryResponse)
-def get_negotiations(job_id: int, db: Session = Depends(get_db)) -> schemas.NegotiationStoryResponse:
-    result = jobs_service.get_negotiations(db, job_id)
-    if result is None:
-        raise HTTPException(status_code=404, detail="job not found")
-    return result
+@router.get("/jobs/{job_id}/negotiations", response_model=schemas.JobNegotiationResponse | None)
+def get_negotiations(
+    job_id: int, db: Session = Depends(get_db)
+) -> schemas.JobNegotiationResponse | None:
+    return jobs_service.get_negotiations(db, job_id)
 
 
 @router.post("/jobs/train", response_model=schemas.JobSummary, status_code=201)
