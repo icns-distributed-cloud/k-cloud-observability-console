@@ -122,8 +122,8 @@ class AcceleratorMetricProfile(Base):
     accelerator: Mapped["Accelerator"] = relationship(back_populates="metric_profiles")
 
 
-class ClusterFederationLink(Base):
-    __tablename__ = "cluster_federation_link"
+class ClusterDistributedLink(Base):
+    __tablename__ = "cluster_distributed_link"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     cluster_a_id: Mapped[int] = mapped_column(ForeignKey("cluster.id"))

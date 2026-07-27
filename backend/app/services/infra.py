@@ -99,6 +99,19 @@ def list_clusters(db: Session) -> list[schemas.ClusterListItem]:
     ]
 
 
+def list_distributed_links(db: Session) -> list[schemas.DistributedLinkItem]:
+    links = db.query(models.ClusterDistributedLink).all()
+    return [
+        schemas.DistributedLinkItem(
+            id=link.id,
+            cluster_a_id=link.cluster_a_id,
+            cluster_b_id=link.cluster_b_id,
+            active=link.active,
+        )
+        for link in links
+    ]
+
+
 def _as_metric_points(profiles: list) -> list[schemas.MetricProfilePoint]:
     return [
         schemas.MetricProfilePoint(
