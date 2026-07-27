@@ -1,0 +1,43 @@
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.separator {
+  color: var(--sub);
+  font-size: 13px;
+}
+
+.link,
+.current {
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: 13px;
+  padding: 0;
+  white-space: nowrap;
+}
+
+.link {
+  color: var(--sub);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.link:hover {
+  color: var(--ink);
+}
+
+.current {
+  color: var(--ink);
+  font-weight: 700;
+  cursor: default;
+}
