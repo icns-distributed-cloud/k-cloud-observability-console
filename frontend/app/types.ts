@@ -1,15 +1,19 @@
-// ========== Infra 관련 타입 정의 ==========
-
+// ========== 공통 타입 별칭 ==========
+// TODO: 시드 데이터 확인 후 union literal로 좁히기 
 export type ClusterStatus = string
 export type AcceleratorKind = string
 export type ProviderKind = string
 export type MetricType = string
+export type AlertSeverity = string
 export type JobType = string
 export type JobStatus = string
 export type Precision = string
 export type PriorityPref = string
 export type EventType = string
 export type CurveShape = string
+export type LayerCharacteristic = string
+
+// ========== Infra ==========
 
 export interface ProviderTree {
     id: number
@@ -22,6 +26,8 @@ export interface RegionTree {
     id: number
     name: string
     location: string
+    latitude: string
+    longitude: string
     clusters: ClusterTreeItem[]
 }
 
@@ -33,9 +39,12 @@ export interface Cluster {
     cost_per_hour: string
 }
 
+export type ClusterListItem = Cluster
+
 export interface ClusterTreeItem extends Cluster {
     avg_util: number
     node_count: number
+    has_alert: boolean
 }
 
 export interface ClusterDetail extends Cluster {
@@ -47,11 +56,34 @@ export interface ClusterDetail extends Cluster {
     accelerators: AcceleratorGroup[]
 }
 
+export interface DistributedLinkItem {
+    id: number
+    cluster_a_id: number
+    cluster_b_id: number
+    active: boolean
+}
+
 export interface NodeSummary {
     id: number
     name: string
     cluster_id: number
     metric_profiles: MetricProfilePoint[]
+    alerts: NodeAlertItem[]
+}
+
+export interface NodeDetail {
+    id: number
+    name: string
+    cluster_id: number
+    accelerators: AcceleratorGroup[]
+    metric_profiles: MetricProfilePoint[]
+    alerts: NodeAlertItem[]
+}
+
+export interface NodeAlertItem {
+    id: number
+    severity: AlertSeverity
+    message: string
 }
 
 export interface AcceleratorSpec {
@@ -91,15 +123,8 @@ export interface MetricProfilePoint {
     unit: string
 }
 
-export interface NodeDetail {
-    id: number
-    name: string
-    cluster_id: number
-    accelerators: AcceleratorGroup[]
-    metric_profiles: MetricProfilePoint[]
-}
+// ========== Job ==========
 
-// ========== Job 관련 타입 정의 ==========
 export interface JobSummary {
     id: number
     model_id: number
@@ -116,15 +141,67 @@ export interface JobSummary {
 }
 
 export interface JobDetail extends JobSummary {
-    training_profile: JobTrainingProfilePoint | null
+    metrics: JobMetricProfileItem[]
+    cache: JobCacheSummary | null
 }
 
-export interface JobTrainingProfilePoint {
-    metric_name: string
-    start_value: string
-    target_value: string
-    curve_shape: CurveShape
-    noise_amplitude: string | null
+/** 작업별 지표 곡선 파라미터.
+ *  start_value → target_value 로 curve_shape 형태로 수렴하는 곡선을 프론트에서 생성 */
+export interface JobMetricProfileItem {
+    id: number
+    seq: number
+    label: string
+    unit: string | null
+    start_value: string | null
+    target_value: string | null
+    curve_shape: CurveShape | null
+    total_count: number | null
+    featured: boolean
+}
+
+export interface JobCacheSummary {
+    latency_reduction_pct: string
+    tiers: JobCacheTierItem[]
+}
+
+export interface JobCacheTierItem {
+    id: number
+    tier_name: string
+    fill_pct: string
+    latency_ms: string
+}
+
+export interface HyperparamAdjustmentItem {
+    id: number
+    seq: number
+    t_offset_sec: number
+    param_name: string
+    from_value: string
+    to_value: string
+    reward: string
+}
+
+export interface JobKqvBenchmarkResponse {
+    kqv_gain_pct: string | null
+    kqv_even_makespan_sec: string | null
+    kqv_opt_makespan_sec: string | null
+}
+
+export interface ReallocationItem {
+    id: number
+    donor_job_id: number
+    receiver_job_id: number
+    node_id: number
+    at_t_offset_sec: number
+    downtime_sec: string
+    resume_delay_sec: string
+}
+
+export interface JobNegotiationResponse {
+    rounds: number
+    agreement_pct: string
+    proposed: string[]
+    agreed: string[]
 }
 
 export interface TrainJobRequest {
@@ -142,13 +219,36 @@ export interface InferJobRequest {
     sla_target: number | string
 }
 
-// ========== Event 관련 타입 정의 ==========
+// ========== Model ==========
+
+export interface ModelLayerItem {
+    id: number
+    model_id: number
+    op_name: string
+    shape: string
+    gflops: string
+    mem_mb: string
+    characteristic: LayerCharacteristic
+}
+
+export interface ModelLayerEdgeItem {
+    id: number
+    from_layer_id: number
+    to_layer_id: number
+}
+
+export interface ModelLayersResponse {
+    layers: ModelLayerItem[]
+    edges: ModelLayerEdgeItem[]
+}
+
+// ========== Event ==========
+
 export interface EventItem {
     id: number
     type: EventType
     job_id: number | null
     node_id: number | null
-    accelerator_id: number | null
     cluster_id: number | null
     payload: Record<string, unknown> | null
     occurred_at: string
