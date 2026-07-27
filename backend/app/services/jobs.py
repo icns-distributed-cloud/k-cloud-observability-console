@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 
 from fastapi import Depends
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
 from app import clock, models, schemas
@@ -9,6 +10,86 @@ from app.database import get_db
 
 DURATION_SEC = {"train": 180, "infer": 30}
 REQUIRED_KIND = {"train": "GPU"}  # infer: no kind restriction
+
+# one metric-card template set per job.type, copied verbatim into job_metric_profile on submission
+METRIC_TEMPLATES: dict[str, list[dict]] = {
+    "train": [
+        {
+            "seq": 1,
+            "label": "정확도",
+            "unit": "%",
+            "start_value": Decimal("40"),
+            "target_value": Decimal("92"),
+            "curve_shape": "exp_approach",
+            "total_count": None,
+            "featured": True,
+        },
+        {
+            "seq": 2,
+            "label": "에포크",
+            "unit": None,
+            "start_value": None,
+            "target_value": None,
+            "curve_shape": None,
+            "total_count": 100,
+            "featured": False,
+        },
+    ],
+    "infer": [
+        {
+            "seq": 1,
+            "label": "처리량",
+            "unit": "req/s",
+            "start_value": Decimal("350"),
+            "target_value": Decimal("420"),
+            "curve_shape": "exp_approach",
+            "total_count": None,
+            "featured": True,
+        },
+        {
+            "seq": 2,
+            "label": "p99 지연",
+            "unit": "ms",
+            "start_value": Decimal("38"),
+            "target_value": Decimal("38"),
+            "curve_shape": None,
+            "total_count": None,
+            "featured": False,
+        },
+    ],
+    "distributed": [
+        {
+            "seq": 1,
+            "label": "글로벌 정확도",
+            "unit": "%",
+            "start_value": Decimal("60"),
+            "target_value": Decimal("92"),
+            "curve_shape": "exp_approach",
+            "total_count": None,
+            "featured": True,
+        },
+        {
+            "seq": 2,
+            "label": "라운드",
+            "unit": None,
+            "start_value": None,
+            "target_value": None,
+            "curve_shape": None,
+            "total_count": 50,
+            "featured": False,
+        },
+        {
+            "seq": 3,
+            "label": "참여 사이트",
+            "unit": "곳",
+            "start_value": Decimal("3"),
+            "target_value": Decimal("3"),
+            "curve_shape": None,
+            "total_count": None,
+            "featured": False,
+        },
+    ],
+}
 
 
 def _to_job_summary(job: models.Job) -> schemas.JobSummary:
@@ -82,6 +163,11 @@ def _log_event(
     )
 
 
+def _seed_metric_profiles(db: Session, job: models.Job) -> None:
+    for template in METRIC_TEMPLATES.get(job.type, []):
+        db.add(models.JobMetricProfile(job_id=job.id, **template))
+
+
 def _admit(db: Session, job: models.Job, node: models.Node, now: datetime, event_type: str) -> None:
     db.add(models.Assignment(job_id=job.id, node_id=node.id, from_t=now, to_t=None))
     job.status = "running"
@@ -147,26 +233,144 @@ def list_jobs(db: Session, status: str | None = None) -> list[schemas.JobSummary
 def get_job_detail(db: Session, job_id: int) -> schemas.JobDetail | None:
     job = (
         db.query(models.Job)
-        .options(selectinload(models.Job.model), selectinload(models.Job.training_profile))
+        .options(
+            selectinload(models.Job.model),
+            selectinload(models.Job.metric_profiles),
+            selectinload(models.Job.cache_profile),
+            selectinload(models.Job.cache_tiers),
+        )
         .filter(models.Job.id == job_id)
         .first()
     )
     if job is None:
         return None
 
-    profile = job.training_profile
-    training_profile = (
-        schemas.JobTrainingProfilePoint(
-            metric_name=profile.metric_name,
-            start_value=profile.start_value,
-            target_value=profile.target_value,
-            curve_shape=profile.curve_shape,
-            noise_amplitude=profile.noise_amplitude,
+    metrics = [
+        schemas.JobMetricProfileItem(
+            id=m.id,
+            seq=m.seq,
+            label=m.label,
+            unit=m.unit,
+            start_value=m.start_value,
+            target_value=m.target_value,
+            curve_shape=m.curve_shape,
+            total_count=m.total_count,
+            featured=m.featured,
         )
-        if profile is not None
+        for m in sorted(job.metric_profiles, key=lambda m: m.seq)
+    ]
+
+    cache = (
+        schemas.JobCacheSummary(
+            latency_reduction_pct=job.cache_profile.latency_reduction_pct,
+            tiers=[
+                schemas.JobCacheTierItem(
+                    id=t.id, tier_name=t.tier_name, fill_pct=t.fill_pct, latency_ms=t.latency_ms
+                )
+                for t in job.cache_tiers
+            ],
+        )
+        if job.cache_profile is not None
         else None
     )
-    return schemas.JobDetail(**_to_job_summary(job).model_dump(), training_profile=training_profile)
+
+    return schemas.JobDetail(
+        **_to_job_summary(job).model_dump(),
+        metrics=metrics,
+        cache=cache,
+    )
+
+
+def get_negotiations(db: Session, job_id: int) -> schemas.JobNegotiationResponse | None:
+    negotiation = (
+        db.query(models.JobNegotiation).filter(models.JobNegotiation.job_id == job_id).first()
+    )
+    if negotiation is None:
+        return None
+
+    items = (
+        db.query(models.JobNegotiationItem)
+        .filter(models.JobNegotiationItem.job_id == job_id)
+        .order_by(models.JobNegotiationItem.seq)
+        .all()
+    )
+    return schemas.JobNegotiationResponse(
+        rounds=negotiation.rounds,
+        agreement_pct=negotiation.agreement_pct,
+        proposed=[i.text for i in items if i.side == "proposed"],
+        agreed=[i.text for i in items if i.side == "agreed"],
+    )
+
+
+def list_reallocations(db: Session, job_id: int) -> list[schemas.ReallocationItem] | None:
+    job = db.query(models.Job).filter(models.Job.id == job_id).first()
+    if job is None:
+        return None
+
+    rows = (
+        db.query(models.Reallocation)
+        .filter(
+            or_(
+                models.Reallocation.donor_job_id == job_id,
+                models.Reallocation.receiver_job_id == job_id,
+            )
+        )
+        .order_by(models.Reallocation.at_t_offset_sec)
+        .all()
+    )
+    return [
+        schemas.ReallocationItem(
+            id=r.id,
+            donor_job_id=r.donor_job_id,
+            receiver_job_id=r.receiver_job_id,
+            node_id=r.node_id,
+            at_t_offset_sec=r.at_t_offset_sec,
+            downtime_sec=r.downtime_sec,
+            resume_delay_sec=r.resume_delay_sec,
+        )
+        for r in rows
+    ]
+
+
+def get_kqv_benchmark(db: Session, job_id: int) -> schemas.JobKqvBenchmarkResponse | None:
+    benchmark = (
+        db.query(models.JobKqvBenchmark).filter(models.JobKqvBenchmark.job_id == job_id).first()
+    )
+    if benchmark is None:
+        return None
+
+    return schemas.JobKqvBenchmarkResponse(
+        kqv_gain_pct=benchmark.kqv_gain_pct,
+        kqv_even_makespan_sec=benchmark.kqv_even_makespan_sec,
+        kqv_opt_makespan_sec=benchmark.kqv_opt_makespan_sec,
+    )
+
+
+def list_hyperparam_adjustments(
+    db: Session, job_id: int
+) -> list[schemas.HyperparamAdjustmentItem] | None:
+    job = db.query(models.Job).filter(models.Job.id == job_id).first()
+    if job is None:
+        return None
+
+    rows = (
+        db.query(models.HyperparamAdjustment)
+        .filter(models.HyperparamAdjustment.job_id == job_id)
+        .order_by(models.HyperparamAdjustment.seq)
+        .all()
+    )
+    return [
+        schemas.HyperparamAdjustmentItem(
+            id=r.id,
+            seq=r.seq,
+            t_offset_sec=r.t_offset_sec,
+            param_name=r.param_name,
+            from_value=r.from_value,
+            to_value=r.to_value,
+            reward=r.reward,
+        )
+        for r in rows
+    ]
 
 
 def submit_job(
@@ -192,6 +396,7 @@ def submit_job(
     )
     db.add(job)
     db.flush()
+    _seed_metric_profiles(db, job)
     _log_event(db, type="ARRIVAL", now=now, job_id=job.id)
 
     live_cluster = _load_live_cluster(db)

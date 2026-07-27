@@ -47,7 +47,8 @@ def list_providers(db: Session) -> list[schemas.ProviderTree]:
             .selectinload(models.Cluster.metric_profiles),
             selectinload(models.Provider.regions)
             .selectinload(models.Region.clusters)
-            .selectinload(models.Cluster.nodes),
+            .selectinload(models.Cluster.nodes)
+            .selectinload(models.Node.alerts),
         )
         .all()
     )
@@ -61,6 +62,8 @@ def list_providers(db: Session) -> list[schemas.ProviderTree]:
                     id=region.id,
                     name=region.name,
                     location=region.location,
+                    latitude=region.latitude,
+                    longitude=region.longitude,
                     clusters=[
                         schemas.ClusterTreeItem(
                             id=cluster.id,
@@ -70,6 +73,7 @@ def list_providers(db: Session) -> list[schemas.ProviderTree]:
                             cost_per_hour=cluster.cost_per_hour,
                             avg_util=_metric_value(cluster.metric_profiles, "utilization"),
                             node_count=len(cluster.nodes),
+                            has_alert=any(node.alerts for node in cluster.nodes),
                         )
                         for cluster in region.clusters
                     ],
@@ -78,6 +82,33 @@ def list_providers(db: Session) -> list[schemas.ProviderTree]:
             ],
         )
         for provider in providers
+    ]
+
+
+def list_clusters(db: Session) -> list[schemas.ClusterListItem]:
+    clusters = db.query(models.Cluster).all()
+    return [
+        schemas.ClusterListItem(
+            id=cluster.id,
+            name=cluster.name,
+            status=cluster.status,
+            is_live=cluster.is_live,
+            cost_per_hour=cluster.cost_per_hour,
+        )
+        for cluster in clusters
+    ]
+
+
+def list_distributed_links(db: Session) -> list[schemas.DistributedLinkItem]:
+    links = db.query(models.ClusterDistributedLink).all()
+    return [
+        schemas.DistributedLinkItem(
+            id=link.id,
+            cluster_a_id=link.cluster_a_id,
+            cluster_b_id=link.cluster_b_id,
+            active=link.active,
+        )
+        for link in links
     ]
 
 
@@ -94,6 +125,12 @@ def _as_metric_points(profiles: list) -> list[schemas.MetricProfilePoint]:
     ]
 
 
+def _as_alert_items(alerts: list) -> list[schemas.NodeAlertItem]:
+    return [
+        schemas.NodeAlertItem(id=a.id, severity=a.severity, message=a.message) for a in alerts
+    ]
+
+
 def get_cluster_detail(db: Session, cluster_id: int) -> schemas.ClusterDetail | None:
     cluster = (
         db.query(models.Cluster)
@@ -102,6 +139,7 @@ def get_cluster_detail(db: Session, cluster_id: int) -> schemas.ClusterDetail | 
             selectinload(models.Cluster.nodes).selectinload(models.Node.accelerators),
             selectinload(models.Cluster.nodes).selectinload(models.Node.metric_profiles),
             selectinload(models.Cluster.nodes).selectinload(models.Node.assignments),
+            selectinload(models.Cluster.nodes).selectinload(models.Node.alerts),
         )
         .filter(models.Cluster.id == cluster_id)
         .first()
@@ -135,6 +173,7 @@ def get_cluster_detail(db: Session, cluster_id: int) -> schemas.ClusterDetail | 
                 name=node.name,
                 cluster_id=cluster.id,
                 metric_profiles=_as_metric_points(node.metric_profiles),
+                alerts=_as_alert_items(node.alerts),
             )
             for node in cluster.nodes
         ],
@@ -180,7 +219,11 @@ def list_cluster_assignments(db: Session, cluster_id: int) -> list[schemas.Assig
 def get_node_detail(db: Session, node_id: int) -> schemas.NodeDetail | None:
     node = (
         db.query(models.Node)
-        .options(selectinload(models.Node.accelerators), selectinload(models.Node.metric_profiles))
+        .options(
+            selectinload(models.Node.accelerators),
+            selectinload(models.Node.metric_profiles),
+            selectinload(models.Node.alerts),
+        )
         .filter(models.Node.id == node_id)
         .first()
     )
@@ -193,6 +236,7 @@ def get_node_detail(db: Session, node_id: int) -> schemas.NodeDetail | None:
         cluster_id=node.cluster_id,
         accelerators=_group_accelerators(node.accelerators),
         metric_profiles=_as_metric_points(node.metric_profiles),
+        alerts=_as_alert_items(node.alerts),
     )
 
 
