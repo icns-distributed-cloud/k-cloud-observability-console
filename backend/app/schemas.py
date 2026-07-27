@@ -149,28 +149,33 @@ class JobSummary(BaseModel):
 
 
 # ---------- GET /api/v1/jobs/{job_id} ----------
-class JobTrainingProfilePoint(BaseModel):
-    metric_name: str
-    start_value: Decimal
-    target_value: Decimal
-    curve_shape: str
-    noise_amplitude: Optional[Decimal]
+class JobMetricProfileItem(BaseModel):
+    id: int
+    seq: int
+    label: str
+    unit: Optional[str]
+    start_value: Optional[Decimal]
+    target_value: Optional[Decimal]
+    curve_shape: Optional[str]
+    total_count: Optional[int]
+    featured: bool
 
 
-class JobCacheProfilePoint(BaseModel):
-    vram_target_pct: Decimal
-    vram_transfer_gbps: Decimal
-    dram_target_pct: Decimal
-    dram_transfer_gbps: Decimal
-    ssd_target_pct: Decimal
-    ssd_transfer_gbps: Decimal
-    hit_rate_target_pct: Decimal
+class JobCacheTierItem(BaseModel):
+    id: int
+    tier_name: str
+    fill_pct: Decimal
+    latency_ms: Decimal
+
+
+class JobCacheSummary(BaseModel):
     latency_reduction_pct: Decimal
+    tiers: list[JobCacheTierItem]
 
 
 class JobDetail(JobSummary):
-    training_profile: Optional[JobTrainingProfilePoint]
-    cache_profile: Optional[JobCacheProfilePoint]
+    metrics: list[JobMetricProfileItem]
+    cache: Optional[JobCacheSummary]
 
 
 # ---------- GET /api/v1/jobs/{job_id}/reallocations ----------
@@ -180,50 +185,23 @@ class ReallocationItem(BaseModel):
     receiver_job_id: int
     node_id: int
     at_t_offset_sec: int
-    delta_u_gain: Decimal
-    delta_u_loss: Decimal
     downtime_sec: Decimal
+    resume_delay_sec: Decimal
 
 
 # ---------- GET /api/v1/jobs/{job_id}/negotiations ----------
-class FeasibleCandidateItem(BaseModel):
-    id: int
-    combo_desc: str
-    score: Decimal
+class JobNegotiationResponse(BaseModel):
+    rounds: int
+    agreement_pct: Decimal
+    proposed: list[str]
+    agreed: list[str]
 
 
-class NegotiationRoundItem(BaseModel):
-    id: int
-    round_no: int
-    csc_proposal: str
-    csp_proposal: str
-    note: Optional[str]
-    candidates: list[FeasibleCandidateItem]
-
-
-class NegotiationStoryResponse(BaseModel):
-    id: int
-    priority_pref: str
-    rounds: list[NegotiationRoundItem]
-
-
-# ---------- GET /api/v1/jobs/{job_id}/kqv-allocation ----------
-class JobBenchmarkPoint(BaseModel):
+# ---------- GET /api/v1/jobs/{job_id}/kqv-benchmark ----------
+class JobKqvBenchmarkResponse(BaseModel):
     kqv_gain_pct: Optional[Decimal]
     kqv_even_makespan_sec: Optional[Decimal]
     kqv_opt_makespan_sec: Optional[Decimal]
-
-
-class KqvAllocationItem(BaseModel):
-    id: int
-    node_id: int
-    even_shard: Decimal
-    optimized_shard: Decimal
-
-
-class KqvAllocationResponse(BaseModel):
-    benchmark: Optional[JobBenchmarkPoint]
-    allocations: list[KqvAllocationItem]
 
 
 # ---------- GET /api/v1/jobs/{job_id}/hyperparam-adjustment ----------
@@ -231,19 +209,10 @@ class HyperparamAdjustmentItem(BaseModel):
     id: int
     seq: int
     t_offset_sec: int
-    reward: Decimal
-    batch_size: int
-    data_shard: int
-    workers: int
-    lr_multiplier: Decimal
-    action: str
-
-
-# ---------- GET /api/v1/cache-prediction-points ----------
-class CachePredictionPointItem(BaseModel):
-    id: int
-    predicted: Decimal
-    actual: Decimal
+    param_name: str
+    from_value: str
+    to_value: str
+    reward: str
 
 
 # ---------- GET /api/v1/models/{model_id}/layers ----------
