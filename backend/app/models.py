@@ -25,6 +25,8 @@ class Region(Base):
     provider_id: Mapped[int] = mapped_column(ForeignKey("provider.id"))
     name: Mapped[str]
     location: Mapped[str]
+    latitude: Mapped[Decimal]
+    longitude: Mapped[Decimal]
 
     provider: Mapped["Provider"] = relationship(back_populates="regions")
     clusters: Mapped[list["Cluster"]] = relationship(back_populates="region")
@@ -58,8 +60,8 @@ class Node(Base):
     metric_profiles: Mapped[list["NodeMetricProfile"]] = relationship(back_populates="node")
     assignments: Mapped[list["Assignment"]] = relationship(back_populates="node")
     events: Mapped[list["Event"]] = relationship(back_populates="node")
-    kqv_allocations: Mapped[list["KqvAllocation"]] = relationship(back_populates="node")
     reallocations: Mapped[list["Reallocation"]] = relationship(back_populates="node")
+    alerts: Mapped[list["NodeAlert"]] = relationship(back_populates="node")
 
 
 class Accelerator(Base):
@@ -121,6 +123,29 @@ class AcceleratorMetricProfile(Base):
     accelerator: Mapped["Accelerator"] = relationship(back_populates="metric_profiles")
 
 
+class ClusterFederationLink(Base):
+    __tablename__ = "cluster_federation_link"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    cluster_a_id: Mapped[int] = mapped_column(ForeignKey("cluster.id"))
+    cluster_b_id: Mapped[int] = mapped_column(ForeignKey("cluster.id"))
+    active: Mapped[bool]
+
+    cluster_a: Mapped["Cluster"] = relationship(foreign_keys=[cluster_a_id])
+    cluster_b: Mapped["Cluster"] = relationship(foreign_keys=[cluster_b_id])
+
+
+class NodeAlert(Base):
+    __tablename__ = "node_alert"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    node_id: Mapped[int] = mapped_column(ForeignKey("node.id"))
+    severity: Mapped[str]
+    message: Mapped[str]
+
+    node: Mapped["Node"] = relationship(back_populates="alerts")
+
+
 class Model(Base):
     __tablename__ = "model"
 
@@ -141,21 +166,22 @@ class Job(Base):
     status: Mapped[str]
     batch: Mapped[int]
     precision: Mapped[str]
-    priority_pref: Mapped[str] = mapped_column(ForeignKey("negotiation_story.priority_pref"))
+    priority_pref: Mapped[str]
     sla_target: Mapped[Optional[Decimal]]
     submitted_at: Mapped[datetime]
     started_at: Mapped[Optional[datetime]]
     finished_at: Mapped[Optional[datetime]]
 
     model: Mapped["Model"] = relationship(back_populates="jobs")
-    negotiation_story: Mapped["NegotiationStory"] = relationship(back_populates="jobs")
     assignments: Mapped[list["Assignment"]] = relationship(back_populates="job")
     events: Mapped[list["Event"]] = relationship(back_populates="job")
-    training_profile: Mapped[Optional["JobTrainingProfile"]] = relationship(back_populates="job")
+    metric_profiles: Mapped[list["JobMetricProfile"]] = relationship(back_populates="job")
     cache_profile: Mapped[Optional["JobCacheProfile"]] = relationship(back_populates="job")
+    cache_tiers: Mapped[list["JobCacheTier"]] = relationship(back_populates="job")
     hyperparam_adjustments: Mapped[list["HyperparamAdjustment"]] = relationship(back_populates="job")
-    benchmark: Mapped[Optional["JobBenchmark"]] = relationship(back_populates="job")
-    kqv_allocations: Mapped[list["KqvAllocation"]] = relationship(back_populates="job")
+    kqv_benchmark: Mapped[Optional["JobKqvBenchmark"]] = relationship(back_populates="job")
+    negotiation: Mapped[Optional["JobNegotiation"]] = relationship(back_populates="job")
+    negotiation_items: Mapped[list["JobNegotiationItem"]] = relationship(back_populates="job")
 
 
 class Assignment(Base):
@@ -191,33 +217,42 @@ class Event(Base):
     reallocation: Mapped[Optional["Reallocation"]] = relationship(back_populates="events")
 
 
-class JobTrainingProfile(Base):
-    __tablename__ = "job_training_profile"
+class JobMetricProfile(Base):
+    __tablename__ = "job_metric_profile"
 
-    job_id: Mapped[int] = mapped_column(ForeignKey("job.id"), primary_key=True)
-    metric_name: Mapped[str]
-    start_value: Mapped[Decimal]
-    target_value: Mapped[Decimal]
-    curve_shape: Mapped[str]
-    noise_amplitude: Mapped[Optional[Decimal]]
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("job.id"))
+    seq: Mapped[int]
+    label: Mapped[str]
+    unit: Mapped[Optional[str]]
+    start_value: Mapped[Optional[Decimal]]
+    target_value: Mapped[Optional[Decimal]]
+    curve_shape: Mapped[Optional[str]]
+    total_count: Mapped[Optional[int]]
+    featured: Mapped[bool]
 
-    job: Mapped["Job"] = relationship(back_populates="training_profile")
+    job: Mapped["Job"] = relationship(back_populates="metric_profiles")
 
 
 class JobCacheProfile(Base):
     __tablename__ = "job_cache_profile"
 
     job_id: Mapped[int] = mapped_column(ForeignKey("job.id"), primary_key=True)
-    vram_target_pct: Mapped[Decimal]
-    vram_transfer_gbps: Mapped[Decimal]
-    dram_target_pct: Mapped[Decimal]
-    dram_transfer_gbps: Mapped[Decimal]
-    ssd_target_pct: Mapped[Decimal]
-    ssd_transfer_gbps: Mapped[Decimal]
-    hit_rate_target_pct: Mapped[Decimal]
     latency_reduction_pct: Mapped[Decimal]
 
     job: Mapped["Job"] = relationship(back_populates="cache_profile")
+
+
+class JobCacheTier(Base):
+    __tablename__ = "job_cache_tier"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("job.id"))
+    tier_name: Mapped[str]
+    fill_pct: Mapped[Decimal]
+    latency_ms: Mapped[Decimal]
+
+    job: Mapped["Job"] = relationship(back_populates="cache_tiers")
 
 
 class HyperparamAdjustment(Base):
@@ -227,46 +262,23 @@ class HyperparamAdjustment(Base):
     job_id: Mapped[int] = mapped_column(ForeignKey("job.id"))
     seq: Mapped[int]
     t_offset_sec: Mapped[int]
-    reward: Mapped[Decimal]
-    batch_size: Mapped[int]
-    data_shard: Mapped[int]
-    workers: Mapped[int]
-    lr_multiplier: Mapped[Decimal]
-    action: Mapped[str]
+    param_name: Mapped[str]
+    from_value: Mapped[str]
+    to_value: Mapped[str]
+    reward: Mapped[str]
 
     job: Mapped["Job"] = relationship(back_populates="hyperparam_adjustments")
 
 
-class CachePredictionPoint(Base):
-    __tablename__ = "cache_prediction_point"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    predicted: Mapped[Decimal]
-    actual: Mapped[Decimal]
-
-
-class JobBenchmark(Base):
-    __tablename__ = "job_benchmark"
+class JobKqvBenchmark(Base):
+    __tablename__ = "job_kqv_benchmark"
 
     job_id: Mapped[int] = mapped_column(ForeignKey("job.id"), primary_key=True)
     kqv_gain_pct: Mapped[Optional[Decimal]]
     kqv_even_makespan_sec: Mapped[Optional[Decimal]]
     kqv_opt_makespan_sec: Mapped[Optional[Decimal]]
 
-    job: Mapped["Job"] = relationship(back_populates="benchmark")
-
-
-class KqvAllocation(Base):
-    __tablename__ = "kqv_allocation"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    job_id: Mapped[int] = mapped_column(ForeignKey("job.id"))
-    node_id: Mapped[int] = mapped_column(ForeignKey("node.id"))
-    even_shard: Mapped[Decimal]
-    optimized_shard: Mapped[Decimal]
-
-    job: Mapped["Job"] = relationship(back_populates="kqv_allocations")
-    node: Mapped["Node"] = relationship(back_populates="kqv_allocations")
+    job: Mapped["Job"] = relationship(back_populates="kqv_benchmark")
 
 
 class Reallocation(Base):
@@ -277,9 +289,8 @@ class Reallocation(Base):
     receiver_job_id: Mapped[int] = mapped_column(ForeignKey("job.id"))
     node_id: Mapped[int] = mapped_column(ForeignKey("node.id"))
     at_t_offset_sec: Mapped[int]
-    delta_u_gain: Mapped[Decimal]
-    delta_u_loss: Mapped[Decimal]
     downtime_sec: Mapped[Decimal]
+    resume_delay_sec: Mapped[Decimal]
 
     donor_job: Mapped["Job"] = relationship(foreign_keys=[donor_job_id])
     receiver_job: Mapped["Job"] = relationship(foreign_keys=[receiver_job_id])
@@ -287,39 +298,26 @@ class Reallocation(Base):
     events: Mapped[list["Event"]] = relationship(back_populates="reallocation")
 
 
-class NegotiationStory(Base):
-    __tablename__ = "negotiation_story"
+class JobNegotiation(Base):
+    __tablename__ = "job_negotiation"
+
+    job_id: Mapped[int] = mapped_column(ForeignKey("job.id"), primary_key=True)
+    rounds: Mapped[int]
+    agreement_pct: Mapped[Decimal]
+
+    job: Mapped["Job"] = relationship(back_populates="negotiation")
+
+
+class JobNegotiationItem(Base):
+    __tablename__ = "job_negotiation_item"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    priority_pref: Mapped[str] = mapped_column(unique=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("job.id"))
+    side: Mapped[str]
+    seq: Mapped[int]
+    text: Mapped[str]
 
-    jobs: Mapped[list["Job"]] = relationship(back_populates="negotiation_story")
-    rounds: Mapped[list["NegotiationRound"]] = relationship(back_populates="story")
-
-
-class NegotiationRound(Base):
-    __tablename__ = "negotiation_round"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    story_id: Mapped[int] = mapped_column(ForeignKey("negotiation_story.id"))
-    round_no: Mapped[int]
-    csc_proposal: Mapped[str]
-    csp_proposal: Mapped[str]
-    note: Mapped[Optional[str]]
-
-    story: Mapped["NegotiationStory"] = relationship(back_populates="rounds")
-    candidates: Mapped[list["FeasibleCandidate"]] = relationship(back_populates="round")
-
-
-class FeasibleCandidate(Base):
-    __tablename__ = "feasible_candidate"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    negotiation_round_id: Mapped[int] = mapped_column(ForeignKey("negotiation_round.id"))
-    combo_desc: Mapped[str]
-    score: Mapped[Decimal]
-
-    round: Mapped["NegotiationRound"] = relationship(back_populates="candidates")
+    job: Mapped["Job"] = relationship(back_populates="negotiation_items")
 
 
 class ModelLayer(Base):
