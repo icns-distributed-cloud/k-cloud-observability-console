@@ -5,37 +5,52 @@ import StatCard from "@/components/StatCard";
 import NodeCard from "@/components/NodeCard";
 import Card from "@/components/Card";
 import Sparkline from "@/components/Sparkline";
-import { generateMetricSeries } from "@/lib/metrics";
-import { dummyCluster, dummyClusterMetrics, dummyNodeJobs } from "@/lib/dummyData";
-import type { AcceleratorKind } from "@/app/types";
+import { generateDisplaySeries } from "@/lib/metrics";
+import { fetchClusterDetail, fetchClusterMetrics } from "@/lib/api";
+import { dummyNodeJobs } from "@/lib/dummyData";
+import type { AcceleratorKind, ClusterDetail, MetricProfilePoint } from "@/app/types";
+
 
 const METRIC_LABELS: Record<string, string> = {
   power: "전력 (kW)",
-  util: "활용률 (%)",
+  utilization: "활용률 (%)",
   sla: "SLA 준수 (%)",
 };
 
 export default function ClusterPage() {
   const [now, setNow] = useState<number | null>(null);
+  const [cluster, setCluster] = useState<ClusterDetail | null>(null);
+  const [metrics, setMetrics] = useState<MetricProfilePoint[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setNow(Date.now() / 1000);
   }, []);
 
-  const cluster = dummyCluster;
+  useEffect(() => {
+    Promise.all([fetchClusterDetail(1), fetchClusterMetrics(1)])
+      .then(([c, m]) => {
+        setCluster(c);
+        setMetrics(m);
+      })
+      .catch((e) => setError(String(e)));
+  }, []);
 
   // 노드의 활용률: metric_profiles에서 util 타입을 찾아 baseline을 사용
   const nodeUtil = (nodeId: number): number => {
-    const node = cluster.nodes.find((n) => n.id === nodeId);
+    const node = cluster?.nodes.find((n) => n.id === nodeId);
     const util = node?.metric_profiles.find((m) => m.metric_type === "util");
-    return util ? Number(util.baseline) / 100 : 0;
+    return util ? Number(util.baseline) : 0;
   };
 
   // 노드의 가속기 종류: accelerators에서 node_id로 찾기
   const nodeKind = (nodeId: number): AcceleratorKind => {
-    const acc = cluster.accelerators.find((a) => a.node_id === nodeId);
+    const acc = cluster?.accelerators.find((a) => a.node_id === nodeId);
     return acc?.kind ?? "GPU";
   };
+
+  if (error) return <main style={{ padding: 24 }}>불러오기 실패: {error}</main>;
+  if (!cluster) return <main style={{ padding: 24 }}>불러오는 중…</main>;
 
   return (
     <main style={{ padding: "24px 28px" }}>
@@ -99,17 +114,17 @@ export default function ClusterPage() {
         })}
       </div>
 
-      {now && (
+      {now && metrics.length > 0 && (
         <Card>
           <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 14 }}>
             실시간 모니터링
           </div>
           <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
-            {dummyClusterMetrics.map((m) => (
+            {metrics.map((m) => (
               <Sparkline
                 key={m.metric_type}
                 label={METRIC_LABELS[m.metric_type] ?? m.metric_type}
-                values={generateMetricSeries(m, now)}
+                values={generateDisplaySeries(m, now)}
               />
             ))}
           </div>

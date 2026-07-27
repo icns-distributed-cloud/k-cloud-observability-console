@@ -32,3 +32,17 @@ export function generateMetricSeries(
     return baseline + amplitude * Math.sin((2 * Math.PI * t) / period)
   })
 }
+
+/** 백엔드가 0~1 비율로 주는 지표들. 그 외는 실제 단위 값 그대로 */
+const RATIO_METRICS = new Set(['utilization', 'util', 'mem', 'cpu'])
+
+export function generateDisplaySeries(
+  profile: MetricProfilePoint,
+  toSec: number,
+  spanSec = 300,
+  points = 30
+): number[] {
+  const series = generateMetricSeries(profile, toSec, spanSec, points)
+  const factor = RATIO_METRICS.has(profile.metric_type) ? 100 : 1
+  return series.map((v) => v * factor)
+}

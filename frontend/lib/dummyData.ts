@@ -1,4 +1,4 @@
-import type { ClusterDetail } from '@/app/types'
+import type { ClusterDetail, MetricProfilePoint } from '@/app/types'
 
 export const dummyCluster: ClusterDetail = {
   id: 1,
@@ -14,40 +14,40 @@ export const dummyCluster: ClusterDetail = {
     {
       id: 1, name: 'g0', cluster_id: 1, alerts: [],
       metric_profiles: [
-        { metric_type: 'util', baseline: '82', amplitude: '3', period_sec: 90, unit: '%' },
+        { metric_type: 'util', baseline: '0.82', amplitude: '0.03', period_sec: 90, unit: 'pct' },
       ],
     },
     {
       id: 2, name: 'g1', cluster_id: 1, alerts: [],
       metric_profiles: [
-        { metric_type: 'util', baseline: '80', amplitude: '4', period_sec: 110, unit: '%' },
+        { metric_type: 'util', baseline: '0.80', amplitude: '0.04', period_sec: 110, unit: 'pct' },
       ],
     },
     {
       id: 3, name: 'g2', cluster_id: 1, alerts: [],
       metric_profiles: [
-        { metric_type: 'util', baseline: '74', amplitude: '5', period_sec: 100, unit: '%' },
+        { metric_type: 'util', baseline: '0.74', amplitude: '0.05', period_sec: 100, unit: 'pct' },
       ],
     },
     {
       id: 4, name: 'n0', cluster_id: 1, alerts: [],
       metric_profiles: [
-        { metric_type: 'util', baseline: '50', amplitude: '6', period_sec: 80, unit: '%' },
+        { metric_type: 'util', baseline: '0.50', amplitude: '0.06', period_sec: 80, unit: 'pct' },
       ],
     },
     {
       id: 5, name: 'n1', cluster_id: 1,
       alerts: [
-        { id: 1, severity: 'warning', message: 'SLA 임계 접근 · p99 지연 42ms (목표 40ms 초과)' },
+        { id: 1, severity: 'sla', message: 'SLA 임계 접근 · p99 지연 42ms (목표 40ms 초과)' },
       ],
       metric_profiles: [
-        { metric_type: 'util', baseline: '54', amplitude: '5', period_sec: 95, unit: '%' },
+        { metric_type: 'util', baseline: '0.54', amplitude: '0.05', period_sec: 95, unit: 'pct' },
       ],
     },
     {
       id: 6, name: 'p0', cluster_id: 1, alerts: [],
       metric_profiles: [
-        { metric_type: 'util', baseline: '5', amplitude: '2', period_sec: 120, unit: '%' },
+        { metric_type: 'util', baseline: '0.05', amplitude: '0.02', period_sec: 120, unit: 'pct' },
       ],
     },
   ],
@@ -62,10 +62,10 @@ export const dummyCluster: ClusterDetail = {
 }
 
 /** 클러스터 모니터링용 프로파일 (GET /clusters/{id}/metric-profiles 응답) */
-export const dummyClusterMetrics = [
-  { metric_type: 'power', baseline: '62', amplitude: '5', period_sec: 120, unit: 'kW' },
-  { metric_type: 'util', baseline: '74', amplitude: '6', period_sec: 90, unit: '%' },
-  { metric_type: 'sla', baseline: '99', amplitude: '0.5', period_sec: 200, unit: '%' },
+export const dummyClusterMetrics: MetricProfilePoint[] = [
+  { metric_type: 'utilization', baseline: '0.6', amplitude: '0.1', period_sec: 60, unit: 'pct' },
+  { metric_type: 'power', baseline: '65', amplitude: '5', period_sec: 90, unit: 'kW' },
+  { metric_type: 'sla', baseline: '99', amplitude: '0.5', period_sec: 120, unit: 'pct' },
 ]
 
 /** 노드에서 실행 중인 작업 (실제로는 assignments + jobs 조합으로 구해야 함) */

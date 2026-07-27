@@ -1,17 +1,23 @@
 // ========== 공통 타입 별칭 ==========
-// TODO: 시드 데이터 확인 후 union literal로 좁히기 
-export type ClusterStatus = string
-export type AcceleratorKind = string
-export type ProviderKind = string
-export type MetricType = string
-export type AlertSeverity = string
-export type JobType = string
-export type JobStatus = string
-export type Precision = string
-export type PriorityPref = string
-export type EventType = string
-export type CurveShape = string
-export type LayerCharacteristic = string
+export type ProviderKind = 'onprem' | 'cloud'
+export type ClusterStatus = 'active' | 'standby'
+export type AcceleratorKind = 'GPU' | 'NPU' | 'PIM'
+export type AlertSeverity = 'physical' | 'sla'
+export type JobType = 'train' | 'infer' | 'distributed'
+export type JobStatus = 'queued' | 'running' | 'done'
+export type PriorityPref = 'time' | 'cost' | 'balanced'
+export type CurveShape = 'exp_approach' | 'flat'
+export type LayerCharacteristic = 'compute_bound' | 'memory_bound' | 'balanced'
+export type EventType = 'ARRIVAL' | 'START' | 'BACKFILL' | 'FINISH'
+export type CacheTierName = 'VRAM' | 'DRAM' | 'SSD'
+
+/** 테이블마다 허용값이 다름 (cluster: power/utilization/sla, node: util/cpu/mem/temp, accelerator: util/mem/power) */
+export type MetricType =
+    | 'power' | 'utilization' | 'sla'
+    | 'util' | 'cpu' | 'mem' | 'temp'
+
+// // 시드 기준. 백엔드에 다른 값이 추가되면 여기도 추가 필요
+export type Precision = 'FP16' | 'INT8'
 
 // ========== Infra ==========
 
@@ -166,7 +172,7 @@ export interface JobCacheSummary {
 
 export interface JobCacheTierItem {
     id: number
-    tier_name: string
+    tier_name: CacheTierName
     fill_pct: string
     latency_ms: string
 }
