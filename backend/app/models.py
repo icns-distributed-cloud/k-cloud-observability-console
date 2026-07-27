@@ -78,7 +78,6 @@ class Accelerator(Base):
 
     node: Mapped["Node"] = relationship(back_populates="accelerators")
     metric_profiles: Mapped[list["AcceleratorMetricProfile"]] = relationship(back_populates="accelerator")
-    events: Mapped[list["Event"]] = relationship(back_populates="accelerator")
 
 
 class ClusterMetricProfile(Base):
@@ -204,7 +203,6 @@ class Event(Base):
     type: Mapped[str]
     job_id: Mapped[Optional[int]] = mapped_column(ForeignKey("job.id"))
     node_id: Mapped[Optional[int]] = mapped_column(ForeignKey("node.id"))
-    accelerator_id: Mapped[Optional[int]] = mapped_column(ForeignKey("accelerator.id"))
     cluster_id: Mapped[Optional[int]] = mapped_column(ForeignKey("cluster.id"))
     reallocation_id: Mapped[Optional[int]] = mapped_column(ForeignKey("reallocation.id"))
     payload: Mapped[Optional[dict]] = mapped_column(JSON)
@@ -212,7 +210,6 @@ class Event(Base):
 
     job: Mapped[Optional["Job"]] = relationship(back_populates="events")
     node: Mapped[Optional["Node"]] = relationship(back_populates="events")
-    accelerator: Mapped[Optional["Accelerator"]] = relationship(back_populates="events")
     cluster: Mapped[Optional["Cluster"]] = relationship(back_populates="events")
     reallocation: Mapped[Optional["Reallocation"]] = relationship(back_populates="events")
 

@@ -18,7 +18,6 @@ def list_events(db: Session, since: datetime) -> list[schemas.EventItem]:
             type=e.type,
             job_id=e.job_id,
             node_id=e.node_id,
-            accelerator_id=e.accelerator_id,
             cluster_id=e.cluster_id,
             payload=e.payload,
             occurred_at=e.occurred_at,

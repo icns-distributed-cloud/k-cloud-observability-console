@@ -100,7 +100,6 @@ class EventItem(BaseModel):
     type: str
     job_id: Optional[int]
     node_id: Optional[int]
-    accelerator_id: Optional[int]
     cluster_id: Optional[int]
     payload: Optional[dict]
     occurred_at: datetime
