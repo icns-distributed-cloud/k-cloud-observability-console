@@ -57,7 +57,7 @@ METRIC_TEMPLATES: dict[str, list[dict]] = {
             "featured": False,
         },
     ],
-    "fed": [
+    "distributed": [
         {
             "seq": 1,
             "label": "글로벌 정확도",

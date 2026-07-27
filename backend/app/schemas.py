@@ -68,6 +68,14 @@ class ClusterListItem(BaseModel):
     cost_per_hour: Decimal
 
 
+# ---------- GET /api/v1/distributed-links ----------
+class DistributedLinkItem(BaseModel):
+    id: int
+    cluster_a_id: int
+    cluster_b_id: int
+    active: bool
+
+
 # ---------- GET /api/v1/clusters/{cluster_id} ----------
 class NodeSummary(BaseModel):
     id: int
