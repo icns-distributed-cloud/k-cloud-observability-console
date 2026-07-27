@@ -11,6 +11,86 @@ from app.database import get_db
 DURATION_SEC = {"train": 180, "infer": 30}
 REQUIRED_KIND = {"train": "GPU"}  # infer: no kind restriction
 
+# one metric-card template set per job.type, copied verbatim into job_metric_profile on submission
+METRIC_TEMPLATES: dict[str, list[dict]] = {
+    "train": [
+        {
+            "seq": 1,
+            "label": "정확도",
+            "unit": "%",
+            "start_value": Decimal("40"),
+            "target_value": Decimal("92"),
+            "curve_shape": "exp_approach",
+            "total_count": None,
+            "featured": True,
+        },
+        {
+            "seq": 2,
+            "label": "에포크",
+            "unit": None,
+            "start_value": None,
+            "target_value": None,
+            "curve_shape": None,
+            "total_count": 100,
+            "featured": False,
+        },
+    ],
+    "infer": [
+        {
+            "seq": 1,
+            "label": "처리량",
+            "unit": "req/s",
+            "start_value": Decimal("350"),
+            "target_value": Decimal("420"),
+            "curve_shape": "exp_approach",
+            "total_count": None,
+            "featured": True,
+        },
+        {
+            "seq": 2,
+            "label": "p99 지연",
+            "unit": "ms",
+            "start_value": Decimal("38"),
+            "target_value": Decimal("38"),
+            "curve_shape": None,
+            "total_count": None,
+            "featured": False,
+        },
+    ],
+    "fed": [
+        {
+            "seq": 1,
+            "label": "글로벌 정확도",
+            "unit": "%",
+            "start_value": Decimal("60"),
+            "target_value": Decimal("92"),
+            "curve_shape": "exp_approach",
+            "total_count": None,
+            "featured": True,
+        },
+        {
+            "seq": 2,
+            "label": "라운드",
+            "unit": None,
+            "start_value": None,
+            "target_value": None,
+            "curve_shape": None,
+            "total_count": 50,
+            "featured": False,
+        },
+        {
+            "seq": 3,
+            "label": "참여 사이트",
+            "unit": "곳",
+            "start_value": Decimal("3"),
+            "target_value": Decimal("3"),
+            "curve_shape": None,
+            "total_count": None,
+            "featured": False,
+        },
+    ],
+}
+
 
 def _to_job_summary(job: models.Job) -> schemas.JobSummary:
     return schemas.JobSummary(
@@ -81,6 +161,11 @@ def _log_event(
             occurred_at=now,
         )
     )
+
+
+def _seed_metric_profiles(db: Session, job: models.Job) -> None:
+    for template in METRIC_TEMPLATES.get(job.type, []):
+        db.add(models.JobMetricProfile(job_id=job.id, **template))
 
 
 def _admit(db: Session, job: models.Job, node: models.Node, now: datetime, event_type: str) -> None:
@@ -311,6 +396,7 @@ def submit_job(
     )
     db.add(job)
     db.flush()
+    _seed_metric_profiles(db, job)
     _log_event(db, type="ARRIVAL", now=now, job_id=job.id)
 
     live_cluster = _load_live_cluster(db)
