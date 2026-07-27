@@ -1,3 +1,22 @@
+:root {
+  --bg: #0B1220;
+  --panel: #111B30;
+  --panel-2: #0E1728;
+  --line: #243149;
+  --ink: #E6EDF7;
+  --sub: #8FA1BD;
+  --accent: #6366F1;
+
+  --gpu: #818CF8;
+  --npu: #2DD4BF;
+  --pim: #FB923C;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+}
+
 * {
   box-sizing: border-box;
 }
