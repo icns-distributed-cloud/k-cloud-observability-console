@@ -25,6 +25,12 @@ class AcceleratorGroup(BaseModel):
     count: int
 
 
+class NodeAlertItem(BaseModel):
+    id: int
+    severity: str
+    message: str
+
+
 # ---------- GET /api/v1/providers ----------
 class ClusterTreeItem(BaseModel):
     id: int
@@ -34,12 +40,15 @@ class ClusterTreeItem(BaseModel):
     cost_per_hour: Decimal
     avg_util: float
     node_count: int
+    has_alert: bool
 
 
 class RegionTree(BaseModel):
     id: int
     name: str
     location: str
+    latitude: Decimal
+    longitude: Decimal
     clusters: list[ClusterTreeItem]
 
 
@@ -50,12 +59,30 @@ class ProviderTree(BaseModel):
     regions: list[RegionTree]
 
 
+# ---------- GET /api/v1/clusters ----------
+class ClusterListItem(BaseModel):
+    id: int
+    name: str
+    status: str
+    is_live: bool
+    cost_per_hour: Decimal
+
+
+# ---------- GET /api/v1/distributed-links ----------
+class DistributedLinkItem(BaseModel):
+    id: int
+    cluster_a_id: int
+    cluster_b_id: int
+    active: bool
+
+
 # ---------- GET /api/v1/clusters/{cluster_id} ----------
 class NodeSummary(BaseModel):
     id: int
     name: str
     cluster_id: int
     metric_profiles: list[MetricProfilePoint]
+    alerts: list[NodeAlertItem]
 
 
 class ClusterDetail(BaseModel):
@@ -91,7 +118,6 @@ class EventItem(BaseModel):
     type: str
     job_id: Optional[int]
     node_id: Optional[int]
-    accelerator_id: Optional[int]
     cluster_id: Optional[int]
     payload: Optional[dict]
     occurred_at: datetime
@@ -131,16 +157,92 @@ class JobSummary(BaseModel):
 
 
 # ---------- GET /api/v1/jobs/{job_id} ----------
-class JobTrainingProfilePoint(BaseModel):
-    metric_name: str
-    start_value: Decimal
-    target_value: Decimal
-    curve_shape: str
-    noise_amplitude: Optional[Decimal]
+class JobMetricProfileItem(BaseModel):
+    id: int
+    seq: int
+    label: str
+    unit: Optional[str]
+    start_value: Optional[Decimal]
+    target_value: Optional[Decimal]
+    curve_shape: Optional[str]
+    total_count: Optional[int]
+    featured: bool
+
+
+class JobCacheTierItem(BaseModel):
+    id: int
+    tier_name: str
+    fill_pct: Decimal
+    latency_ms: Decimal
+
+
+class JobCacheSummary(BaseModel):
+    latency_reduction_pct: Decimal
+    tiers: list[JobCacheTierItem]
 
 
 class JobDetail(JobSummary):
-    training_profile: Optional[JobTrainingProfilePoint]
+    metrics: list[JobMetricProfileItem]
+    cache: Optional[JobCacheSummary]
+
+
+# ---------- GET /api/v1/jobs/{job_id}/reallocations ----------
+class ReallocationItem(BaseModel):
+    id: int
+    donor_job_id: int
+    receiver_job_id: int
+    node_id: int
+    at_t_offset_sec: int
+    downtime_sec: Decimal
+    resume_delay_sec: Decimal
+
+
+# ---------- GET /api/v1/jobs/{job_id}/negotiations ----------
+class JobNegotiationResponse(BaseModel):
+    rounds: int
+    agreement_pct: Decimal
+    proposed: list[str]
+    agreed: list[str]
+
+
+# ---------- GET /api/v1/jobs/{job_id}/kqv-benchmark ----------
+class JobKqvBenchmarkResponse(BaseModel):
+    kqv_gain_pct: Optional[Decimal]
+    kqv_even_makespan_sec: Optional[Decimal]
+    kqv_opt_makespan_sec: Optional[Decimal]
+
+
+# ---------- GET /api/v1/jobs/{job_id}/hyperparam-adjustment ----------
+class HyperparamAdjustmentItem(BaseModel):
+    id: int
+    seq: int
+    t_offset_sec: int
+    param_name: str
+    from_value: str
+    to_value: str
+    reward: str
+
+
+# ---------- GET /api/v1/models/{model_id}/layers ----------
+class ModelLayerItem(BaseModel):
+    id: int
+    model_id: int
+    op_name: str
+    shape: str
+    gflops: Decimal
+    mem_mb: Decimal
+    characteristic: str
+
+
+class ModelLayerEdgeItem(BaseModel):
+    id: int
+    from_layer_id: int
+    to_layer_id: int
+
+
+class ModelLayersResponse(BaseModel):
+    layers: list[ModelLayerItem]
+    edges: list[ModelLayerEdgeItem]
 
 
 # ---------- GET /api/v1/nodes/{node_id} ----------
@@ -150,6 +252,7 @@ class NodeDetail(BaseModel):
     cluster_id: int
     accelerators: list[AcceleratorGroup]
     metric_profiles: list[MetricProfilePoint]
+    alerts: list[NodeAlertItem]
 
 
 # ---------- GET /api/v1/accelerators/{accelerator_id} ----------
