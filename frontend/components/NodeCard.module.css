@@ -1,0 +1,67 @@
+.card {
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px;
+  color: var(--ink);
+}
+
+.card.alert {
+  border-color: #EF4444;
+}
+
+.alertDot {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #EF4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.25);
+  animation: alertPulse 1.4s infinite;
+}
+
+@keyframes alertPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.name {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.kind {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--sub);
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+.jobName {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.idle {
+  font-size: 12px;
+  color: var(--sub);
+  margin-bottom: 8px;
+}
+
+.util {
+  font-size: 10.5px;
+  color: var(--sub);
+  margin-top: 6px;
+  font-family: 'IBM Plex Mono', monospace;
+}
