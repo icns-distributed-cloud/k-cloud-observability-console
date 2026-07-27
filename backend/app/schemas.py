@@ -25,6 +25,12 @@ class AcceleratorGroup(BaseModel):
     count: int
 
 
+class NodeAlertItem(BaseModel):
+    id: int
+    severity: str
+    message: str
+
+
 # ---------- GET /api/v1/providers ----------
 class ClusterTreeItem(BaseModel):
     id: int
@@ -34,12 +40,15 @@ class ClusterTreeItem(BaseModel):
     cost_per_hour: Decimal
     avg_util: float
     node_count: int
+    has_alert: bool
 
 
 class RegionTree(BaseModel):
     id: int
     name: str
     location: str
+    latitude: Decimal
+    longitude: Decimal
     clusters: list[ClusterTreeItem]
 
 
@@ -65,6 +74,7 @@ class NodeSummary(BaseModel):
     name: str
     cluster_id: int
     metric_profiles: list[MetricProfilePoint]
+    alerts: list[NodeAlertItem]
 
 
 class ClusterDetail(BaseModel):
@@ -265,6 +275,7 @@ class NodeDetail(BaseModel):
     cluster_id: int
     accelerators: list[AcceleratorGroup]
     metric_profiles: list[MetricProfilePoint]
+    alerts: list[NodeAlertItem]
 
 
 # ---------- GET /api/v1/accelerators/{accelerator_id} ----------
