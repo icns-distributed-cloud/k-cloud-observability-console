@@ -168,11 +168,13 @@ def _seed_metric_profiles(db: Session, job: models.Job) -> None:
         db.add(models.JobMetricProfile(job_id=job.id, **template))
 
 
-def _admit(db: Session, job: models.Job, node: models.Node, now: datetime, event_type: str) -> None:
-    db.add(models.Assignment(job_id=job.id, node_id=node.id, from_t=now, to_t=None))
+def _admit(db: Session, job: models.Job, node: models.Node, start_time: datetime, event_type: str) -> None:
+    db.add(models.Assignment(job_id=job.id, node_id=node.id, from_t=start_time, to_t=None))
     job.status = "running"
-    job.started_at = now
-    _log_event(db, type=event_type, now=now, job_id=job.id, node_id=node.id, cluster_id=node.cluster_id)
+    job.started_at = start_time
+    _log_event(
+        db, type=event_type, now=start_time, job_id=job.id, node_id=node.id, cluster_id=node.cluster_id
+    )
 
 
 def sweep_and_backfill(db: Session) -> None:
@@ -184,18 +186,22 @@ def sweep_and_backfill(db: Session) -> None:
         .options(selectinload(models.Job.assignments).selectinload(models.Assignment.node))
         .all()
     )
+    # node_id -> the correct instant it was vacated (its ex-occupant's deadline),
+    # not whenever this sweep happened to notice
+    freed_at: dict[int, datetime] = {}
     for job in running_jobs:
         deadline = job.started_at + timedelta(seconds=DURATION_SEC[job.type])
         if deadline <= now:
             job.status = "done"
-            job.finished_at = now
+            job.finished_at = deadline
             for assignment in job.assignments:
                 if assignment.to_t is None:
-                    assignment.to_t = now
+                    assignment.to_t = deadline
+                    freed_at[assignment.node_id] = deadline
                     _log_event(
                         db,
                         type="FINISH",
-                        now=now,
+                        now=deadline,
                         job_id=job.id,
                         node_id=assignment.node_id,
                         cluster_id=assignment.node.cluster_id,
@@ -213,7 +219,8 @@ def sweep_and_backfill(db: Session) -> None:
         for job in queued_jobs:
             node = _pick_free_node(live_cluster, job.type, occupied)
             if node is not None:
-                _admit(db, job, node, now, event_type="BACKFILL")
+                start_time = max(job.submitted_at, freed_at.get(node.id, job.submitted_at))
+                _admit(db, job, node, start_time, event_type="BACKFILL")
                 occupied.add(node.id)
 
     db.commit()
@@ -400,11 +407,15 @@ def submit_job(
     _log_event(db, type="ARRIVAL", now=now, job_id=job.id)
 
     live_cluster = _load_live_cluster(db)
+    node = None
     if live_cluster is not None:
         occupied = _occupied_node_ids(live_cluster, now)
         node = _pick_free_node(live_cluster, job.type, occupied)
         if node is not None:
             _admit(db, job, node, now, event_type="START")
+
+    if node is None:
+        _log_event(db, type="QUEUE", now=now, job_id=job.id)
 
     db.commit()
     db.refresh(job)
