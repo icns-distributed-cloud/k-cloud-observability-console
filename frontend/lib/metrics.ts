@@ -32,3 +32,4 @@ export function generateMetricSeries(
     return baseline + amplitude * Math.sin((2 * Math.PI * t) / period)
   })
 }
+
