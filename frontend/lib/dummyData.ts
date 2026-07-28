@@ -63,8 +63,8 @@ export const dummyCluster: ClusterDetail = {
 
 /** 클러스터 모니터링용 프로파일 (GET /clusters/{id}/metric-profiles 응답) */
 export const dummyClusterMetrics: MetricProfilePoint[] = [
-  { metric_type: 'utilization', baseline: '0.6', amplitude: '0.1', period_sec: 60, unit: 'pct' },
-  { metric_type: 'power', baseline: '65', amplitude: '5', period_sec: 90, unit: 'kW' },
+  { metric_type: 'utilization', baseline: '60', amplitude: '10', period_sec: 60, unit: 'pct' },
+  { metric_type: 'power', baseline: '65', amplitude: '8', period_sec: 90, unit: 'kW' },
   { metric_type: 'sla', baseline: '99', amplitude: '0.5', period_sec: 120, unit: 'pct' },
 ]
 

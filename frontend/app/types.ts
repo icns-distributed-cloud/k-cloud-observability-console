@@ -16,8 +16,8 @@ export type MetricType =
     | 'power' | 'utilization' | 'sla'
     | 'util' | 'cpu' | 'mem' | 'temp'
 
-// // 시드 기준. 백엔드에 다른 값이 추가되면 여기도 추가 필요
-export type Precision = 'FP16' | 'INT8'
+
+export type Precision = string
 
 // ========== Infra ==========
 

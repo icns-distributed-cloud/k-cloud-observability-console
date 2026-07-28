@@ -5,7 +5,7 @@ import StatCard from "@/components/StatCard";
 import NodeCard from "@/components/NodeCard";
 import Card from "@/components/Card";
 import Sparkline from "@/components/Sparkline";
-import { generateDisplaySeries } from "@/lib/metrics";
+import { generateMetricSeries } from "@/lib/metrics";
 import { fetchClusterDetail, fetchClusterMetrics } from "@/lib/api";
 import { dummyNodeJobs } from "@/lib/dummyData";
 import type { AcceleratorKind, ClusterDetail, MetricProfilePoint } from "@/app/types";
@@ -40,7 +40,7 @@ export default function ClusterPage() {
   const nodeUtil = (nodeId: number): number => {
     const node = cluster?.nodes.find((n) => n.id === nodeId);
     const util = node?.metric_profiles.find((m) => m.metric_type === "util");
-    return util ? Number(util.baseline) : 0;
+    return util ? Number(util.baseline) / 100 : 0;
   };
 
   // 노드의 가속기 종류: accelerators에서 node_id로 찾기
@@ -73,7 +73,7 @@ export default function ClusterPage() {
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
         <StatCard label="상태" value={cluster.status.toUpperCase()} />
         <StatCard label="노드 수" value={cluster.nodes.length} />
-        <StatCard label="평균 활용률" value={Math.round(cluster.avg_util * 100)} unit="%" />
+        <StatCard label="평균 활용률" value={Math.round(cluster.avg_util)} unit="%" />
       </div>
 
       <div
@@ -124,7 +124,7 @@ export default function ClusterPage() {
               <Sparkline
                 key={m.metric_type}
                 label={METRIC_LABELS[m.metric_type] ?? m.metric_type}
-                values={generateDisplaySeries(m, now)}
+              values={generateMetricSeries(m, now)}
               />
             ))}
           </div>
