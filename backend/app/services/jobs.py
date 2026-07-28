@@ -407,11 +407,15 @@ def submit_job(
     _log_event(db, type="ARRIVAL", now=now, job_id=job.id)
 
     live_cluster = _load_live_cluster(db)
+    node = None
     if live_cluster is not None:
         occupied = _occupied_node_ids(live_cluster, now)
         node = _pick_free_node(live_cluster, job.type, occupied)
         if node is not None:
             _admit(db, job, node, now, event_type="START")
+
+    if node is None:
+        _log_event(db, type="QUEUE", now=now, job_id=job.id)
 
     db.commit()
     db.refresh(job)
