@@ -9,6 +9,7 @@ interface NodeCardProps {
   jobName?: string
   jobColor?: string
   hasAlert?: boolean
+  onClick?: () => void
 }
 
 export default function NodeCard({
@@ -18,9 +19,12 @@ export default function NodeCard({
   jobName,
   jobColor,
   hasAlert,
+  onClick,
 }: NodeCardProps) {
   return (
-    <div className={`${styles.card} ${hasAlert ? styles.alert : ''}`}>
+    <div className={`${styles.card} ${hasAlert ? styles.alert : ''}`} 
+    onClick={onClick}
+    >
       {hasAlert && <span className={styles.alertDot} />}
 
       <div className={styles.header}>

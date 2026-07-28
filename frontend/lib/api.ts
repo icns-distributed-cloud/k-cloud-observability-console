@@ -1,4 +1,4 @@
-import type { ClusterDetail, MetricProfilePoint } from '@/app/types'
+import type { AssignmentItem, ClusterDetail, JobSummary, MetricProfilePoint, NodeDetail } from '@/app/types'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
@@ -14,4 +14,17 @@ export function fetchClusterDetail(clusterId: number) {
 
 export function fetchClusterMetrics(clusterId: number) {
   return get<MetricProfilePoint[]>(`/clusters/${clusterId}/metric-profiles`)
+}
+
+export function fetchNodeDetail(nodeId: number) {
+  return get<NodeDetail>(`/nodes/${nodeId}`)
+}
+
+export function fetchClusterAssignments(clusterId: number) {
+  return get<AssignmentItem[]>(`/clusters/${clusterId}/assignments`)
+}
+
+export function fetchJobs(status?: string) {
+  const query = status ? `?status=${status}` : ''
+  return get<JobSummary[]>(`/jobs${query}`)
 }
