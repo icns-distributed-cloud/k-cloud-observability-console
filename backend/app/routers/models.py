@@ -8,6 +8,11 @@ from app.services import models as models_service
 router = APIRouter(tags=["models"])
 
 
+@router.get("/models", response_model=list[schemas.ModelSummary])
+def list_models(db: Session = Depends(get_db)) -> list[schemas.ModelSummary]:
+    return models_service.list_models(db)
+
+
 @router.get("/models/{model_id}/layers", response_model=schemas.ModelLayersResponse)
 def get_model_layers(model_id: int, db: Session = Depends(get_db)) -> schemas.ModelLayersResponse:
     result = models_service.get_model_layers(db, model_id)
