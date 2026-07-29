@@ -32,3 +32,10 @@ export function mapNodeJobs(
 
   return result
 }
+
+/** 우선순위 선호 라벨 */
+export const PRIORITY_LABELS: Record<string, string> = {
+  time: '시간 우선',
+  cost: '비용 우선',
+  balanced: '균형',
+}
