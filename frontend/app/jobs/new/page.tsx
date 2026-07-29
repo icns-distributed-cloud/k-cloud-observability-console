@@ -1,18 +1,16 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Breadcrumb from "@/components/Breadcrumb";
 import Card from "@/components/Card";
 import Tabs from "@/components/Tabs";
-import { submitInferJob, submitTrainJob } from "@/lib/api";
+import { fetchModels, submitInferJob, submitTrainJob } from "@/lib/api";
 import { JOB_STATUS_LABELS } from "@/lib/jobs";
-import type { JobSummary } from "@/app/types";
+import type { JobSummary, ModelItem, PriorityPref } from "@/app/types";
 
-// TODO: GET /models 나오면 API로 교체
-const MODELS = [{ id: 1, name: "BERT-base", type: "nlp" }];
 
 const PRECISIONS = ["FP16", "INT8", "FP32"];
-const PRIORITIES = [
+const PRIORITIES: { value: PriorityPref; label: string }[] = [
   { value: "time", label: "시간 우선" },
   { value: "cost", label: "비용 우선" },
   { value: "balanced", label: "균형" },
@@ -22,17 +20,28 @@ export default function NewJobPage() {
   const router = useRouter();
 
   const [jobType, setJobType] = useState("train");
-  const [modelId, setModelId] = useState(MODELS[0]?.id ?? 1);
+  const [models, setModels] = useState<ModelItem[]>([]);
+  const [modelId, setModelId] = useState<number | null>(null);
   const [batch, setBatch] = useState(128);
   const [precision, setPrecision] = useState("FP16");
-  const [priority, setPriority] = useState("time");
+  const [priority, setPriority] = useState<PriorityPref>("time");
   const [slaTarget, setSlaTarget] = useState(99);
 
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<JobSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    fetchModels()
+      .then((m) => {
+        setModels(m);
+        if (m.length > 0) setModelId(m[0].id);
+      })
+      .catch((e) => setError(String(e)));
+  }, []);
+
   const handleSubmit = async () => {
+    if (modelId === null) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -141,11 +150,13 @@ export default function NewJobPage() {
         <Card>
           <Field label="모델">
             <select
-              value={modelId}
+              value={modelId ?? ""}
               onChange={(e) => setModelId(Number(e.target.value))}
               style={inputStyle}
+              disabled={models.length === 0}
             >
-              {MODELS.map((m) => (
+              {models.length === 0 && <option value="">모델 불러오는 중…</option>}
+              {models.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name} ({m.type})
                 </option>
@@ -209,7 +220,11 @@ export default function NewJobPage() {
             </div>
           )}
 
-          <button onClick={handleSubmit} disabled={submitting} style={primaryBtn}>
+          <button
+            onClick={handleSubmit}
+            disabled={submitting || modelId === null}
+            style={primaryBtn}
+          >
             {submitting ? "제출 중…" : "작업 제출"}
           </button>
         </Card>

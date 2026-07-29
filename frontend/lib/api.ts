@@ -14,6 +14,7 @@ import type {
   ReallocationItem,
   InferJobRequest,
   TrainJobRequest,
+  ModelItem,
 } from '@/app/types'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
@@ -93,4 +94,8 @@ export function submitTrainJob(body: TrainJobRequest) {
 
 export function submitInferJob(body: InferJobRequest) {
   return post<JobSummary>('/jobs/infer', body)
+}
+
+export function fetchModels() {
+  return get<ModelItem[]>('/models')
 }
