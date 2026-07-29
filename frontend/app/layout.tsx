@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import TopBar from "@/components/TopBar";
-import TimelineScrubber from "@/components/TimelineScrubber";
 import { TimeProvider } from "@/lib/TimeContext";
 
 export const metadata: Metadata = {
@@ -17,7 +16,6 @@ export default function RootLayout({
       <body>
         <TimeProvider>
           <TopBar />
-          <TimelineScrubber />
           {children}
         </TimeProvider>
       </body>

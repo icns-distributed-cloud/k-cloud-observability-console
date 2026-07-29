@@ -2,6 +2,16 @@ import styles from './NodeCard.module.css'
 import KindGlyph from './KindGlyph'
 import ProgressBar from './ProgressBar'
 
+const ALERT_COLORS = {
+  physical: '#EF4444',
+  sla: '#F59E0B',
+} as const
+
+const ALERT_SHADOWS = {
+  physical: 'rgba(239, 68, 68, 0.25)',
+  sla: 'rgba(245, 158, 11, 0.25)',
+} as const
+
 interface NodeCardProps {
   name: string
   kind: 'GPU' | 'NPU' | 'PIM'
@@ -9,6 +19,7 @@ interface NodeCardProps {
   jobName?: string
   jobColor?: string
   hasAlert?: boolean
+  alertSeverity?: 'physical' | 'sla'
   onClick?: () => void
 }
 
@@ -19,13 +30,24 @@ export default function NodeCard({
   jobName,
   jobColor,
   hasAlert,
+  alertSeverity = 'physical',
   onClick,
 }: NodeCardProps) {
   return (
-    <div className={`${styles.card} ${hasAlert ? styles.alert : ''}`} 
-    onClick={onClick}
+    <div
+      className={styles.card}
+      onClick={onClick}
+      style={hasAlert ? { borderColor: ALERT_COLORS[alertSeverity] } : undefined}
     >
-      {hasAlert && <span className={styles.alertDot} />}
+      {hasAlert && (
+        <span
+          className={styles.alertDot}
+          style={{
+            background: ALERT_COLORS[alertSeverity],
+            boxShadow: `0 0 0 3px ${ALERT_SHADOWS[alertSeverity]}`,
+          }}
+        />
+      )}
 
       <div className={styles.header}>
         <KindGlyph kind={kind} size={14} />

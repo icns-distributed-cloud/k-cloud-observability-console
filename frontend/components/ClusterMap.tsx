@@ -255,6 +255,25 @@ export default function ClusterMap({ regions, links, onSelectCluster }: ClusterM
         </div>
       </div>
 
+      {mode === "world" && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: 14,
+            left: 16,
+            fontSize: 11.5,
+            color: "var(--sub)",
+            background: "rgba(11,18,32,.55)",
+            padding: "6px 11px",
+            borderRadius: 8,
+          }}
+        >
+          🇰🇷 대한민국 마커를 클릭하면 국내 클러스터 지도가 열립니다
+        </div>
+      )}
+
+      {/* 클러스터 선택 팝오버 */}
+
       {/* 클러스터 선택 팝오버 */}
       {picker && (
         <div
