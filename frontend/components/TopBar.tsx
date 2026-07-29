@@ -1,8 +1,9 @@
 "use client";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 
 export default function TopBar() {
   const router = useRouter();
+  const pathname = usePathname();
 
   return (
     <header
@@ -44,6 +45,47 @@ export default function TopBar() {
           </div>
         </div>
       </div>
+
+      <nav style={{ display: "flex", gap: 4, marginLeft: 8 }}>
+        <NavLink label="지도" href="/" active={pathname === "/"} onClick={router.push} />
+        <NavLink
+          label="작업 목록"
+          href="/jobs"
+          active={pathname.startsWith("/jobs")}
+          onClick={router.push}
+        />
+      </nav>
     </header>
+  );
+}
+
+function NavLink({
+  label,
+  href,
+  active,
+  onClick,
+}: {
+  label: string;
+  href: string;
+  active: boolean;
+  onClick: (href: string) => void;
+}) {
+  return (
+    <button
+      onClick={() => onClick(href)}
+      style={{
+        background: active ? "var(--panel-2)" : "transparent",
+        border: "none",
+        borderRadius: 8,
+        padding: "6px 12px",
+        cursor: "pointer",
+        fontFamily: "inherit",
+        fontSize: 12.5,
+        fontWeight: 600,
+        color: active ? "var(--ink)" : "var(--sub)",
+      }}
+    >
+      {label}
+    </button>
   );
 }
