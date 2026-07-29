@@ -110,7 +110,9 @@ export default function NodePage({ params }: { params: Promise<{ id: string }> }
 
       {job ? (
         <div
-          onClick={() => router.push(`/jobs/${job.id}`)}
+          onClick={() =>
+            router.push(`/clusters/${node.cluster_id}/nodes/${node.id}/jobs/${job.id}`)
+          }
           style={{
             background: "var(--panel)",
             border: "1px solid var(--line)",
