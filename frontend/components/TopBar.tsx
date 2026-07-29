@@ -1,0 +1,91 @@
+"use client";
+import { useRouter, usePathname } from "next/navigation";
+
+export default function TopBar() {
+  const router = useRouter();
+  const pathname = usePathname();
+
+  return (
+    <header
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 14,
+        padding: "12px 28px",
+        borderBottom: "1px solid var(--line)",
+        background: "var(--panel)",
+      }}
+    >
+      <div
+        onClick={() => router.push("/")}
+        style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}
+      >
+        <span
+          style={{
+            width: 18,
+            height: 18,
+            borderRadius: 5,
+            background: "var(--accent)",
+            flexShrink: 0,
+          }}
+        />
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: "-0.01em" }}>
+            K-Cloud 연구 클러스터
+          </div>
+          <div
+            style={{
+              fontSize: 10,
+              color: "var(--sub)",
+              fontFamily: "'IBM Plex Mono', monospace",
+              letterSpacing: "0.04em",
+            }}
+          >
+            경희대 ICNS
+          </div>
+        </div>
+      </div>
+
+      <nav style={{ display: "flex", gap: 4, marginLeft: 8 }}>
+        <NavLink label="지도" href="/" active={pathname === "/"} onClick={router.push} />
+        <NavLink
+          label="작업 목록"
+          href="/jobs"
+          active={pathname.startsWith("/jobs")}
+          onClick={router.push}
+        />
+      </nav>
+    </header>
+  );
+}
+
+function NavLink({
+  label,
+  href,
+  active,
+  onClick,
+}: {
+  label: string;
+  href: string;
+  active: boolean;
+  onClick: (href: string) => void;
+}) {
+  return (
+    <button
+      onClick={() => onClick(href)}
+      style={{
+        background: active ? "var(--panel-2)" : "transparent",
+        border: "none",
+        borderRadius: 8,
+        padding: "6px 12px",
+        cursor: "pointer",
+        fontFamily: "inherit",
+        fontSize: 12.5,
+        fontWeight: 600,
+        color: active ? "var(--ink)" : "var(--sub)",
+      }}
+    >
+      {label}
+    </button>
+  );
+}

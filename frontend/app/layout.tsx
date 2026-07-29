@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import TopBar from "@/components/TopBar";
+import TimelineScrubber from "@/components/TimelineScrubber";
+import { TimeProvider } from "@/lib/TimeContext";
 
 export const metadata: Metadata = {
   title: "K-Cloud Observability Console",
@@ -11,7 +14,13 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="ko">
-      <body>{children}</body>
+      <body>
+        <TimeProvider>
+          <TopBar />
+          <TimelineScrubber />
+          {children}
+        </TimeProvider>
+      </body>
     </html>
   );
 }

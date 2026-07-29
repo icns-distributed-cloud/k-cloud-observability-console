@@ -6,10 +6,21 @@ import NodeCard from "@/components/NodeCard";
 import Card from "@/components/Card";
 import Sparkline from "@/components/Sparkline";
 import { generateMetricSeries } from "@/lib/metrics";
-import { fetchClusterAssignments, fetchClusterDetail, fetchClusterMetrics, fetchJobs } from "@/lib/api";
+import {
+  fetchClusterAssignments,
+  fetchClusterDetail,
+  fetchClusterMetrics,
+  fetchJobs,
+} from "@/lib/api";
 import { JOB_COLORS, mapNodeJobs } from "@/lib/jobs";
-import type { AcceleratorKind, ClusterDetail, JobSummary, MetricProfilePoint } from "@/app/types";
+import type {
+  AcceleratorKind,
+  ClusterDetail,
+  JobSummary,
+  MetricProfilePoint,
+} from "@/app/types";
 import { useRouter } from "next/navigation";
+import { useTime } from "@/lib/TimeContext";
 
 const METRIC_LABELS: Record<string, string> = {
   power: "전력 (kW)",
@@ -22,18 +33,20 @@ export default function ClusterPage({ params }: { params: Promise<{ id: string }
   const clusterId = Number(id);
   const router = useRouter();
 
-  const [now, setNow] = useState<number | null>(null);
   const [cluster, setCluster] = useState<ClusterDetail | null>(null);
   const [metrics, setMetrics] = useState<MetricProfilePoint[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [nodeJobs, setNodeJobs] = useState<Record<number, JobSummary | undefined>>({});
 
-  useEffect(() => {
-    setNow(Date.now() / 1000);
-  }, []);
+  const { nowSec: now } = useTime();
 
   useEffect(() => {
-    Promise.all([fetchClusterDetail(clusterId), fetchClusterMetrics(clusterId), fetchClusterAssignments(clusterId), fetchJobs()])
+    Promise.all([
+      fetchClusterDetail(clusterId),
+      fetchClusterMetrics(clusterId),
+      fetchClusterAssignments(clusterId),
+      fetchJobs(),
+    ])
       .then(([c, m, assignments, jobs]) => {
         setCluster(c);
         setMetrics(m);
@@ -131,7 +144,7 @@ export default function ClusterPage({ params }: { params: Promise<{ id: string }
               <Sparkline
                 key={m.metric_type}
                 label={METRIC_LABELS[m.metric_type] ?? m.metric_type}
-                values={generateMetricSeries(m, now)}
+                values={generateMetricSeries(m, now, 90, 14)}
               />
             ))}
           </div>
