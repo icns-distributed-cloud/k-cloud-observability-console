@@ -1,15 +1,15 @@
 "use client";
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 import Breadcrumb from "@/components/Breadcrumb";
 import StatCard from "@/components/StatCard";
 import NodeCard from "@/components/NodeCard";
 import Card from "@/components/Card";
 import Sparkline from "@/components/Sparkline";
 import { generateMetricSeries } from "@/lib/metrics";
-import { fetchClusterDetail, fetchClusterMetrics } from "@/lib/api";
-import { dummyNodeJobs } from "@/lib/dummyData";
-import type { AcceleratorKind, ClusterDetail, MetricProfilePoint } from "@/app/types";
-
+import { fetchClusterAssignments, fetchClusterDetail, fetchClusterMetrics, fetchJobs } from "@/lib/api";
+import { JOB_COLORS, mapNodeJobs } from "@/lib/jobs";
+import type { AcceleratorKind, ClusterDetail, JobSummary, MetricProfilePoint } from "@/app/types";
+import { useRouter } from "next/navigation";
 
 const METRIC_LABELS: Record<string, string> = {
   power: "전력 (kW)",
@@ -17,24 +17,30 @@ const METRIC_LABELS: Record<string, string> = {
   sla: "SLA 준수 (%)",
 };
 
-export default function ClusterPage() {
+export default function ClusterPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  const clusterId = Number(id);
+  const router = useRouter();
+
   const [now, setNow] = useState<number | null>(null);
   const [cluster, setCluster] = useState<ClusterDetail | null>(null);
   const [metrics, setMetrics] = useState<MetricProfilePoint[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [nodeJobs, setNodeJobs] = useState<Record<number, JobSummary | undefined>>({});
 
   useEffect(() => {
     setNow(Date.now() / 1000);
   }, []);
 
   useEffect(() => {
-    Promise.all([fetchClusterDetail(1), fetchClusterMetrics(1)])
-      .then(([c, m]) => {
+    Promise.all([fetchClusterDetail(clusterId), fetchClusterMetrics(clusterId), fetchClusterAssignments(clusterId), fetchJobs()])
+      .then(([c, m, assignments, jobs]) => {
         setCluster(c);
         setMetrics(m);
+        setNodeJobs(mapNodeJobs(assignments, jobs));
       })
       .catch((e) => setError(String(e)));
-  }, []);
+  }, [clusterId]);
 
   // 노드의 활용률: metric_profiles에서 util 타입을 찾아 baseline을 사용
   const nodeUtil = (nodeId: number): number => {
@@ -56,7 +62,7 @@ export default function ClusterPage() {
     <main style={{ padding: "24px 28px" }}>
       <Breadcrumb
         segments={[
-          { label: "지도", onClick: () => alert("지도로 이동") },
+          { label: "지도", onClick: () => router.push("/") },
           { label: cluster.name },
         ]}
       />
@@ -99,16 +105,17 @@ export default function ClusterPage() {
         }}
       >
         {cluster.nodes.map((node) => {
-          const job = dummyNodeJobs[node.id];
+          const job = nodeJobs[node.id];
           return (
             <NodeCard
               key={node.id}
               name={node.name}
               kind={nodeKind(node.id)}
               util={nodeUtil(node.id)}
-              jobName={job?.name}
-              jobColor={job?.color}
+              jobName={job?.model_name}
+              jobColor={job ? JOB_COLORS[job.type] : undefined}
               hasAlert={node.alerts.length > 0}
+              onClick={() => router.push(`/nodes/${node.id}`)}
             />
           );
         })}
@@ -124,7 +131,7 @@ export default function ClusterPage() {
               <Sparkline
                 key={m.metric_type}
                 label={METRIC_LABELS[m.metric_type] ?? m.metric_type}
-              values={generateMetricSeries(m, now)}
+                values={generateMetricSeries(m, now)}
               />
             ))}
           </div>

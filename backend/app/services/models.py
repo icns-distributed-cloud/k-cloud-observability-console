@@ -3,6 +3,11 @@ from sqlalchemy.orm import Session
 from app import models, schemas
 
 
+def list_models(db: Session) -> list[schemas.ModelSummary]:
+    rows = db.query(models.Model).all()
+    return [schemas.ModelSummary(id=m.id, name=m.name, type=m.type) for m in rows]
+
+
 def get_model_layers(db: Session, model_id: int) -> schemas.ModelLayersResponse | None:
     model = db.query(models.Model).filter(models.Model.id == model_id).first()
     if model is None:

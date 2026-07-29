@@ -223,6 +223,13 @@ class HyperparamAdjustmentItem(BaseModel):
     reward: str
 
 
+# ---------- GET /api/v1/models ----------
+class ModelSummary(BaseModel):
+    id: int
+    name: str
+    type: str
+
+
 # ---------- GET /api/v1/models/{model_id}/layers ----------
 class ModelLayerItem(BaseModel):
     id: int
