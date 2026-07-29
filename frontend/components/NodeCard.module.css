@@ -13,10 +13,6 @@
   border-color: var(--accent);
 }
 
-.card.alert {
-  border-color: #EF4444;
-}
-
 .alertDot {
   position: absolute;
   top: 10px;
@@ -24,8 +20,6 @@
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: #EF4444;
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.25);
   animation: alertPulse 1.4s infinite;
 }
 

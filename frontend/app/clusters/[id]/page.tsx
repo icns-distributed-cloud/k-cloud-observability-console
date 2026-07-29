@@ -155,6 +155,7 @@ export default function ClusterPage({ params }: { params: Promise<{ id: string }
               jobName={job?.model_name}
               jobColor={job ? JOB_COLORS[job.type] : undefined}
               hasAlert={node.alerts.length > 0}
+              alertSeverity={node.alerts[0]?.severity === "sla" ? "sla" : "physical"}
               onClick={() => router.push(`/nodes/${node.id}`)}
             />
           );
