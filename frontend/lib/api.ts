@@ -1,6 +1,7 @@
 import type {
   AssignmentItem,
   ClusterDetail,
+  DistributedLinkItem,
   HyperparamAdjustmentItem,
   JobDetail,
   JobKqvBenchmarkResponse,
@@ -9,6 +10,7 @@ import type {
   MetricProfilePoint,
   ModelLayersResponse,
   NodeDetail,
+  ProviderTree,
   ReallocationItem,
 } from '@/app/types'
 
@@ -63,4 +65,12 @@ export function fetchNegotiations(jobId: number) {
 
 export function fetchModelLayers(modelId: number) {
   return get<ModelLayersResponse>(`/models/${modelId}/layers`)
+}
+
+export function fetchProviders() {
+  return get<ProviderTree[]>('/providers')
+}
+
+export function fetchDistributedLinks() {
+  return get<DistributedLinkItem[]>('/distributed-links')
 }
