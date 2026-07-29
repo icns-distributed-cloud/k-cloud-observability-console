@@ -1,4 +1,16 @@
-import type { AssignmentItem, ClusterDetail, JobSummary, MetricProfilePoint, NodeDetail } from '@/app/types'
+import type {
+  AssignmentItem,
+  ClusterDetail,
+  HyperparamAdjustmentItem,
+  JobDetail,
+  JobKqvBenchmarkResponse,
+  JobNegotiationResponse,
+  JobSummary,
+  MetricProfilePoint,
+  ModelLayersResponse,
+  NodeDetail,
+  ReallocationItem,
+} from '@/app/types'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
@@ -27,4 +39,28 @@ export function fetchClusterAssignments(clusterId: number) {
 export function fetchJobs(status?: string) {
   const query = status ? `?status=${status}` : ''
   return get<JobSummary[]>(`/jobs${query}`)
+}
+
+export function fetchJobDetail(jobId: number) {
+  return get<JobDetail>(`/jobs/${jobId}`)
+}
+
+export function fetchHyperparamAdjustments(jobId: number) {
+  return get<HyperparamAdjustmentItem[]>(`/jobs/${jobId}/hyperparam-adjustment`)
+}
+
+export function fetchKqvBenchmark(jobId: number) {
+  return get<JobKqvBenchmarkResponse>(`/jobs/${jobId}/kqv-benchmark`)
+}
+
+export function fetchReallocations(jobId: number) {
+  return get<ReallocationItem[]>(`/jobs/${jobId}/reallocations`)
+}
+
+export function fetchNegotiations(jobId: number) {
+  return get<JobNegotiationResponse>(`/jobs/${jobId}/negotiations`)
+}
+
+export function fetchModelLayers(modelId: number) {
+  return get<ModelLayersResponse>(`/models/${modelId}/layers`)
 }
