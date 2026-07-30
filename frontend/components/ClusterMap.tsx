@@ -10,6 +10,8 @@ const KR_ID = "410";
 const KR_HUB: [number, number] = [127.9, 36.4];
 
 const ACCENT = "#6366F1";
+const ACTIVE = "#34D399";
+const IDLE = "#64748B";
 const LAND = "#1C2A45";
 const LAND_STROKE = "#2C3E60";
 
@@ -96,6 +98,45 @@ export default function ClusterMap({ regions, links, onSelectCluster }: ClusterM
     [geo]
   );
 
+  /** 두 좌표를 잇는 완만한 곡선 path (화면 좌표 기준 이차 베지에) */
+  const linkPath = useCallback(
+    (a: [number, number], b: [number, number]): string | null => {
+      const pa = project(a[0], a[1]);
+      const pb = project(b[0], b[1]);
+      if (!pa || !pb) return null;
+
+      const [x1, y1] = pa;
+      const [x2, y2] = pb;
+
+      // 두 점의 중간에서 수직 방향으로 살짝 띄운 제어점
+      const mx = (x1 + x2) / 2;
+      const my = (y1 + y2) / 2;
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const dist = Math.hypot(dx, dy);
+      const lift = Math.min(dist * 0.16, 90); // 거리에 비례하되 상한
+
+      // 진행 방향의 법선으로 밀어냄 (항상 위쪽으로 휘도록 부호 조정)
+      const nx = -dy / (dist || 1);
+      const ny = dx / (dist || 1);
+      const sign = ny > 0 ? -1 : 1;
+
+      const cx = mx + nx * lift * sign;
+      const cy = my + ny * lift * sign;
+
+      return `M${x1} ${y1} Q${cx} ${cy} ${x2} ${y2}`;
+    },
+    [project]
+  );
+
+  const linkStyle = (active: boolean) => ({
+    stroke: active ? ACCENT : "#3A4A66",
+    strokeWidth: active ? 1.6 : 1,
+    strokeDasharray: active ? undefined : "4 4",
+    opacity: active ? 0.8 : 0.45,
+    fill: "none" as const,
+  });
+
   const enterKorea = () => {
     setPicker(null);
     setMode("korea");
@@ -153,22 +194,9 @@ export default function ClusterMap({ regions, links, onSelectCluster }: ClusterM
               const a = clusterCoords.get(l.cluster_a_id);
               const b = clusterCoords.get(l.cluster_b_id);
               if (!a || !b) return null;
-              const pa = project(a[0], a[1]);
-              const pb = project(b[0], b[1]);
-              if (!pa || !pb) return null;
-              return (
-                <line
-                  key={l.id}
-                  x1={pa[0]}
-                  y1={pa[1]}
-                  x2={pb[0]}
-                  y2={pb[1]}
-                  stroke={l.active ? ACCENT : "#3A4A66"}
-                  strokeWidth={l.active ? 1.6 : 1}
-                  strokeDasharray={l.active ? undefined : "4 4"}
-                  opacity={l.active ? 0.8 : 0.45}
-                />
-              );
+              const d = linkPath(a, b);
+              if (!d) return null;
+              return <path key={l.id} d={d} {...linkStyle(l.active)} />;
             })}
 
           {/* world 모드: 국내 쪽은 대한민국 허브 마커 위치로 대체해서 그림.
@@ -181,22 +209,9 @@ export default function ClusterMap({ regions, links, onSelectCluster }: ClusterM
               const aDomestic = isDomestic(a[1], a[0]);
               const bDomestic = isDomestic(b[1], b[0]);
               if (aDomestic && bDomestic) return null;
-              const pa = project(...(aDomestic ? KR_HUB : a));
-              const pb = project(...(bDomestic ? KR_HUB : b));
-              if (!pa || !pb) return null;
-              return (
-                <line
-                  key={`w-${l.id}`}
-                  x1={pa[0]}
-                  y1={pa[1]}
-                  x2={pb[0]}
-                  y2={pb[1]}
-                  stroke={l.active ? ACCENT : "#3A4A66"}
-                  strokeWidth={l.active ? 1.6 : 1}
-                  strokeDasharray={l.active ? undefined : "4 4"}
-                  opacity={l.active ? 0.8 : 0.45}
-                />
-              );
+              const d = linkPath(aDomestic ? KR_HUB : a, bDomestic ? KR_HUB : b);
+              if (!d) return null;
+              return <path key={`w-${l.id}`} d={d} {...linkStyle(l.active)} />;
             })}
         </g>
 
@@ -221,8 +236,7 @@ export default function ClusterMap({ regions, links, onSelectCluster }: ClusterM
                 const anyActive = r.clusters.some((c) => c.status === "active");
                 return (
                   <g key={r.id} transform={`translate(${p[0]},${p[1]})`}>
-                    <circle r={5} fill={anyActive ? ACCENT : "#8FA1BD"} stroke="var(--bg)" strokeWidth={1.5} />
-                    <MarkerLabel text={`${r.name} · ${r.clusters.length}`} y={-14} />
+                    <circle r={5} fill={anyActive ? ACTIVE : IDLE} stroke="var(--bg)" strokeWidth={1.5} />                    <MarkerLabel text={`${r.name} · ${r.clusters.length}`} y={-14} />
                   </g>
                 );
               })}
@@ -234,7 +248,7 @@ export default function ClusterMap({ regions, links, onSelectCluster }: ClusterM
               const multi = r.clusters.length > 1;
               const anyActive = r.clusters.some((c) => c.status === "active");
               const anyAlert = r.clusters.some((c) => c.has_alert);
-              const col = anyActive ? ACCENT : "#64748B";
+              const col = anyActive ? ACTIVE : IDLE;
               const handleClick = () => {
                 if (multi) setPicker({ x: p[0], y: p[1], region: r });
                 else if (r.clusters[0]) onSelectCluster(r.clusters[0].id);
@@ -366,7 +380,7 @@ export default function ClusterMap({ regions, links, onSelectCluster }: ClusterM
                   width: 8,
                   height: 8,
                   borderRadius: "50%",
-                  background: c.status === "active" ? ACCENT : "#64748B",
+                  background: c.status === "active" ? ACTIVE : IDLE,
                   flexShrink: 0,
                 }}
               />
