@@ -68,9 +68,11 @@ export default function Home() {
           >
             <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>
               {p.name}
-              <span style={{ fontSize: 11, color: "var(--sub)", fontWeight: 500, marginLeft: 6 }}>
-                {PROVIDER_KIND_LABELS[p.kind] ?? p.kind}
-              </span>
+              {PROVIDER_KIND_LABELS[p.kind] !== p.name && (
+                <span style={{ fontSize: 11, color: "var(--sub)", fontWeight: 500, marginLeft: 6 }}>
+                  {PROVIDER_KIND_LABELS[p.kind] ?? p.kind}
+                </span>
+              )}
             </div>
 
             {p.regions.map((r) => (
