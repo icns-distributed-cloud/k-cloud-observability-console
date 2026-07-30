@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { geoMercator, geoNaturalEarth1, geoPath } from "d3-geo";
 import { feature } from "topojson-client";
 import type { DistributedLinkItem } from "@/app/types";
-import { buildClusterCoords, splitByLocation, type MapRegion } from "@/lib/mapData";
+import { buildClusterCoords, isDomestic, splitByLocation, type MapRegion } from "@/lib/mapData";
 
 const WORLD_URL = "https://unpkg.com/world-atlas@2/countries-110m.json";
 const KR_ID = "410";
@@ -170,6 +170,34 @@ export default function ClusterMap({ regions, links, onSelectCluster }: ClusterM
                 />
               );
             })}
+
+          {/* world 모드: 국내 쪽은 대한민국 허브 마커 위치로 대체해서 그림.
+              양쪽 다 국내인 링크는 둘 다 같은 허브 점으로 뭉개져 그릴 게 없으므로 스킵 */}
+          {mode === "world" &&
+            links.map((l) => {
+              const a = clusterCoords.get(l.cluster_a_id);
+              const b = clusterCoords.get(l.cluster_b_id);
+              if (!a || !b) return null;
+              const aDomestic = isDomestic(a[1], a[0]);
+              const bDomestic = isDomestic(b[1], b[0]);
+              if (aDomestic && bDomestic) return null;
+              const pa = project(...(aDomestic ? KR_HUB : a));
+              const pb = project(...(bDomestic ? KR_HUB : b));
+              if (!pa || !pb) return null;
+              return (
+                <line
+                  key={`w-${l.id}`}
+                  x1={pa[0]}
+                  y1={pa[1]}
+                  x2={pb[0]}
+                  y2={pb[1]}
+                  stroke={l.active ? ACCENT : "#3A4A66"}
+                  strokeWidth={l.active ? 1.6 : 1}
+                  strokeDasharray={l.active ? undefined : "4 4"}
+                  opacity={l.active ? 0.8 : 0.45}
+                />
+              );
+            })}
         </g>
 
         {/* 마커 */}
@@ -190,9 +218,10 @@ export default function ClusterMap({ regions, links, onSelectCluster }: ClusterM
               {overseas.map((r) => {
                 const p = project(r.lon, r.lat);
                 if (!p) return null;
+                const anyActive = r.clusters.some((c) => c.status === "active");
                 return (
                   <g key={r.id} transform={`translate(${p[0]},${p[1]})`}>
-                    <circle r={5} fill="#8FA1BD" stroke="var(--bg)" strokeWidth={1.5} />
+                    <circle r={5} fill={anyActive ? ACCENT : "#8FA1BD"} stroke="var(--bg)" strokeWidth={1.5} />
                     <MarkerLabel text={`${r.name} · ${r.clusters.length}`} y={-14} />
                   </g>
                 );
