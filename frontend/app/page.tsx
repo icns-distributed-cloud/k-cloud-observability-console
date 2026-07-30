@@ -113,7 +113,7 @@ export default function Home() {
                         width: 7,
                         height: 7,
                         borderRadius: "50%",
-                        background: c.status === "active" ? "#34D399" : "#64748B", flexShrink: 0,
+                        background: c.status === "active" ? "var(--active)" : "var(--idle)",
                       }}
                     />
                     {c.name}
@@ -123,7 +123,7 @@ export default function Home() {
                           width: 6,
                           height: 6,
                           borderRadius: "50%",
-                          background: "#EF4444",
+                          background: "var(--alert-critical)",
                           flexShrink: 0,
                         }}
                       />

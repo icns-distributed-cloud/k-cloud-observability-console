@@ -72,9 +72,9 @@ export function buildGraphColumns(
 
 /** characteristic별 색상 */
 export const CHARACTERISTIC_COLORS: Record<string, string> = {
-  compute_bound: '#FB923C',
-  memory_bound: '#38BDF8',
-  balanced: '#34D399',
+  compute_bound: 'var(--layer-compute)',
+  memory_bound: 'var(--layer-memory)',
+  balanced: 'var(--layer-balanced)',
 }
 
 export const CHARACTERISTIC_LABELS: Record<string, string> = {

@@ -87,7 +87,7 @@ export default function NodePage({ params }: { params: Promise<{ id: string }> }
               key={a.id}
               style={{
                 background: "var(--panel)",
-                border: `1px solid ${a.severity === "physical" ? "#EF4444" : "#F59E0B"}`,
+                border: `1px solid ${a.severity === "physical" ? "var(--alert-critical)" : "var(--alert-warning)"}`,
                 borderRadius: 12,
                 padding: "12px 14px",
                 fontSize: 12.5,
@@ -96,7 +96,7 @@ export default function NodePage({ params }: { params: Promise<{ id: string }> }
             >
               <span
                 style={{
-                  color: a.severity === "physical" ? "#EF4444" : "#F59E0B",
+                  color: a.severity === "physical" ? "var(--alert-critical)" : "var(--alert-warning)",
                   fontWeight: 700,
                 }}
               >
