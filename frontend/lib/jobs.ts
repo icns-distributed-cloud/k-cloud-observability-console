@@ -2,9 +2,9 @@ import type { AssignmentItem, JobSummary, JobType } from '@/app/types'
 
 /** 작업 타입별 색상 */
 export const JOB_COLORS: Record<JobType, string> = {
-  train: '#6366F1',
-  infer: '#D97706',
-  distributed: '#2DD4BF',
+  train: 'var(--job-train)',
+  infer: 'var(--job-infer)',
+  distributed: 'var(--job-distributed)',
 }
 
 /** 작업 상태 라벨 */

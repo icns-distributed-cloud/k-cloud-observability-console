@@ -3,13 +3,13 @@ import KindGlyph from './KindGlyph'
 import ProgressBar from './ProgressBar'
 
 const ALERT_COLORS = {
-  physical: '#EF4444',
-  sla: '#F59E0B',
+  physical: 'var(--alert-critical)',
+  sla: 'var(--alert-warning)',
 } as const
 
 const ALERT_SHADOWS = {
-  physical: 'rgba(239, 68, 68, 0.25)',
-  sla: 'rgba(245, 158, 11, 0.25)',
+  physical: 'rgba(220, 38, 38, 0.2)',
+  sla: 'rgba(217, 119, 6, 0.2)',
 } as const
 
 interface NodeCardProps {

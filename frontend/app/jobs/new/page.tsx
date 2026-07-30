@@ -83,7 +83,7 @@ export default function NewJobPage() {
                 fontSize: 11,
                 fontWeight: 700,
                 letterSpacing: "0.08em",
-                color: admitted ? "var(--accent)" : "#F59E0B",
+                color: admitted ? "var(--active)" : "var(--alert-warning)",
                 fontFamily: "'IBM Plex Mono', monospace",
                 marginBottom: 10,
               }}
@@ -215,7 +215,7 @@ export default function NewJobPage() {
           )}
 
           {error && (
-            <div style={{ fontSize: 12, color: "#EF4444", marginBottom: 14 }}>
+            <div style={{ fontSize: 12, color: "var(--alert-critical)", marginBottom: 14 }}>
               제출 실패: {error}
             </div>
           )}
