@@ -32,7 +32,6 @@ import type {
     ModelLayersResponse,
     ReallocationItem,
 } from "@/app/types";
-import BarChart from "@/components/BarChart";
 
 const SECTION_LABEL: React.CSSProperties = {
     fontSize: 11,
@@ -124,6 +123,7 @@ export default function JobDetailView({ jobId, breadcrumbPrefix }: JobDetailView
                 <div>
                     <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
                         {[...job.metrics]
+                            .filter((m) => !m.featured)
                             .sort((a, b) => a.seq - b.seq)
                             .map((m) => {
                                 const d = metricDisplay(m, progress);
@@ -146,9 +146,9 @@ export default function JobDetailView({ jobId, breadcrumbPrefix }: JobDetailView
 
                     {featured && now && (
                         <Card>
-                            <BarChart
+                            <Sparkline
                                 label={`${featured.label}${featured.unit ? ` (${featured.unit})` : ""}`}
-                                values={metricSeries(featured, progress, 10)}
+                                values={metricSeries(featured, progress, 30)}
                                 color={color}
                             />
                         </Card>
