@@ -113,8 +113,7 @@ export default function Home() {
                         width: 7,
                         height: 7,
                         borderRadius: "50%",
-                        background: c.status === "active" ? "var(--accent)" : "#64748B",
-                        flexShrink: 0,
+                        background: c.status === "active" ? "#34D399" : "#64748B", flexShrink: 0,
                       }}
                     />
                     {c.name}
