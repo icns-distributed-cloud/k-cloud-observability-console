@@ -9,11 +9,11 @@ const WORLD_URL = "https://unpkg.com/world-atlas@2/countries-110m.json";
 const KR_ID = "410";
 const KR_HUB: [number, number] = [127.9, 36.4];
 
-const ACCENT = "#6366F1";
-const ACTIVE = "#34D399";
-const IDLE = "#64748B";
-const LAND = "#1C2A45";
-const LAND_STROKE = "#2C3E60";
+const ACCENT =  "#000000";
+const ACTIVE = "var(--active)";
+const IDLE = "var(--idle)";
+const LAND = "var(--map-land)";
+const LAND_STROKE = "var(--map-stroke)";
 
 interface GeoFeature {
   type: string;
@@ -130,10 +130,10 @@ export default function ClusterMap({ regions, links, onSelectCluster }: ClusterM
   );
 
   const linkStyle = (active: boolean) => ({
-    stroke: active ? ACCENT : "#3A4A66",
-    strokeWidth: active ? 1.6 : 1,
-    strokeDasharray: active ? undefined : "4 4",
-    opacity: active ? 0.8 : 0.45,
+    stroke: active ? ACCENT : "var(--map-link-idle)",
+    strokeWidth: active ? 1 : 0.7,
+    strokeDasharray: active ? undefined : "3 3",
+    opacity: active ? 0.7 : 0.4,
     fill: "none" as const,
   });
 
@@ -177,7 +177,7 @@ export default function ClusterMap({ regions, links, onSelectCluster }: ClusterM
               <path
                 key={i}
                 d={d}
-                fill={mode === "world" && isKR ? "#2A3A5E" : LAND}
+                fill={mode === "world" && isKR ? "var(--map-kr)" : LAND}
                 stroke={LAND_STROKE}
                 strokeWidth={0.5}
                 style={mode === "world" && isKR ? { cursor: "pointer" } : undefined}
@@ -225,7 +225,7 @@ export default function ClusterMap({ regions, links, onSelectCluster }: ClusterM
                 return (
                   <g transform={`translate(${hub[0]},${hub[1]})`} style={{ cursor: "pointer" }} onClick={enterKorea}>
                     <circle r={15} fill={ACCENT} opacity={0.16} />
-                    <circle r={7} fill={ACCENT} stroke="var(--bg)" strokeWidth={1.5} />
+                    <circle r={8} fill={ACCENT} stroke="#FFFFFF" strokeWidth={2} />
                     <MarkerLabel text={`대한민국 · 클러스터 ${domesticClusterCount}곳`} y={-20} bold />
                   </g>
                 );
@@ -236,7 +236,8 @@ export default function ClusterMap({ regions, links, onSelectCluster }: ClusterM
                 const anyActive = r.clusters.some((c) => c.status === "active");
                 return (
                   <g key={r.id} transform={`translate(${p[0]},${p[1]})`}>
-                    <circle r={5} fill={anyActive ? ACTIVE : IDLE} stroke="var(--bg)" strokeWidth={1.5} />                    <MarkerLabel text={`${r.name} · ${r.clusters.length}`} y={-14} />
+                    <circle r={6} fill={anyActive ? ACTIVE : IDLE} stroke="#FFFFFF" strokeWidth={2} />
+                    <MarkerLabel text={`${r.name} · ${r.clusters.length}`} y={-14} />
                   </g>
                 );
               })}
@@ -262,14 +263,14 @@ export default function ClusterMap({ regions, links, onSelectCluster }: ClusterM
                 >
                   <circle r={multi ? 15 : 11} fill={col} opacity={0.18} />
                   {anyAlert && (
-                    <circle r={5.5} fill="#EF4444" cx={9} cy={-9} stroke="var(--bg)" strokeWidth={1.5} />
+                    <circle r={5.5} fill="var(--alert-critical)" cx={9} cy={-9} stroke="var(--bg)" strokeWidth={1.5} />
                   )}
-                  <circle r={multi ? 11 : 6.5} fill={col} stroke="var(--bg)" strokeWidth={1.5} />
+                  <circle r={multi ? 12 : 7} fill={col} stroke="#FFFFFF" strokeWidth={2} />
                   {multi && (
                     <text
                       y={4}
                       textAnchor="middle"
-                      fill="var(--bg)"
+                      fill="#FFFFFF"
                       fontSize={12}
                       fontWeight={800}
                       fontFamily="'IBM Plex Mono', monospace"
@@ -306,7 +307,7 @@ export default function ClusterMap({ regions, links, onSelectCluster }: ClusterM
             left: 16,
             fontSize: 11.5,
             color: "var(--sub)",
-            background: "rgba(11,18,32,.55)",
+            background: "var(--overlay)",
             padding: "6px 11px",
             borderRadius: 8,
           }}
@@ -325,11 +326,11 @@ export default function ClusterMap({ regions, links, onSelectCluster }: ClusterM
             left: Math.max(12, Math.min(picker.x - 110, w - 232)),
             top: Math.max(12, picker.y - 12 - 44 * (picker.region.clusters.length + 1)),
             width: 220,
-            background: "rgba(15,23,40,.97)",
+            background: "var(--overlay-strong)",
             border: "1px solid var(--line)",
             borderRadius: 12,
             padding: 8,
-            boxShadow: "0 12px 32px rgba(0,0,0,.5)",
+            boxShadow: "0 12px 32px rgba(22,31,46,.14)",
             zIndex: 10,
           }}
         >
@@ -386,7 +387,7 @@ export default function ClusterMap({ regions, links, onSelectCluster }: ClusterM
               />
               {c.name}
               {c.has_alert && (
-                <span style={{ marginLeft: "auto", width: 7, height: 7, borderRadius: "50%", background: "#EF4444" }} />
+                <span style={{ marginLeft: "auto", width: 7, height: 7, borderRadius: "50%", background: "var(--alert-critical)" }} />
               )}
             </button>
           ))}
@@ -401,7 +402,7 @@ function MarkerLabel({ text, y, bold }: { text: string; y: number; bold?: boolea
     <text
       y={y}
       textAnchor="middle"
-      fill={bold ? "var(--ink)" : "#B7C4D8"}
+      fill={bold ? "#000000" : "#000307"}
       fontSize={11}
       fontWeight={bold ? 700 : 500}
       style={{ pointerEvents: "none" }}
@@ -427,7 +428,7 @@ const shellStyle: React.CSSProperties = {
 
 const backBtnStyle: React.CSSProperties = {
   border: "1px solid var(--line)",
-  background: "rgba(11,18,32,.7)",
+  background: "var(--overlay-strong)",
   color: "var(--ink)",
   borderRadius: 9,
   padding: "6px 12px",
@@ -444,7 +445,7 @@ const badgeStyle: React.CSSProperties = {
   textTransform: "uppercase",
   color: "var(--sub)",
   fontFamily: "'IBM Plex Mono', monospace",
-  background: "rgba(11,18,32,.55)",
+  background: "var(--overlay)",
   padding: "5px 10px",
   borderRadius: 8,
 };

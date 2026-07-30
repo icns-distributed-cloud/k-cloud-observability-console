@@ -102,8 +102,7 @@ export default function InfraPage() {
                             width: 7,
                             height: 7,
                             borderRadius: "50%",
-                            background: c.status === "active" ? "var(--accent)" : "#64748B",
-                            flexShrink: 0,
+                            background: c.status === "active" ? "var(--active)" : "var(--idle)",
                           }}
                         />
                         <span style={{ fontWeight: 600 }}>{c.name}</span>
@@ -133,7 +132,7 @@ export default function InfraPage() {
                         style={{
                           fontSize: 11,
                           fontWeight: 700,
-                          color: c.status === "active" ? "var(--accent)" : "var(--sub)",
+                          color: c.status === "active" ? "var(--active)" : "var(--sub)",
                         }}
                       >
                         {STATUS_LABELS[c.status] ?? c.status}

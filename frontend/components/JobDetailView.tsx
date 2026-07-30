@@ -278,7 +278,7 @@ export default function JobDetailView({ jobId, breadcrumbPrefix }: JobDetailView
                                         <span
                                             style={{
                                                 marginLeft: "auto",
-                                                color: "#34D399",
+                                                color: "var(--positive)",
                                                 fontFamily: "'IBM Plex Mono', monospace",
                                             }}
                                         >

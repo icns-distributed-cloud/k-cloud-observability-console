@@ -1,20 +1,44 @@
 :root {
-  --bg: #0B1220;
-  --panel: #111B30;
-  --panel-2: #0E1728;
-  --line: #243149;
-  --ink: #E6EDF7;
-  --sub: #8FA1BD;
-  --accent: #6366F1;
+  /* 기본 */
+  --bg: #F7FAF8;
+  --panel: #FFFFFF;
+  --panel-2: #F0F5F1;
+  --line: #DBE5DD;
+  --ink: #16241C;
+  --sub: #5B7264;
+  --accent: #0E8F5C;
 
-  --gpu: #818CF8;
-  --npu: #2DD4BF;
-  --pim: #FB923C;
-}
+  /* 상태 */
+  --active: #03aa11;
+  --idle: #3d3d3dab;
+  --alert-critical: #DC2626;
+  --alert-warning: #D97706;
+  --positive: #059669;
 
-body {
-  background: var(--bg);
-  color: var(--ink);
+  /* 가속기 */
+  --gpu: #0E8F5C;
+  --npu: #0D8A8A;
+  --pim: #C2620A;
+
+  /* 작업 타입 */
+  --job-train: #0E8F5C;
+  --job-infer: #C2620A;
+  --job-distributed: #0D8A8A;
+
+  /* 지도 */
+  --map-land: #165ebd49;
+  --map-stroke: #8f99a936;
+  --map-kr: #A0AAB9;
+  --map-link-idle: #B4C1D6;
+
+  /* 레이어 특성 */
+  --layer-compute: #C2620A;
+  --layer-memory: #0E7490;
+  --layer-balanced: #0E8F5C;
+
+  /* 오버레이 */
+  --overlay: rgba(255, 255, 255, 0.85);
+  --overlay-strong: rgba(255, 255, 255, 0.97);
 }
 
 * {
@@ -23,5 +47,10 @@ body {
 
 body {
   margin: 0;
+  background: var(--bg);
+  color: var(--ink);
   font-family: system-ui, sans-serif;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.55;
 }
