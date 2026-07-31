@@ -15,7 +15,6 @@ import type {
   InferJobRequest,
   TrainJobRequest,
   ModelItem,
-  ClusterListItem,
 } from '@/app/types'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
@@ -99,8 +98,4 @@ export function submitInferJob(body: InferJobRequest) {
 
 export function fetchModels() {
   return get<ModelItem[]>('/models')
-}
-
-export function fetchClusters() {
-  return get<ClusterListItem[]>('/clusters')
 }
