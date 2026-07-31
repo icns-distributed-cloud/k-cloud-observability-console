@@ -50,7 +50,7 @@ body {
   background: var(--bg);
   color: var(--ink);
   font-family: system-ui, sans-serif;
-  font-size: 15px;
-  font-weight: 500;
-  line-height: 1.55;
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.7;
 }

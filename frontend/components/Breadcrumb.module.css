@@ -13,7 +13,7 @@
 
 .separator {
   color: var(--sub);
-  font-size: 14px;
+  font-size: 17px;
 }
 
 .link,
@@ -21,14 +21,14 @@
   border: none;
   background: none;
   font-family: inherit;
-  font-size: 14px;
+  font-size: 17px;
   padding: 0;
   white-space: nowrap;
 }
 
 .link {
   color: var(--sub);
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
 }
 

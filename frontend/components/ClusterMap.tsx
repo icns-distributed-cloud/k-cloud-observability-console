@@ -9,7 +9,7 @@ const WORLD_URL = "https://unpkg.com/world-atlas@2/countries-110m.json";
 const KR_ID = "410";
 const KR_HUB: [number, number] = [127.9, 36.4];
 
-const ACCENT =  "#000000";
+const ACCENT = "#000000";
 const ACTIVE = "var(--active)";
 const IDLE = "var(--idle)";
 const LAND = "var(--map-land)";
@@ -54,6 +54,7 @@ export default function ClusterMap({ regions, links, onSelectCluster }: ClusterM
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<"world" | "korea">("world");
   const [picker, setPicker] = useState<{ x: number; y: number; region: MapRegion } | null>(null);
+  const [hovered, setHovered] = useState<number | null>(null);
 
   useEffect(() => {
     fetch(WORLD_URL)
@@ -235,9 +236,22 @@ export default function ClusterMap({ regions, links, onSelectCluster }: ClusterM
                 if (!p) return null;
                 const anyActive = r.clusters.some((c) => c.status === "active");
                 return (
-                  <g key={r.id} transform={`translate(${p[0]},${p[1]})`}>
-                    <circle r={6} fill={anyActive ? ACTIVE : IDLE} stroke="#FFFFFF" strokeWidth={2} />
-                    <MarkerLabel text={`${r.name} · ${r.clusters.length}`} y={-14} />
+                  <g
+                    key={r.id}
+                    transform={`translate(${p[0]},${p[1]})`}
+                    onMouseEnter={() => setHovered(r.id)}
+                    onMouseLeave={() => setHovered(null)}
+                    style={{ cursor: "pointer" }}
+                  >
+                    <circle
+                      r={6}
+                      fill={anyActive ? ACTIVE : IDLE}
+                      stroke="#FFFFFF"
+                      strokeWidth={2}
+                    />
+                    {hovered === r.id && (
+                      <MarkerLabel text={`${r.name} · ${r.clusters.length}`} y={-15} bold />
+                    )}
                   </g>
                 );
               })}
@@ -260,6 +274,8 @@ export default function ClusterMap({ regions, links, onSelectCluster }: ClusterM
                   transform={`translate(${p[0]},${p[1]})`}
                   style={{ cursor: "pointer" }}
                   onClick={handleClick}
+                  onMouseEnter={() => setHovered(r.id)}
+                  onMouseLeave={() => setHovered(null)}
                 >
                   <circle r={multi ? 15 : 11} fill={col} opacity={0.18} />
                   {anyAlert && (
@@ -279,7 +295,9 @@ export default function ClusterMap({ regions, links, onSelectCluster }: ClusterM
                       {r.clusters.length}
                     </text>
                   )}
-                  <MarkerLabel text={multi ? r.name : r.clusters[0]?.name ?? r.name} y={-20} bold />
+                  {hovered === r.id && (
+                    <MarkerLabel text={multi ? r.name : r.clusters[0]?.name ?? r.name} y={-20} bold />
+                  )}
                 </g>
               );
             })
@@ -315,8 +333,6 @@ export default function ClusterMap({ regions, links, onSelectCluster }: ClusterM
           🇰🇷 대한민국 마커를 클릭하면 국내 클러스터 지도가 열립니다
         </div>
       )}
-
-      {/* 클러스터 선택 팝오버 */}
 
       {/* 클러스터 선택 팝오버 */}
       {picker && (
