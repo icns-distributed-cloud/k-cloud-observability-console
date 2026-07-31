@@ -39,6 +39,9 @@
   /* 오버레이 */
   --overlay: rgba(255, 255, 255, 0.85);
   --overlay-strong: rgba(255, 255, 255, 0.97);
+
+  --new-job: #E11D48;
+  --new-job-glow: rgba(225, 29, 72, 0.3);
 }
 
 * {
