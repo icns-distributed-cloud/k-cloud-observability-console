@@ -10,6 +10,9 @@ import type { JobSummary, ModelItem, PriorityPref } from "@/app/types";
 
 
 const PRECISIONS = ["FP16", "INT8", "FP32"];
+// ponytail: 데이터셋은 화면 전용 선택지 — 백엔드 제출 스키마에 필드가 없어 payload에는 넣지 않는다.
+// API에 dataset이 생기면 여기 목록을 fetch로 바꾸고 base에 추가.
+const DATASETS = ["ImageNet-1k", "COCO 2017", "KLUE-MRC", "AI-Hub 한국어 대화"];
 const PRIORITIES: { value: PriorityPref; label: string }[] = [
   { value: "time", label: "시간 우선" },
   { value: "cost", label: "비용 우선" },
@@ -22,6 +25,7 @@ export default function NewJobPage() {
   const [jobType, setJobType] = useState("train");
   const [models, setModels] = useState<ModelItem[]>([]);
   const [modelId, setModelId] = useState<number | null>(null);
+  const [dataset, setDataset] = useState(DATASETS[0]);
   const [batch, setBatch] = useState(128);
   const [precision, setPrecision] = useState("FP16");
   const [priority, setPriority] = useState<PriorityPref>("time");
@@ -56,6 +60,8 @@ export default function NewJobPage() {
           ? await submitTrainJob(base)
           : await submitInferJob({ ...base, sla_target: slaTarget });
       setResult(job);
+      sessionStorage.setItem("kcloud:lastSubmittedJobId", String(job.id));
+      sessionStorage.setItem("kcloud:lastSubmittedAt", String(Date.now()));
     } catch (e) {
       setError(String(e));
     } finally {
@@ -102,12 +108,16 @@ export default function NewJobPage() {
 
             <div style={{ fontSize: 12.5, color: "var(--sub)", lineHeight: 1.9 }}>
               <div>상태 · {JOB_STATUS_LABELS[result.status] ?? result.status}</div>
+              <div>데이터셋 · {dataset}</div>
               <div>배치 · {result.batch}</div>
               <div>정밀도 · {result.precision}</div>
             </div>
 
             <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
-              <button onClick={() => router.push(`/jobs/${result.id}`)} style={primaryBtn}>
+              <button onClick={() => router.push("/timeline")} style={primaryBtn}>
+                스케줄러에서 보기
+              </button>
+              <button onClick={() => router.push(`/jobs/${result.id}`)} style={secondaryBtn}>
                 작업 상세 보기
               </button>
               <button onClick={() => setResult(null)} style={secondaryBtn}>
@@ -159,6 +169,20 @@ export default function NewJobPage() {
               {models.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name} ({m.type})
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="데이터셋">
+            <select
+              value={dataset}
+              onChange={(e) => setDataset(e.target.value)}
+              style={inputStyle}
+            >
+              {DATASETS.map((d) => (
+                <option key={d} value={d}>
+                  {d}
                 </option>
               ))}
             </select>

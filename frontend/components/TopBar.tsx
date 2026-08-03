@@ -30,12 +30,12 @@ export default function TopBar() {
           }}
         />
         <div>
-          <div style={{ fontSize: 14, fontWeight: 700, letterSpacing: "-0.01em" }}>
+          <div style={{ fontSize: 19, fontWeight: 700, letterSpacing: "-0.01em" }}>
             K-Cloud 연구 클러스터
           </div>
           <div
             style={{
-              fontSize: 10,
+              fontSize: 14,
               color: "var(--sub)",
               fontFamily: "'IBM Plex Mono', monospace",
               letterSpacing: "0.04em",
@@ -49,15 +49,21 @@ export default function TopBar() {
       <nav style={{ display: "flex", gap: 4, marginLeft: 8 }}>
         <NavLink label="지도" href="/" active={pathname === "/"} onClick={router.push} />
         <NavLink
+          label="클러스터 현황"
+          href="/infra"
+          active={pathname.startsWith("/infra")}
+          onClick={router.push}
+        />
+        <NavLink
           label="작업 목록"
           href="/jobs"
           active={pathname.startsWith("/jobs")}
           onClick={router.push}
         />
         <NavLink
-          label="클러스터 현황"
-          href="/infra"
-          active={pathname.startsWith("/infra")}
+          label="스케줄러"
+          href="/timeline"
+          active={pathname.startsWith("/timeline")}
           onClick={router.push}
         />
       </nav>
@@ -86,8 +92,8 @@ function NavLink({
         padding: "6px 12px",
         cursor: "pointer",
         fontFamily: "inherit",
-        fontSize: 12.5,
-        fontWeight: 600,
+        fontSize: 17,
+        fontWeight: 700,
         color: active ? "var(--ink)" : "var(--sub)",
       }}
     >
