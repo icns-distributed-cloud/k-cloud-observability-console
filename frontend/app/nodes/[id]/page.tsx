@@ -7,15 +7,27 @@ import { fetchClusterAssignments, fetchClusterDetail, fetchJobs, fetchNodeDetail
 import { JOB_COLORS, JOB_STATUS_LABELS, mapNodeJobs } from "@/lib/jobs";
 import type { JobSummary, NodeDetail } from "@/app/types";
 import { useRouter } from "next/navigation";
+import Card from "@/components/Card";
+import Sparkline from "@/components/Sparkline";
+import { generateMetricSeries } from "@/lib/metrics";
+import { useTime } from "@/lib/TimeContext";
 
 const SECTION_LABEL: React.CSSProperties = {
-  fontSize: 11,
+  fontSize: 15,
   fontWeight: 700,
   letterSpacing: "0.08em",
   textTransform: "uppercase",
   color: "var(--sub)",
   marginBottom: 12,
   fontFamily: "'IBM Plex Mono', monospace",
+};
+
+const METRIC_LABELS: Record<string, string> = {
+  util: "활용률 (%)",
+  cpu: "CPU (%)",
+  mem: "메모리 (%)",
+  temp: "온도 (°C)",
+  power: "전력 (W)",
 };
 
 export default function NodePage({ params }: { params: Promise<{ id: string }> }) {
@@ -27,6 +39,7 @@ export default function NodePage({ params }: { params: Promise<{ id: string }> }
   const [error, setError] = useState<string | null>(null);
   const [job, setJob] = useState<JobSummary | undefined>(undefined);
   const [clusterName, setClusterName] = useState<string>("");
+  const { nowSec } = useTime();
 
   useEffect(() => {
     fetchNodeDetail(nodeId)
@@ -47,8 +60,6 @@ export default function NodePage({ params }: { params: Promise<{ id: string }> }
   if (!node) return <main style={{ padding: 24 }}>불러오는 중…</main>;
 
   const kind = node.accelerators[0]?.kind ?? "GPU";
-  const utilProfile = node.metric_profiles.find((m) => m.metric_type === "util");
-  const util = utilProfile ? Math.round(Number(utilProfile.baseline)) : 0;
   const isIdle = !job;
 
   return (
@@ -65,48 +76,38 @@ export default function NodePage({ params }: { params: Promise<{ id: string }> }
       />
 
       <div style={{ margin: "16px 0 20px" }}>
-        <div style={{ fontSize: 20, fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ fontSize: 27, fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
           <KindGlyph kind={kind} size={16} />
           {node.name}
         </div>
-        <div style={{ fontSize: 12.5, color: "var(--sub)", marginTop: 4 }}>
+        <div style={{ fontSize: 17, color: "var(--sub)", marginTop: 4 }}>
           {clusterName || `클러스터 ${node.cluster_id}`} · {kind}
         </div>
       </div>
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
         <StatCard label="종류" value={kind} />
-        <StatCard label="활용률" value={util} unit="%" />
         <StatCard label="상태" value={isIdle ? "유휴" : "가동중"} />
+        <StatCard label="가속기" value={node.accelerators.reduce((n, a) => n + a.count, 0)} unit="개" />
       </div>
 
-      {node.alerts.length > 0 && (
-        <div style={{ marginBottom: 20 }}>
-          {node.alerts.map((a) => (
-            <div
-              key={a.id}
-              style={{
-                background: "var(--panel)",
-                border: `1px solid ${a.severity === "physical" ? "var(--alert-critical)" : "var(--alert-warning)"}`,
-                borderRadius: 12,
-                padding: "12px 14px",
-                fontSize: 12.5,
-                marginBottom: 8,
-              }}
-            >
-              <span
-                style={{
-                  color: a.severity === "physical" ? "var(--alert-critical)" : "var(--alert-warning)",
-                  fontWeight: 700,
-                }}
-              >
-                {a.severity === "physical" ? "물리" : "SLA"}
-              </span>
-              {" · "}
-              {a.message}
-            </div>
-          ))}
-        </div>
+      {nowSec !== null && node.metric_profiles.length > 0 && (
+        <>
+          <div style={SECTION_LABEL}>실시간 모니터링</div>
+          <div style={{ marginBottom: 24 }}>
+            <Card>
+              <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+                {node.metric_profiles.map((m) => (
+                  <Sparkline
+                    key={m.metric_type}
+                    label={METRIC_LABELS[m.metric_type] ?? m.metric_type}
+                    values={generateMetricSeries(m, nowSec, 90, 14)}
+                  />
+                ))}
+              </div>
+            </Card>
+          </div>
+        </>
       )}
 
       <div style={SECTION_LABEL}>실행 중인 작업</div>
@@ -138,14 +139,14 @@ export default function NodePage({ params }: { params: Promise<{ id: string }> }
             }}
           />
           <div>
-            <div style={{ fontWeight: 700, fontSize: 13.5, color: JOB_COLORS[job.type] }}>
+            <div style={{ fontWeight: 700, fontSize: 19, color: JOB_COLORS[job.type] }}>
               {job.model_name}
             </div>
-            <div style={{ fontSize: 11.5, color: "var(--sub)", marginTop: 2 }}>
+            <div style={{ fontSize: 15, color: "var(--sub)", marginTop: 2 }}>
               {job.type} · {JOB_STATUS_LABELS[job.status] ?? job.status}
             </div>
           </div>
-          <span style={{ marginLeft: "auto", fontSize: 11.5, color: "var(--sub)" }}>
+          <span style={{ marginLeft: "auto", fontSize: 15, color: "var(--sub)" }}>
             상세 보기 ›
           </span>
         </div>
@@ -156,7 +157,7 @@ export default function NodePage({ params }: { params: Promise<{ id: string }> }
             borderRadius: 12,
             padding: 24,
             textAlign: "center",
-            fontSize: 12.5,
+            fontSize: 17,
             color: "var(--sub)",
             marginBottom: 24,
           }}
@@ -182,16 +183,16 @@ export default function NodePage({ params }: { params: Promise<{ id: string }> }
             }}
           >
             <KindGlyph kind={acc.kind} size={14} />
-            <span style={{ fontWeight: 700, fontSize: 13.5 }}>{acc.model_name}</span>
+            <span style={{ fontWeight: 700, fontSize: 19 }}>{acc.model_name}</span>
             <span
-              style={{ fontSize: 11.5, color: "var(--sub)", fontFamily: "'IBM Plex Mono', monospace" }}
+              style={{ fontSize: 15, color: "var(--sub)", fontFamily: "'IBM Plex Mono', monospace" }}
             >
               ×{acc.count}
             </span>
             <span
               style={{
                 marginLeft: "auto",
-                fontSize: 11.5,
+                fontSize: 15,
                 color: "var(--sub)",
                 fontFamily: "'IBM Plex Mono', monospace",
               }}

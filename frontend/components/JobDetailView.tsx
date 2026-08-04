@@ -5,7 +5,7 @@ import StatCard from "@/components/StatCard";
 import Card from "@/components/Card";
 import Tabs from "@/components/Tabs";
 import ProgressBar from "@/components/ProgressBar";
-import Sparkline from "@/components/Sparkline";
+import MetricChart from "@/components/MetricChart";
 import ModelGraph from "@/components/ModelGraph";
 import {
     fetchHyperparamAdjustments,
@@ -98,6 +98,8 @@ export default function JobDetailView({ jobId, breadcrumbPrefix }: JobDetailView
     const color = JOB_COLORS[job.type];
     const progress = now ? jobProgress(job, now) : 0;
     const featured = job.metrics.find((m) => m.featured);
+    /** 에포크처럼 총 개수가 있는 지표 — 그래프 하단에 표시하고 카드에서는 뺀다 */
+    const counter = job.metrics.find((m) => !m.featured && m.total_count !== null);
     const realloc = summarizeReallocations(reallocs);
 
     const tabs = [
@@ -123,7 +125,7 @@ export default function JobDetailView({ jobId, breadcrumbPrefix }: JobDetailView
                 <div>
                     <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
                         {[...job.metrics]
-                            .filter((m) => !m.featured)
+                            .filter((m) => !m.featured && m.id !== counter?.id)
                             .sort((a, b) => a.seq - b.seq)
                             .map((m) => {
                                 const d = metricDisplay(m, progress);
@@ -146,10 +148,20 @@ export default function JobDetailView({ jobId, breadcrumbPrefix }: JobDetailView
 
                     {featured && now && (
                         <Card>
-                            <Sparkline
-                                label={`${featured.label}${featured.unit ? ` (${featured.unit})` : ""}`}
+                            <MetricChart
+                                title={`${TYPE_LABELS[job.type] ?? job.type} 현황`}
+                                currentLabel={`현재 ${featured.label}`}
+                                currentValue={metricDisplay(featured, progress).value}
+                                unit={featured.unit}
                                 values={metricSeries(featured, progress, 30)}
+                                progress={progress}
                                 color={color}
+                                footerLeft={
+                                    counter
+                                        ? `${counter.label} ${Math.round(progress * counter.total_count!)} / ${counter.total_count}`
+                                        : undefined
+                                }
+                                xLabel={counter?.label}
                             />
                         </Card>
                     )}

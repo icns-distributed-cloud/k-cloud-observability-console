@@ -17,11 +17,12 @@ TRUNCATE
   provider, region, cluster, node, accelerator,
   cluster_metric_profile, node_metric_profile, accelerator_metric_profile,
   cluster_distributed_link, node_alert,
-  model, model_layer, model_layer_edge,
+  model, model_layer, model_layer_edge, dataset,
   job, assignment, event,
   job_metric_profile, job_cache_profile, job_cache_tier,
   hyperparam_adjustment, job_kqv_benchmark, reallocation,
-  job_negotiation, job_negotiation_item
+  job_negotiation, job_negotiation_item,
+  resource_tier, resource_tier_requirement
 RESTART IDENTITY CASCADE;
 
 -- ---------- infra ----------
@@ -76,7 +77,7 @@ INSERT INTO cluster (region_id, name, status, is_live, cost_per_hour) VALUES
   (2, 'khu-suwon-01', 'active', true, 0),
   (3, 'khu-daejeon-01', 'standby', false, 0),
   (4, 'khu-busan-01', 'active', false, 0),
-  (5, 'aws-use1-a', 'active', true, 123.00),
+  (5, 'aws-use1-a', 'active', false, 123.00),
   (6, 'aws-apne1-a', 'active', false, 98.50),
   (7, 'aws-euw1-a', 'standby', false, 0),
   (8, 'gcp-usc1-a', 'active', false, 110.00),
@@ -89,7 +90,7 @@ INSERT INTO cluster (region_id, name, status, is_live, cost_per_hour) VALUES
   (13, 'aws-afs1-a', 'active', false, 88.00),
   (14, 'gcp-euw4-a', 'active', false, 108.00),
   (15, 'gcp-ause1-a', 'active', false, 120.00),
-  (16, 'azure-eas-a', 'active', true, 99.00),
+  (16, 'azure-eas-a', 'active', false, 99.00),
   (17, 'azure-uks-a', 'standby', false, 0),
   (18, 'azure-cac-a', 'active', false, 101.00);
 
@@ -345,24 +346,27 @@ INSERT INTO model_layer_edge (from_layer_id, to_layer_id) VALUES
   (1, 2);
 
 -- ---------- jobs ----------
+-- precision/sla_target were dropped from job (see migration 5fcc49cbc30e) - CSC wizard
+-- never collected them. dataset_id/selected_tier_id are nullable and left unset here;
+-- they get wired up once the CSC job-submission API seeds real dataset/resource_tier rows.
 -- job 1: train, currently running (started now, 180s duration)
-INSERT INTO job (model_id, type, status, batch, precision, priority_pref, sla_target, submitted_at, started_at, finished_at) VALUES
-  (1, 'train', 'running', 128, 'FP16', 'time', NULL, now(), now(), NULL);
+INSERT INTO job (model_id, type, status, batch, priority_pref, submitted_at, started_at, finished_at) VALUES
+  (1, 'train', 'running', 128, 'time', now(), now(), NULL);
 
 -- job 2: infer, already finished
-INSERT INTO job (model_id, type, status, batch, precision, priority_pref, sla_target, submitted_at, started_at, finished_at) VALUES
-  (1, 'infer', 'done', 32, 'INT8', 'cost', 99.0, now() - interval '15 minutes', now() - interval '10 minutes', now() - interval '5 minutes');
+INSERT INTO job (model_id, type, status, batch, priority_pref, submitted_at, started_at, finished_at) VALUES
+  (1, 'infer', 'done', 32, 'cost', now() - interval '15 minutes', now() - interval '10 minutes', now() - interval '5 minutes');
 
 -- job 3: infer, still queued (no free node)
-INSERT INTO job (model_id, type, status, batch, precision, priority_pref, sla_target, submitted_at, started_at, finished_at) VALUES
-  (1, 'infer', 'queued', 16, 'INT8', 'balanced', 99.5, now() - interval '1 minute', NULL, NULL);
+INSERT INTO job (model_id, type, status, batch, priority_pref, submitted_at, started_at, finished_at) VALUES
+  (1, 'infer', 'queued', 16, 'balanced', now() - interval '1 minute', NULL, NULL);
 
 -- job 4: train, already finished - donated node1 to job1 (see reallocation below).
 -- Reallocation is a train-only concept, so the donor here has to be a train job,
 -- not job2 (infer) - that was the bug that made the "재할당" tab show up on an
 -- infer job's detail page.
-INSERT INTO job (model_id, type, status, batch, precision, priority_pref, sla_target, submitted_at, started_at, finished_at) VALUES
-  (1, 'train', 'done', 64, 'FP16', 'time', NULL, now() - interval '12 minutes', now() - interval '11 minutes', now() - interval '1 minute');
+INSERT INTO job (model_id, type, status, batch, priority_pref, submitted_at, started_at, finished_at) VALUES
+  (1, 'train', 'done', 64, 'time', now() - interval '12 minutes', now() - interval '11 minutes', now() - interval '1 minute');
 
 INSERT INTO assignment (job_id, node_id, from_t, to_t) VALUES
   (1, 1, now(), NULL),

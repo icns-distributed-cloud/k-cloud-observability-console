@@ -127,7 +127,6 @@ class EventItem(BaseModel):
 class TrainJobRequest(BaseModel):
     model_id: int
     batch: int
-    precision: str
     priority_pref: str
 
 
@@ -135,9 +134,7 @@ class TrainJobRequest(BaseModel):
 class InferJobRequest(BaseModel):
     model_id: int
     batch: int
-    precision: str
     priority_pref: str
-    sla_target: Decimal
 
 
 # ---------- GET /api/v1/jobs ----------
@@ -148,9 +145,7 @@ class JobSummary(BaseModel):
     type: str
     status: str
     batch: int
-    precision: str
     priority_pref: str
-    sla_target: Optional[Decimal]
     submitted_at: datetime
     started_at: Optional[datetime]
     finished_at: Optional[datetime]

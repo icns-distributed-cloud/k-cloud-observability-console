@@ -3,17 +3,23 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Breadcrumb from "@/components/Breadcrumb";
 import Tabs from "@/components/Tabs";
-import { fetchJobs } from "@/lib/api";
-import { JOB_COLORS, JOB_STATUS_LABELS, PRIORITY_LABELS } from "@/lib/jobs";
+import { fetchJobAssignments, fetchJobs, fetchNodeDetail } from "@/lib/api";
+import { JOB_COLORS, JOB_STATUS_LABELS, PRIORITY_LABELS, mapJobNodes } from "@/lib/jobs";
 import { jobProgress } from "@/lib/jobMetrics";
 import { useTime } from "@/lib/TimeContext";
-import type { JobSummary } from "@/app/types";
+import type { JobSummary, NodeDetail } from "@/app/types";
 
 const TYPE_LABELS: Record<string, string> = {
     train: "학습",
     infer: "추론",
     distributed: "분산학습",
 };
+
+/** ["srv-01", "srv-02", "srv-03"] → "srv-01 외 2" */
+function nodeLabel(names: string[] | undefined) {
+    if (!names?.length) return "-";
+    return names.length > 1 ? `${names[0]} 외 ${names.length - 1}` : names[0];
+}
 
 const FILTERS = [
     { id: "all", label: "전체" },
@@ -28,12 +34,44 @@ export default function JobListPage() {
     const [jobs, setJobs] = useState<JobSummary[]>([]);
     const [filter, setFilter] = useState("all");
     const [error, setError] = useState<string | null>(null);
+    /** 작업 → 점유 노드 이름. null이면 아직 로딩 중 (노드 칸만 비워둔다) */
+    const [jobNodes, setJobNodes] = useState<Record<number, string[]> | null>(null);
 
     useEffect(() => {
         fetchJobs(filter === "all" ? undefined : filter)
             .then(setJobs)
             .catch((e) => setError(String(e)));
     }, [filter]);
+
+    // 작업별 할당을 직접 조회한 뒤, 점유 중인 노드의 이름만 추가로 받아 매핑을 만든다.
+    // 할당은 node_id만 주므로 이름은 노드 상세에서 가져온다 (중복 제거해서 노드당 1회).
+    // 실패한 호출은 건너뛰고 나머지로 진행 (작업 목록 자체는 이미 떠 있다).
+    useEffect(() => {
+        if (jobs.length === 0) {
+            setJobNodes({});
+            return;
+        }
+        let cancelled = false;
+
+        Promise.all(jobs.map((j) => fetchJobAssignments(j.id).catch(() => [])))
+            .then(async (lists) => {
+                const active = lists.flat().filter((a) => a.to_t === null);
+                const nodeIds = [...new Set(active.map((a) => a.node_id))];
+                const nodes = await Promise.all(
+                    nodeIds.map((id) => fetchNodeDetail(id).catch(() => null))
+                );
+                if (cancelled) return;
+
+                setJobNodes(mapJobNodes(active, nodes.filter((n): n is NodeDetail => n !== null)));
+            })
+            .catch(() => {
+                if (!cancelled) setJobNodes({});
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [jobs]);
 
     if (error) return <main style={{ padding: 24 }}>불러오기 실패: {error}</main>;
 
@@ -145,6 +183,18 @@ export default function JobListPage() {
                                         {Math.round(progress * 100)}%
                                     </div>
                                 </div>
+
+                                <span
+                                    style={{
+                                        fontSize: 15,
+                                        fontWeight: 600,
+                                        color: "var(--sub)",
+                                        fontFamily: "'IBM Plex Mono', monospace",
+                                        minWidth: 100,
+                                    }}
+                                >
+                                    {jobNodes === null ? "" : nodeLabel(jobNodes[j.id])}
+                                </span>
 
                                 <span
                                     style={{

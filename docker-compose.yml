@@ -19,7 +19,7 @@ services:
     build: ./backend
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-kcloud}:${POSTGRES_PASSWORD:-kcloud}@db:5432/${POSTGRES_DB:-kcloud}
-      FRONTEND_ORIGIN: http://localhost:3000
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:3000}
     ports:
       - "8000:8000"
     volumes:
@@ -31,7 +31,7 @@ services:
   frontend:
     build: ./frontend
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
     ports:
       - "3000:3000"
     volumes:
