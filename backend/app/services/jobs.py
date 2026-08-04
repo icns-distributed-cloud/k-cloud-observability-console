@@ -174,7 +174,7 @@ def _pick_free_nodes_for_tier(
 ) -> list[models.Node] | None:
     free_by_kind: dict[str, list[models.Node]] = {}
     for node in live_cluster.nodes:
-        if node.id in occupied_node_ids:
+        if node.id in occupied_node_ids or node.purpose != tier.job_type:
             continue
         for kind in {a.kind for a in node.accelerators}:
             free_by_kind.setdefault(kind, []).append(node)
@@ -191,10 +191,12 @@ def _pick_free_nodes_for_tier(
     return picked
 
 
-def _free_node_counts_by_kind(live_cluster: models.Cluster, occupied_node_ids: set[int]) -> dict[str, int]:
+def _free_node_counts_by_kind(
+    live_cluster: models.Cluster, job_type: str, occupied_node_ids: set[int]
+) -> dict[str, int]:
     counts: dict[str, int] = {}
     for node in live_cluster.nodes:
-        if node.id in occupied_node_ids:
+        if node.id in occupied_node_ids or node.purpose != job_type:
             continue
         for kind in {a.kind for a in node.accelerators}:
             counts[kind] = counts.get(kind, 0) + 1
@@ -207,7 +209,7 @@ def list_resource_tiers(db: Session, job_type: str) -> list[schemas.ResourceTier
         return []
 
     occupied = _occupied_node_ids(live_cluster, clock.now())
-    free_counts = _free_node_counts_by_kind(live_cluster, occupied)
+    free_counts = _free_node_counts_by_kind(live_cluster, job_type, occupied)
 
     tiers = (
         db.query(models.ResourceTier)
@@ -523,6 +525,8 @@ def submit_job(
     )
     if tier is None:
         raise HTTPException(status_code=400, detail="invalid tier_id")
+    if tier.job_type != job_type:
+        raise HTTPException(status_code=400, detail="tier_id does not match job type")
 
     now = clock.now()
     job = models.Job(

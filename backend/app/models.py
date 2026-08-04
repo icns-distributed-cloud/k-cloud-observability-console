@@ -54,6 +54,7 @@ class Node(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     cluster_id: Mapped[int] = mapped_column(ForeignKey("cluster.id"))
     name: Mapped[str]
+    purpose: Mapped[str]
 
     cluster: Mapped["Cluster"] = relationship(back_populates="nodes")
     accelerators: Mapped[list["Accelerator"]] = relationship(back_populates="node")
