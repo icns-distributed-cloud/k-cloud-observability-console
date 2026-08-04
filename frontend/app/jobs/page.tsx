@@ -3,8 +3,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Breadcrumb from "@/components/Breadcrumb";
 import Tabs from "@/components/Tabs";
-import { fetchJobs } from "@/lib/api";
-import { JOB_COLORS, JOB_STATUS_LABELS, PRIORITY_LABELS } from "@/lib/jobs";
+import { fetchClusterAssignments, fetchClusterDetail, fetchJobs, fetchProviders } from "@/lib/api";
+import { JOB_COLORS, JOB_STATUS_LABELS, PRIORITY_LABELS, mapJobNodes } from "@/lib/jobs";
 import { jobProgress } from "@/lib/jobMetrics";
 import { useTime } from "@/lib/TimeContext";
 import type { JobSummary } from "@/app/types";
@@ -14,6 +14,12 @@ const TYPE_LABELS: Record<string, string> = {
     infer: "추론",
     distributed: "분산학습",
 };
+
+/** ["srv-01", "srv-02", "srv-03"] → "srv-01 외 2" */
+function nodeLabel(names: string[] | undefined) {
+    if (!names?.length) return "-";
+    return names.length > 1 ? `${names[0]} 외 ${names.length - 1}` : names[0];
+}
 
 const FILTERS = [
     { id: "all", label: "전체" },
@@ -28,12 +34,42 @@ export default function JobListPage() {
     const [jobs, setJobs] = useState<JobSummary[]>([]);
     const [filter, setFilter] = useState("all");
     const [error, setError] = useState<string | null>(null);
+    /** 작업 → 점유 노드 이름. null이면 아직 로딩 중 (노드 칸만 비워둔다) */
+    const [jobNodes, setJobNodes] = useState<Record<number, string[]> | null>(null);
 
     useEffect(() => {
         fetchJobs(filter === "all" ? undefined : filter)
             .then(setJobs)
             .catch((e) => setError(String(e)));
     }, [filter]);
+
+    // 할당 정보는 클러스터 단위로만 조회된다. 전 클러스터를 병렬로 훑어 작업→노드 매핑을 만든다.
+    // 실패한 클러스터는 건너뛰고 나머지로 진행 (작업 목록 자체는 이미 떠 있다).
+    useEffect(() => {
+        let cancelled = false;
+
+        fetchProviders()
+            .then(async (providers) => {
+                const ids = providers.flatMap((p) =>
+                    p.regions.flatMap((r) => r.clusters.map((c) => c.id))
+                );
+                const [details, assignmentLists] = await Promise.all([
+                    Promise.all(ids.map((id) => fetchClusterDetail(id).catch(() => null))),
+                    Promise.all(ids.map((id) => fetchClusterAssignments(id).catch(() => []))),
+                ]);
+                if (cancelled) return;
+
+                const nodes = details.flatMap((d) => d?.nodes ?? []);
+                setJobNodes(mapJobNodes(assignmentLists.flat(), nodes));
+            })
+            .catch(() => {
+                if (!cancelled) setJobNodes({});
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     if (error) return <main style={{ padding: 24 }}>불러오기 실패: {error}</main>;
 
@@ -145,6 +181,18 @@ export default function JobListPage() {
                                         {Math.round(progress * 100)}%
                                     </div>
                                 </div>
+
+                                <span
+                                    style={{
+                                        fontSize: 15,
+                                        fontWeight: 600,
+                                        color: "var(--sub)",
+                                        fontFamily: "'IBM Plex Mono', monospace",
+                                        minWidth: 100,
+                                    }}
+                                >
+                                    {jobNodes === null ? "" : nodeLabel(jobNodes[j.id])}
+                                </span>
 
                                 <span
                                     style={{
