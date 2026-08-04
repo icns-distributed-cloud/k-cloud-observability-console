@@ -27,7 +27,7 @@ const METRIC_LABELS: Record<string, string> = {
   cpu: "CPU (%)",
   mem: "메모리 (%)",
   temp: "온도 (°C)",
-  power: "전력 (kW)",
+  power: "전력 (W)",
 };
 
 export default function NodePage({ params }: { params: Promise<{ id: string }> }) {
