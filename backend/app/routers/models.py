@@ -19,3 +19,8 @@ def get_model_layers(model_id: int, db: Session = Depends(get_db)) -> schemas.Mo
     if result is None:
         raise HTTPException(status_code=404, detail="model not found")
     return result
+
+
+@router.get("/datasets", response_model=list[schemas.DatasetItem])
+def list_datasets(model_id: int | None = None, db: Session = Depends(get_db)) -> list[schemas.DatasetItem]:
+    return models_service.list_datasets(db, model_id)
