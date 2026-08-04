@@ -81,6 +81,7 @@ class NodeSummary(BaseModel):
     id: int
     name: str
     cluster_id: int
+    purpose: str
     metric_profiles: list[MetricProfilePoint]
     alerts: list[NodeAlertItem]
 
@@ -280,6 +281,7 @@ class NodeDetail(BaseModel):
     id: int
     name: str
     cluster_id: int
+    purpose: str
     accelerators: list[AcceleratorGroup]
     metric_profiles: list[MetricProfilePoint]
     alerts: list[NodeAlertItem]
