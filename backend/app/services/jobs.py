@@ -120,6 +120,19 @@ METRIC_TEMPLATES: dict[str, list[dict]] = {
 }
 
 
+def _to_selected_tier(tier: models.ResourceTier | None) -> schemas.SelectedTierSummary | None:
+    if tier is None:
+        return None
+    return schemas.SelectedTierSummary(
+        id=tier.id,
+        tier_no=tier.tier_no,
+        cost_per_hour=tier.cost_per_hour,
+        requirements=[
+            schemas.TierRequirementItem(kind=r.kind, node_count=r.node_count) for r in tier.requirements
+        ],
+    )
+
+
 def _to_job_summary(job: models.Job) -> schemas.JobSummary:
     return schemas.JobSummary(
         id=job.id,
@@ -132,6 +145,7 @@ def _to_job_summary(job: models.Job) -> schemas.JobSummary:
         submitted_at=job.submitted_at,
         started_at=job.started_at,
         finished_at=job.finished_at,
+        selected_tier=_to_selected_tier(job.selected_tier),
     )
 
 
@@ -167,6 +181,48 @@ def _pick_free_node(
             continue
         return node
     return None
+
+
+def _free_node_counts_by_kind(live_cluster: models.Cluster, occupied_node_ids: set[int]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for node in live_cluster.nodes:
+        if node.id in occupied_node_ids:
+            continue
+        for kind in {a.kind for a in node.accelerators}:
+            counts[kind] = counts.get(kind, 0) + 1
+    return counts
+
+
+def list_resource_tiers(db: Session, job_type: str) -> list[schemas.ResourceTierItem]:
+    live_cluster = _load_live_cluster(db)
+    if live_cluster is None:
+        return []
+
+    occupied = _occupied_node_ids(live_cluster, clock.now())
+    free_counts = _free_node_counts_by_kind(live_cluster, occupied)
+
+    tiers = (
+        db.query(models.ResourceTier)
+        .options(selectinload(models.ResourceTier.requirements))
+        .filter(
+            models.ResourceTier.cluster_id == live_cluster.id,
+            models.ResourceTier.job_type == job_type,
+        )
+        .order_by(models.ResourceTier.tier_no)
+        .all()
+    )
+    return [
+        schemas.ResourceTierItem(
+            id=t.id,
+            tier_no=t.tier_no,
+            cost_per_hour=t.cost_per_hour,
+            requirements=[
+                schemas.TierRequirementItem(kind=r.kind, node_count=r.node_count) for r in t.requirements
+            ],
+            available=all(free_counts.get(r.kind, 0) >= r.node_count for r in t.requirements),
+        )
+        for t in tiers
+    ]
 
 
 def _log_event(
@@ -257,7 +313,10 @@ def sweep_dependency(db: Session = Depends(get_db)) -> None:
 
 
 def list_jobs(db: Session, status: str | None = None) -> list[schemas.JobSummary]:
-    query = db.query(models.Job).options(selectinload(models.Job.model))
+    query = db.query(models.Job).options(
+        selectinload(models.Job.model),
+        selectinload(models.Job.selected_tier).selectinload(models.ResourceTier.requirements),
+    )
     if status is not None:
         query = query.filter(models.Job.status == status)
     return [_to_job_summary(job) for job in query.all()]
@@ -271,6 +330,7 @@ def get_job_detail(db: Session, job_id: int) -> schemas.JobDetail | None:
             selectinload(models.Job.metric_profiles),
             selectinload(models.Job.cache_profile),
             selectinload(models.Job.cache_tiers),
+            selectinload(models.Job.selected_tier).selectinload(models.ResourceTier.requirements),
         )
         .filter(models.Job.id == job_id)
         .first()

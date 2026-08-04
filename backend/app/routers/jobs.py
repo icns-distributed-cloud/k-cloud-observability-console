@@ -67,6 +67,11 @@ def get_negotiations(
     return jobs_service.get_negotiations(db, job_id)
 
 
+@router.get("/resource-tiers", response_model=list[schemas.ResourceTierItem])
+def list_resource_tiers(job_type: str, db: Session = Depends(get_db)) -> list[schemas.ResourceTierItem]:
+    return jobs_service.list_resource_tiers(db, job_type)
+
+
 @router.post("/jobs/train", response_model=schemas.JobSummary, status_code=201)
 def submit_train_job(
     req: schemas.TrainJobRequest, db: Session = Depends(get_db), _: None = Depends(jobs_service.sweep_dependency)

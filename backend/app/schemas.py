@@ -138,6 +138,18 @@ class InferJobRequest(BaseModel):
 
 
 # ---------- GET /api/v1/jobs ----------
+class TierRequirementItem(BaseModel):
+    kind: str
+    node_count: int
+
+
+class SelectedTierSummary(BaseModel):
+    id: int
+    tier_no: int
+    cost_per_hour: Decimal
+    requirements: list[TierRequirementItem]
+
+
 class JobSummary(BaseModel):
     id: int
     model_id: int
@@ -149,6 +161,7 @@ class JobSummary(BaseModel):
     submitted_at: datetime
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
+    selected_tier: Optional[SelectedTierSummary]
 
 
 # ---------- GET /api/v1/jobs/{job_id} ----------
@@ -223,6 +236,18 @@ class ModelSummary(BaseModel):
     id: int
     name: str
     type: str
+
+
+# ---------- GET /api/v1/datasets ----------
+class DatasetItem(BaseModel):
+    id: int
+    name: str
+    model_id: Optional[int]
+
+
+# ---------- GET /api/v1/resource-tiers ----------
+class ResourceTierItem(SelectedTierSummary):
+    available: bool
 
 
 # ---------- GET /api/v1/models/{model_id}/layers ----------

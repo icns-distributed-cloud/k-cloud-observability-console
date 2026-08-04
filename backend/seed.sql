@@ -125,6 +125,11 @@ INSERT INTO node (cluster_id, name) VALUES
   (18, 'uks-node-a'),
   (19, 'cac-node-a');
 
+-- extra node on the live cluster (khu-suwon-01) so resource_tier below can demo a
+-- mixed-kind tier (GPU + NPU) - the other two suwon nodes are GPU-only.
+INSERT INTO node (cluster_id, name) VALUES
+  (3, 'suwon-srv-03');
+
 INSERT INTO accelerator (node_id, kind, model_name, tflops, memory_gb, memory_type, tdp_w) VALUES
   (1, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
   (1, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
@@ -172,6 +177,9 @@ INSERT INTO accelerator (node_id, kind, model_name, tflops, memory_gb, memory_ty
   (25, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
   (26, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
   (27, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400);
+
+INSERT INTO accelerator (node_id, kind, model_name, tflops, memory_gb, memory_type, tdp_w) VALUES
+  (28, 'NPU', 'Furiosa RNGD', 256, 48, 'GDDR6', 180);
 
 -- All metric_profile tables render as: value(t) = baseline + amplitude * sin(2*pi*t / period_sec)
 -- t = current unix epoch seconds (matches app/services/infra.py's _evaluate, which uses
@@ -257,7 +265,8 @@ INSERT INTO node_metric_profile (node_id, metric_type, baseline, amplitude, peri
   (21, 'util', 45, 10, 55, 'pct'), (22, 'util', 55, 11, 50, 'pct'),
   (23, 'util', 48, 10, 55, 'pct'), (24, 'util', 62, 13, 45, 'pct'),
   (25, 'util', 68, 12, 40, 'pct'), (26, 'util', 30, 8, 60, 'pct'),
-  (27, 'util', 52, 10, 50, 'pct');
+  (27, 'util', 52, 10, 50, 'pct'),
+  (28, 'util', 40, 12, 40, 'pct'), (28, 'temp', 48, 3, 45, 'C');
 
 -- node power draw (W), scaled roughly to what each node's accelerators pull
 -- (A100 nodes ~300-560W, H100 nodes ~950-2100W, NPU/PIM nodes ~130-150W)
@@ -288,7 +297,8 @@ INSERT INTO node_metric_profile (node_id, metric_type, baseline, amplitude, peri
   (24, 'power', 335, 63, 42, 'W'),
   (25, 'power', 340, 65, 40, 'W'),
   (26, 'power', 300, 55, 48, 'W'),
-  (27, 'power', 320, 60, 45, 'W');
+  (27, 'power', 320, 60, 45, 'W'),
+  (28, 'power', 160, 30, 35, 'W');
 
 -- accelerator_metric_profile: accelerator 1,2 keep original full coverage; every new
 -- accelerator gets a single 'util' row (kept light since there are 32 new ones)
@@ -318,7 +328,8 @@ INSERT INTO accelerator_metric_profile (accelerator_id, metric_type, baseline, a
   (38, 'util', 45, 10, 35, 'pct'), (39, 'util', 55, 11, 32, 'pct'),
   (40, 'util', 48, 10, 33, 'pct'), (41, 'util', 62, 13, 27, 'pct'),
   (42, 'util', 68, 12, 25, 'pct'), (43, 'util', 30, 8, 38, 'pct'),
-  (44, 'util', 52, 10, 30, 'pct');
+  (44, 'util', 52, 10, 30, 'pct'),
+  (45, 'util', 42, 14, 30, 'pct');
 
 -- distributed links: domestic-domestic ones only ever draw in Korea-mode view.
 -- (1, 6, true) is domestic(서울, cluster 1) <-> overseas(aws-use1-a, cluster 6) so it
@@ -344,6 +355,33 @@ INSERT INTO model_layer (model_id, op_name, shape, gflops, mem_mb, characteristi
 
 INSERT INTO model_layer_edge (from_layer_id, to_layer_id) VALUES
   (1, 2);
+
+INSERT INTO dataset (name, model_id) VALUES
+  ('SST-2', 1),
+  ('GLUE-MNLI', 1),
+  ('CIFAR-100', NULL);
+
+-- ---------- resource tiers ----------
+-- attached to cluster 3 (khu-suwon-01), the only is_live=true cluster - it has 3 nodes:
+-- suwon-srv-01 (2x GPU), suwon-srv-02 (1x GPU), suwon-srv-03 (1x NPU). "available" in
+-- GET /resource-tiers is computed live from free node counts, not stored.
+INSERT INTO resource_tier (cluster_id, job_type, tier_no, cost_per_hour) VALUES
+  (3, 'train', 1, 12.0),
+  (3, 'train', 2, 5.0),
+  (3, 'train', 3, 3.0),
+  (3, 'train', 4, 2.0),
+  (3, 'infer', 1, 8.0),
+  (3, 'infer', 2, 4.0),
+  (3, 'infer', 3, 6.0);
+
+INSERT INTO resource_tier_requirement (tier_id, kind, node_count) VALUES
+  (1, 'GPU', 2), (1, 'NPU', 1),  -- train tier 1: 고성능 혼합, uses all 3 nodes
+  (2, 'GPU', 1),                 -- train tier 2: GPU 1대
+  (3, 'NPU', 1),                 -- train tier 3: NPU 1대
+  (4, 'GPU', 3),                 -- train tier 4: 이 클러스터엔 GPU 2대뿐이라 항상 대기 예상
+  (5, 'NPU', 1), (5, 'GPU', 1),  -- infer tier 1: 저지연 혼합
+  (6, 'NPU', 1),                 -- infer tier 2: NPU 1대
+  (7, 'GPU', 2);                 -- infer tier 3: GPU 집중
 
 -- ---------- jobs ----------
 -- precision/sla_target were dropped from job (see migration 5fcc49cbc30e) - CSC wizard
