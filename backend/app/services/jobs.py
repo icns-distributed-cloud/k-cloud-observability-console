@@ -117,38 +117,6 @@ METRIC_TEMPLATES: dict[str, list[dict]] = {
             "featured": False,
         },
     ],
-    "distributed": [
-        {
-            "seq": 1,
-            "label": "글로벌 정확도",
-            "unit": "%",
-            "start_value": Decimal("60"),
-            "target_value": Decimal("92"),
-            "curve_shape": "exp_approach",
-            "total_count": None,
-            "featured": True,
-        },
-        {
-            "seq": 2,
-            "label": "라운드",
-            "unit": None,
-            "start_value": None,
-            "target_value": None,
-            "curve_shape": None,
-            "total_count": 50,
-            "featured": False,
-        },
-        {
-            "seq": 3,
-            "label": "참여 사이트",
-            "unit": "곳",
-            "start_value": Decimal("3"),
-            "target_value": Decimal("3"),
-            "curve_shape": None,
-            "total_count": None,
-            "featured": False,
-        },
-    ],
 }
 
 
