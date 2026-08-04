@@ -10,9 +10,12 @@ router = APIRouter(tags=["jobs"])
 
 @router.get("/jobs", response_model=list[schemas.JobSummary])
 def list_jobs(
-    status: str | None = None, db: Session = Depends(get_db), _: None = Depends(jobs_service.sweep_dependency)
+    status: str | None = None,
+    user_id: int | None = None,
+    db: Session = Depends(get_db),
+    _: None = Depends(jobs_service.sweep_dependency),
 ) -> list[schemas.JobSummary]:
-    return jobs_service.list_jobs(db, status=status)
+    return jobs_service.list_jobs(db, status=status, user_id=user_id)
 
 
 @router.get("/jobs/{job_id}", response_model=schemas.JobDetail)
@@ -83,6 +86,7 @@ def submit_train_job(
         batch=req.batch,
         priority_pref=req.priority_pref,
         tier_id=req.tier_id,
+        user_id=req.user_id,
         dataset_id=req.dataset_id,
     )
 
@@ -98,4 +102,5 @@ def submit_infer_job(
         batch=req.batch,
         priority_pref=req.priority_pref,
         tier_id=req.tier_id,
+        user_id=req.user_id,
     )
