@@ -18,7 +18,7 @@ import {
 } from "@/lib/timeline";
 import { flattenRegions, isDomestic } from "@/lib/mapData";
 import { useTime } from "@/lib/TimeContext";
-import type { AssignmentItem, JobSummary } from "@/app/types";
+import type { AssignmentItem, JobSummary, NodePurpose } from "@/app/types";
 
 const HIGHLIGHT_KEY = "kcloud:lastSubmittedJobId";
 const HIGHLIGHT_AT_KEY = "kcloud:lastSubmittedAt";
@@ -30,6 +30,7 @@ const POLL_MS = 10_000;
 interface NodeRef {
   id: number;
   name: string;
+  purpose: NodePurpose;
 }
 
 interface SchedulerData {
@@ -74,11 +75,11 @@ export default function SchedulerPage() {
         if (cancelled) return;
 
         const allNodes: NodeRef[] = details.flatMap((d) =>
-          d ? d.nodes.map((n) => ({ id: n.id, name: n.name })) : []
+          d ? d.nodes.map((n) => ({ id: n.id, name: n.name, purpose: n.purpose })) : []
         );
         const allAssignments = assignmentLists.flat();
-        const { train, infer } = selectSchedulerNodes(allNodes, allAssignments, jobs);
-
+        const { train, infer } = selectSchedulerNodes(allNodes, allAssignments);
+        
         setData({ train, infer, jobs });
         setError(null);
       } catch (e) {

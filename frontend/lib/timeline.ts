@@ -1,4 +1,4 @@
-import type { AssignmentItem, JobSummary } from '@/app/types'
+import type { AssignmentItem, JobSummary, NodePurpose } from '@/app/types'
 
 export interface TimelineBar {
   assignmentId: number
@@ -39,40 +39,32 @@ export interface SchedulerSection<T> {
 }
 
 /* 스케줄러 두 섹션(학습/추론)을 나눈다.
- * node에는 용도 필드가 없으므로, 그 노드에 배정된 작업의 type으로 역산한다.
- * (train/distributed → 학습, infer → 추론)
- * 해당 타입 이력이 있는 노드를 먼저 넣고, 남는 자리는 유휴 노드로 채워 행 수를 고정한다.
- * 한 노드가 두 타입을 모두 돌린 이력이 있으면 양쪽에 나타나되, 각 섹션에는 그 타입 막대만 그려진다.
+ * node.purpose가 용도를 직접 알려주므로, 배정된 작업 타입으로 역산할 필요가 없다.
+ * 할당 이력이 없는 유휴 노드도 제 풀에 정확히 들어간다.
+ * 막대가 있는 노드를 앞에 두어 perSection으로 잘라도 활동이 먼저 보이게 한다.
  */
-export function selectSchedulerNodes<T extends { id: number }>(
+export function selectSchedulerNodes<T extends { id: number; purpose: NodePurpose }>(
   nodes: T[],
   assignments: AssignmentItem[],
-  jobs: JobSummary[],
   perSection = 4
 ): { train: SchedulerSection<T>; infer: SchedulerSection<T> } {
-  const typeById = new Map(jobs.map((j) => [j.id, j.type]))
-  const isInfer = (a: AssignmentItem) => typeById.get(a.job_id) === 'infer'
+  const section = (purpose: NodePurpose): SchedulerSection<T> => {
+    const pool = nodes.filter((n) => n.purpose === purpose)
+    const poolIds = new Set(pool.map((n) => n.id))
+    const sectionAssignments = assignments.filter((a) => poolIds.has(a.node_id))
 
-  const inferAssignments = assignments.filter(isInfer)
-  const trainAssignments = assignments.filter((a) => !isInfer(a))
-
-  const pick = (sectionAssignments: AssignmentItem[]): T[] => {
     const busyIds = new Set(sectionAssignments.map((a) => a.node_id))
-    return nodes.filter((n) => busyIds.has(n.id)).slice(0, perSection)
-  }
-  const trainNodes = pick(trainAssignments)
-  const inferNodes = pick(inferAssignments)
+    const ordered = [
+      ...pool.filter((n) => busyIds.has(n.id)),
+      ...pool.filter((n) => !busyIds.has(n.id)),
+    ]
 
-  // 채움용 유휴 노드: 아무 할당도 없는 노드만, 양쪽이 겹치지 않게 순서대로 소비
-  const assignedIds = new Set(assignments.map((a) => a.node_id))
-  const spare = nodes.filter((n) => !assignedIds.has(n.id))
-  const fill = (picked: T[]) => [...picked, ...spare.splice(0, perSection - picked.length)]
-
-  return {
-    train: { nodes: fill(trainNodes), assignments: trainAssignments },
-    infer: { nodes: fill(inferNodes), assignments: inferAssignments },
+    return { nodes: ordered.slice(0, perSection), assignments: sectionAssignments }
   }
+
+  return { train: section('train'), infer: section('infer') }
 }
+
 export function buildTimeline(
   assignments: AssignmentItem[],
   jobs: JobSummary[],
