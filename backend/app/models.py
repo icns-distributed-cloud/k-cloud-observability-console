@@ -194,11 +194,21 @@ class ResourceTierRequirement(Base):
     tier: Mapped["ResourceTier"] = relationship(back_populates="requirements")
 
 
+class User(Base):
+    __tablename__ = "user"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str]
+
+    jobs: Mapped[list["Job"]] = relationship(back_populates="user")
+
+
 class Job(Base):
     __tablename__ = "job"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     model_id: Mapped[int] = mapped_column(ForeignKey("model.id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("user.id"))
     type: Mapped[str]
     status: Mapped[str]
     batch: Mapped[int]
@@ -210,6 +220,7 @@ class Job(Base):
     selected_tier_id: Mapped[Optional[int]] = mapped_column(ForeignKey("resource_tier.id"))
 
     model: Mapped["Model"] = relationship(back_populates="jobs")
+    user: Mapped["User"] = relationship(back_populates="jobs")
     dataset: Mapped[Optional["Dataset"]] = relationship(back_populates="jobs")
     selected_tier: Mapped[Optional["ResourceTier"]] = relationship(back_populates="jobs")
     assignments: Mapped[list["Assignment"]] = relationship(back_populates="job")

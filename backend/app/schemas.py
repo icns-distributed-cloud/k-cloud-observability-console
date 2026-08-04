@@ -130,6 +130,7 @@ class TrainJobRequest(BaseModel):
     batch: int
     priority_pref: str
     tier_id: int
+    user_id: int
     dataset_id: Optional[int] = None
 
 
@@ -139,6 +140,7 @@ class InferJobRequest(BaseModel):
     batch: int
     priority_pref: str
     tier_id: int
+    user_id: int
 
 
 # ---------- GET /api/v1/jobs ----------
@@ -154,10 +156,18 @@ class SelectedTierSummary(BaseModel):
     requirements: list[TierRequirementItem]
 
 
+class AssignedNodeItem(BaseModel):
+    node_id: int
+    node_name: str
+    cluster_id: int
+    cluster_name: str
+
+
 class JobSummary(BaseModel):
     id: int
     model_id: int
     model_name: str
+    user_id: int
     type: str
     status: str
     batch: int
@@ -165,7 +175,10 @@ class JobSummary(BaseModel):
     submitted_at: datetime
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
+    dataset_id: Optional[int]
+    dataset_name: Optional[str]
     selected_tier: Optional[SelectedTierSummary]
+    assigned_nodes: list[AssignedNodeItem]
 
 
 # ---------- GET /api/v1/jobs/{job_id} ----------

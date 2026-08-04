@@ -137,6 +137,7 @@ def _to_job_summary(job: models.Job) -> schemas.JobSummary:
         id=job.id,
         model_id=job.model_id,
         model_name=job.model.name,
+        user_id=job.user_id,
         type=job.type,
         status=job.status,
         batch=job.batch,
@@ -144,7 +145,18 @@ def _to_job_summary(job: models.Job) -> schemas.JobSummary:
         submitted_at=job.submitted_at,
         started_at=job.started_at,
         finished_at=job.finished_at,
+        dataset_id=job.dataset_id,
+        dataset_name=job.dataset.name if job.dataset is not None else None,
         selected_tier=_to_selected_tier(job.selected_tier),
+        assigned_nodes=[
+            schemas.AssignedNodeItem(
+                node_id=a.node.id,
+                node_name=a.node.name,
+                cluster_id=a.node.cluster.id,
+                cluster_name=a.node.cluster.name,
+            )
+            for a in job.assignments
+        ],
     )
 
 
@@ -330,13 +342,17 @@ def sweep_dependency(db: Session = Depends(get_db)) -> None:
     sweep_and_backfill(db)
 
 
-def list_jobs(db: Session, status: str | None = None) -> list[schemas.JobSummary]:
+def list_jobs(db: Session, status: str | None = None, user_id: int | None = None) -> list[schemas.JobSummary]:
     query = db.query(models.Job).options(
         selectinload(models.Job.model),
+        selectinload(models.Job.dataset),
         selectinload(models.Job.selected_tier).selectinload(models.ResourceTier.requirements),
+        selectinload(models.Job.assignments).selectinload(models.Assignment.node).selectinload(models.Node.cluster),
     )
     if status is not None:
         query = query.filter(models.Job.status == status)
+    if user_id is not None:
+        query = query.filter(models.Job.user_id == user_id)
     return [_to_job_summary(job) for job in query.all()]
 
 
@@ -345,10 +361,14 @@ def get_job_detail(db: Session, job_id: int) -> schemas.JobDetail | None:
         db.query(models.Job)
         .options(
             selectinload(models.Job.model),
+            selectinload(models.Job.dataset),
             selectinload(models.Job.metric_profiles),
             selectinload(models.Job.cache_profile),
             selectinload(models.Job.cache_tiers),
             selectinload(models.Job.selected_tier).selectinload(models.ResourceTier.requirements),
+            selectinload(models.Job.assignments)
+            .selectinload(models.Assignment.node)
+            .selectinload(models.Node.cluster),
         )
         .filter(models.Job.id == job_id)
         .first()
@@ -515,6 +535,7 @@ def submit_job(
     batch: int,
     priority_pref: str,
     tier_id: int,
+    user_id: int,
     dataset_id: int | None = None,
 ) -> schemas.JobSummary:
     tier = (
@@ -531,6 +552,7 @@ def submit_job(
     now = clock.now()
     job = models.Job(
         model_id=model_id,
+        user_id=user_id,
         type=job_type,
         status="queued",
         batch=batch,
