@@ -10,6 +10,11 @@ export type CurveShape = 'exp_approach' | 'flat'
 export type LayerCharacteristic = 'compute_bound' | 'memory_bound' | 'balanced'
 export type EventType = 'ARRIVAL' | 'START' | 'BACKFILL' | 'FINISH'
 export type CacheTierName = 'VRAM' | 'DRAM' | 'SSD'
+export interface ModelItem {
+    id: number
+    name: string
+    type: string
+}
 
 /** 테이블마다 허용값이 다름 (cluster: power/utilization/sla, node: util/cpu/mem/temp, accelerator: util/mem/power) */
 export type MetricType =

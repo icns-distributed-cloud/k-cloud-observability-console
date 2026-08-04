@@ -12,7 +12,7 @@ export interface MapRegion {
 }
 
 /** 대한민국 대략 범위 (국내/해외 구분용) */
-function isDomestic(lat: number, lon: number): boolean {
+export function isDomestic(lat: number, lon: number): boolean {
   return lat >= 33 && lat <= 39 && lon >= 124 && lon <= 132
 }
 

@@ -12,12 +12,25 @@ import type {
   NodeDetail,
   ProviderTree,
   ReallocationItem,
+  InferJobRequest,
+  TrainJobRequest,
+  ModelItem,
 } from '@/app/types'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${API_URL}/api/v1${path}`)
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+  return res.json()
+}
+
+async function post<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_URL}/api/v1${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
   return res.json()
 }
@@ -73,4 +86,16 @@ export function fetchProviders() {
 
 export function fetchDistributedLinks() {
   return get<DistributedLinkItem[]>('/distributed-links')
+}
+
+export function submitTrainJob(body: TrainJobRequest) {
+  return post<JobSummary>('/jobs/train', body)
+}
+
+export function submitInferJob(body: InferJobRequest) {
+  return post<JobSummary>('/jobs/infer', body)
+}
+
+export function fetchModels() {
+  return get<ModelItem[]>('/models')
 }

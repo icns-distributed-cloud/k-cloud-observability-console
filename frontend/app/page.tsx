@@ -68,9 +68,11 @@ export default function Home() {
           >
             <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>
               {p.name}
-              <span style={{ fontSize: 11, color: "var(--sub)", fontWeight: 500, marginLeft: 6 }}>
-                {PROVIDER_KIND_LABELS[p.kind] ?? p.kind}
-              </span>
+              {PROVIDER_KIND_LABELS[p.kind] !== p.name && (
+                <span style={{ fontSize: 11, color: "var(--sub)", fontWeight: 500, marginLeft: 6 }}>
+                  {PROVIDER_KIND_LABELS[p.kind] ?? p.kind}
+                </span>
+              )}
             </div>
 
             {p.regions.map((r) => (
@@ -111,8 +113,7 @@ export default function Home() {
                         width: 7,
                         height: 7,
                         borderRadius: "50%",
-                        background: c.status === "active" ? "var(--accent)" : "#64748B",
-                        flexShrink: 0,
+                        background: c.status === "active" ? "var(--active)" : "var(--idle)",
                       }}
                     />
                     {c.name}
@@ -122,7 +123,7 @@ export default function Home() {
                           width: 6,
                           height: 6,
                           borderRadius: "50%",
-                          background: "#EF4444",
+                          background: "var(--alert-critical)",
                           flexShrink: 0,
                         }}
                       />

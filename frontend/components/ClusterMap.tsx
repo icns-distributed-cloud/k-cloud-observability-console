@@ -3,15 +3,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { geoMercator, geoNaturalEarth1, geoPath } from "d3-geo";
 import { feature } from "topojson-client";
 import type { DistributedLinkItem } from "@/app/types";
-import { buildClusterCoords, splitByLocation, type MapRegion } from "@/lib/mapData";
+import { buildClusterCoords, isDomestic, splitByLocation, type MapRegion } from "@/lib/mapData";
 
 const WORLD_URL = "https://unpkg.com/world-atlas@2/countries-110m.json";
 const KR_ID = "410";
 const KR_HUB: [number, number] = [127.9, 36.4];
 
-const ACCENT = "#6366F1";
-const LAND = "#1C2A45";
-const LAND_STROKE = "#2C3E60";
+const ACCENT =  "#000000";
+const ACTIVE = "var(--active)";
+const IDLE = "var(--idle)";
+const LAND = "var(--map-land)";
+const LAND_STROKE = "var(--map-stroke)";
 
 interface GeoFeature {
   type: string;
@@ -96,6 +98,45 @@ export default function ClusterMap({ regions, links, onSelectCluster }: ClusterM
     [geo]
   );
 
+  /** 두 좌표를 잇는 완만한 곡선 path (화면 좌표 기준 이차 베지에) */
+  const linkPath = useCallback(
+    (a: [number, number], b: [number, number]): string | null => {
+      const pa = project(a[0], a[1]);
+      const pb = project(b[0], b[1]);
+      if (!pa || !pb) return null;
+
+      const [x1, y1] = pa;
+      const [x2, y2] = pb;
+
+      // 두 점의 중간에서 수직 방향으로 살짝 띄운 제어점
+      const mx = (x1 + x2) / 2;
+      const my = (y1 + y2) / 2;
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const dist = Math.hypot(dx, dy);
+      const lift = Math.min(dist * 0.16, 90); // 거리에 비례하되 상한
+
+      // 진행 방향의 법선으로 밀어냄 (항상 위쪽으로 휘도록 부호 조정)
+      const nx = -dy / (dist || 1);
+      const ny = dx / (dist || 1);
+      const sign = ny > 0 ? -1 : 1;
+
+      const cx = mx + nx * lift * sign;
+      const cy = my + ny * lift * sign;
+
+      return `M${x1} ${y1} Q${cx} ${cy} ${x2} ${y2}`;
+    },
+    [project]
+  );
+
+  const linkStyle = (active: boolean) => ({
+    stroke: active ? ACCENT : "var(--map-link-idle)",
+    strokeWidth: active ? 1 : 0.7,
+    strokeDasharray: active ? undefined : "3 3",
+    opacity: active ? 0.7 : 0.4,
+    fill: "none" as const,
+  });
+
   const enterKorea = () => {
     setPicker(null);
     setMode("korea");
@@ -136,7 +177,7 @@ export default function ClusterMap({ regions, links, onSelectCluster }: ClusterM
               <path
                 key={i}
                 d={d}
-                fill={mode === "world" && isKR ? "#2A3A5E" : LAND}
+                fill={mode === "world" && isKR ? "var(--map-kr)" : LAND}
                 stroke={LAND_STROKE}
                 strokeWidth={0.5}
                 style={mode === "world" && isKR ? { cursor: "pointer" } : undefined}
@@ -153,22 +194,24 @@ export default function ClusterMap({ regions, links, onSelectCluster }: ClusterM
               const a = clusterCoords.get(l.cluster_a_id);
               const b = clusterCoords.get(l.cluster_b_id);
               if (!a || !b) return null;
-              const pa = project(a[0], a[1]);
-              const pb = project(b[0], b[1]);
-              if (!pa || !pb) return null;
-              return (
-                <line
-                  key={l.id}
-                  x1={pa[0]}
-                  y1={pa[1]}
-                  x2={pb[0]}
-                  y2={pb[1]}
-                  stroke={l.active ? ACCENT : "#3A4A66"}
-                  strokeWidth={l.active ? 1.6 : 1}
-                  strokeDasharray={l.active ? undefined : "4 4"}
-                  opacity={l.active ? 0.8 : 0.45}
-                />
-              );
+              const d = linkPath(a, b);
+              if (!d) return null;
+              return <path key={l.id} d={d} {...linkStyle(l.active)} />;
+            })}
+
+          {/* world 모드: 국내 쪽은 대한민국 허브 마커 위치로 대체해서 그림.
+              양쪽 다 국내인 링크는 둘 다 같은 허브 점으로 뭉개져 그릴 게 없으므로 스킵 */}
+          {mode === "world" &&
+            links.map((l) => {
+              const a = clusterCoords.get(l.cluster_a_id);
+              const b = clusterCoords.get(l.cluster_b_id);
+              if (!a || !b) return null;
+              const aDomestic = isDomestic(a[1], a[0]);
+              const bDomestic = isDomestic(b[1], b[0]);
+              if (aDomestic && bDomestic) return null;
+              const d = linkPath(aDomestic ? KR_HUB : a, bDomestic ? KR_HUB : b);
+              if (!d) return null;
+              return <path key={`w-${l.id}`} d={d} {...linkStyle(l.active)} />;
             })}
         </g>
 
@@ -182,7 +225,7 @@ export default function ClusterMap({ regions, links, onSelectCluster }: ClusterM
                 return (
                   <g transform={`translate(${hub[0]},${hub[1]})`} style={{ cursor: "pointer" }} onClick={enterKorea}>
                     <circle r={15} fill={ACCENT} opacity={0.16} />
-                    <circle r={7} fill={ACCENT} stroke="var(--bg)" strokeWidth={1.5} />
+                    <circle r={8} fill={ACCENT} stroke="#FFFFFF" strokeWidth={2} />
                     <MarkerLabel text={`대한민국 · 클러스터 ${domesticClusterCount}곳`} y={-20} bold />
                   </g>
                 );
@@ -190,9 +233,10 @@ export default function ClusterMap({ regions, links, onSelectCluster }: ClusterM
               {overseas.map((r) => {
                 const p = project(r.lon, r.lat);
                 if (!p) return null;
+                const anyActive = r.clusters.some((c) => c.status === "active");
                 return (
                   <g key={r.id} transform={`translate(${p[0]},${p[1]})`}>
-                    <circle r={5} fill="#8FA1BD" stroke="var(--bg)" strokeWidth={1.5} />
+                    <circle r={6} fill={anyActive ? ACTIVE : IDLE} stroke="#FFFFFF" strokeWidth={2} />
                     <MarkerLabel text={`${r.name} · ${r.clusters.length}`} y={-14} />
                   </g>
                 );
@@ -205,7 +249,7 @@ export default function ClusterMap({ regions, links, onSelectCluster }: ClusterM
               const multi = r.clusters.length > 1;
               const anyActive = r.clusters.some((c) => c.status === "active");
               const anyAlert = r.clusters.some((c) => c.has_alert);
-              const col = anyActive ? ACCENT : "#64748B";
+              const col = anyActive ? ACTIVE : IDLE;
               const handleClick = () => {
                 if (multi) setPicker({ x: p[0], y: p[1], region: r });
                 else if (r.clusters[0]) onSelectCluster(r.clusters[0].id);
@@ -219,14 +263,14 @@ export default function ClusterMap({ regions, links, onSelectCluster }: ClusterM
                 >
                   <circle r={multi ? 15 : 11} fill={col} opacity={0.18} />
                   {anyAlert && (
-                    <circle r={5.5} fill="#EF4444" cx={9} cy={-9} stroke="var(--bg)" strokeWidth={1.5} />
+                    <circle r={5.5} fill="var(--alert-critical)" cx={9} cy={-9} stroke="var(--bg)" strokeWidth={1.5} />
                   )}
-                  <circle r={multi ? 11 : 6.5} fill={col} stroke="var(--bg)" strokeWidth={1.5} />
+                  <circle r={multi ? 12 : 7} fill={col} stroke="#FFFFFF" strokeWidth={2} />
                   {multi && (
                     <text
                       y={4}
                       textAnchor="middle"
-                      fill="var(--bg)"
+                      fill="#FFFFFF"
                       fontSize={12}
                       fontWeight={800}
                       fontFamily="'IBM Plex Mono', monospace"
@@ -255,6 +299,25 @@ export default function ClusterMap({ regions, links, onSelectCluster }: ClusterM
         </div>
       </div>
 
+      {mode === "world" && (
+        <div
+          style={{
+            position: "absolute",
+            bottom: 14,
+            left: 16,
+            fontSize: 11.5,
+            color: "var(--sub)",
+            background: "var(--overlay)",
+            padding: "6px 11px",
+            borderRadius: 8,
+          }}
+        >
+          🇰🇷 대한민국 마커를 클릭하면 국내 클러스터 지도가 열립니다
+        </div>
+      )}
+
+      {/* 클러스터 선택 팝오버 */}
+
       {/* 클러스터 선택 팝오버 */}
       {picker && (
         <div
@@ -263,11 +326,11 @@ export default function ClusterMap({ regions, links, onSelectCluster }: ClusterM
             left: Math.max(12, Math.min(picker.x - 110, w - 232)),
             top: Math.max(12, picker.y - 12 - 44 * (picker.region.clusters.length + 1)),
             width: 220,
-            background: "rgba(15,23,40,.97)",
+            background: "var(--overlay-strong)",
             border: "1px solid var(--line)",
             borderRadius: 12,
             padding: 8,
-            boxShadow: "0 12px 32px rgba(0,0,0,.5)",
+            boxShadow: "0 12px 32px rgba(22,31,46,.14)",
             zIndex: 10,
           }}
         >
@@ -318,13 +381,13 @@ export default function ClusterMap({ regions, links, onSelectCluster }: ClusterM
                   width: 8,
                   height: 8,
                   borderRadius: "50%",
-                  background: c.status === "active" ? ACCENT : "#64748B",
+                  background: c.status === "active" ? ACTIVE : IDLE,
                   flexShrink: 0,
                 }}
               />
               {c.name}
               {c.has_alert && (
-                <span style={{ marginLeft: "auto", width: 7, height: 7, borderRadius: "50%", background: "#EF4444" }} />
+                <span style={{ marginLeft: "auto", width: 7, height: 7, borderRadius: "50%", background: "var(--alert-critical)" }} />
               )}
             </button>
           ))}
@@ -339,7 +402,7 @@ function MarkerLabel({ text, y, bold }: { text: string; y: number; bold?: boolea
     <text
       y={y}
       textAnchor="middle"
-      fill={bold ? "var(--ink)" : "#B7C4D8"}
+      fill={bold ? "#000000" : "#000307"}
       fontSize={11}
       fontWeight={bold ? 700 : 500}
       style={{ pointerEvents: "none" }}
@@ -365,7 +428,7 @@ const shellStyle: React.CSSProperties = {
 
 const backBtnStyle: React.CSSProperties = {
   border: "1px solid var(--line)",
-  background: "rgba(11,18,32,.7)",
+  background: "var(--overlay-strong)",
   color: "var(--ink)",
   borderRadius: 9,
   padding: "6px 12px",
@@ -382,7 +445,7 @@ const badgeStyle: React.CSSProperties = {
   textTransform: "uppercase",
   color: "var(--sub)",
   fontFamily: "'IBM Plex Mono', monospace",
-  background: "rgba(11,18,32,.55)",
+  background: "var(--overlay)",
   padding: "5px 10px",
   borderRadius: 8,
 };

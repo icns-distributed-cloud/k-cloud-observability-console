@@ -3,7 +3,7 @@ import { use, useEffect, useState } from "react";
 import Breadcrumb from "@/components/Breadcrumb";
 import StatCard from "@/components/StatCard";
 import KindGlyph from "@/components/KindGlyph";
-import { fetchClusterAssignments, fetchJobs, fetchNodeDetail } from "@/lib/api";
+import { fetchClusterAssignments, fetchClusterDetail, fetchJobs, fetchNodeDetail } from "@/lib/api";
 import { JOB_COLORS, JOB_STATUS_LABELS, mapNodeJobs } from "@/lib/jobs";
 import type { JobSummary, NodeDetail } from "@/app/types";
 import { useRouter } from "next/navigation";
@@ -26,6 +26,7 @@ export default function NodePage({ params }: { params: Promise<{ id: string }> }
   const [node, setNode] = useState<NodeDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [job, setJob] = useState<JobSummary | undefined>(undefined);
+  const [clusterName, setClusterName] = useState<string>("");
 
   useEffect(() => {
     fetchNodeDetail(nodeId)
@@ -36,6 +37,8 @@ export default function NodePage({ params }: { params: Promise<{ id: string }> }
           fetchJobs(),
         ]);
         setJob(mapNodeJobs(assignments, jobs)[n.id]);
+        const c = await fetchClusterDetail(n.cluster_id).catch(() => null);
+        setClusterName(c?.name ?? `클러스터 ${n.cluster_id}`);
       })
       .catch((e) => setError(String(e)));
   }, [nodeId]);
@@ -54,7 +57,7 @@ export default function NodePage({ params }: { params: Promise<{ id: string }> }
         segments={[
           { label: "지도", onClick: () => router.push("/") },
           {
-            label: `클러스터 ${node.cluster_id}`,
+            label: clusterName || `클러스터 ${node.cluster_id}`,
             onClick: () => router.push(`/clusters/${node.cluster_id}`),
           },
           { label: `노드 ${node.name}` },
@@ -67,7 +70,7 @@ export default function NodePage({ params }: { params: Promise<{ id: string }> }
           {node.name}
         </div>
         <div style={{ fontSize: 12.5, color: "var(--sub)", marginTop: 4 }}>
-          클러스터 {node.cluster_id} · {kind}
+          {clusterName || `클러스터 ${node.cluster_id}`} · {kind}
         </div>
       </div>
 
@@ -84,7 +87,7 @@ export default function NodePage({ params }: { params: Promise<{ id: string }> }
               key={a.id}
               style={{
                 background: "var(--panel)",
-                border: `1px solid ${a.severity === "physical" ? "#EF4444" : "#F59E0B"}`,
+                border: `1px solid ${a.severity === "physical" ? "var(--alert-critical)" : "var(--alert-warning)"}`,
                 borderRadius: 12,
                 padding: "12px 14px",
                 fontSize: 12.5,
@@ -93,7 +96,7 @@ export default function NodePage({ params }: { params: Promise<{ id: string }> }
             >
               <span
                 style={{
-                  color: a.severity === "physical" ? "#EF4444" : "#F59E0B",
+                  color: a.severity === "physical" ? "var(--alert-critical)" : "var(--alert-warning)",
                   fontWeight: 700,
                 }}
               >

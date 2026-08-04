@@ -54,6 +54,12 @@ export default function TopBar() {
           active={pathname.startsWith("/jobs")}
           onClick={router.push}
         />
+        <NavLink
+          label="클러스터 현황"
+          href="/infra"
+          active={pathname.startsWith("/infra")}
+          onClick={router.push}
+        />
       </nav>
     </header>
   );
