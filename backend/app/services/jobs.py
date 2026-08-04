@@ -160,9 +160,7 @@ def _to_job_summary(job: models.Job) -> schemas.JobSummary:
         type=job.type,
         status=job.status,
         batch=job.batch,
-        precision=job.precision,
         priority_pref=job.priority_pref,
-        sla_target=job.sla_target,
         submitted_at=job.submitted_at,
         started_at=job.started_at,
         finished_at=job.finished_at,
@@ -469,9 +467,7 @@ def submit_job(
     job_type: str,
     model_id: int,
     batch: int,
-    precision: str,
     priority_pref: str,
-    sla_target: Decimal | None,
 ) -> schemas.JobSummary:
     now = clock.now()
     job = models.Job(
@@ -479,9 +475,7 @@ def submit_job(
         type=job_type,
         status="queued",
         batch=batch,
-        precision=precision,
         priority_pref=priority_pref,
-        sla_target=sla_target,
         submitted_at=now,
     )
     db.add(job)

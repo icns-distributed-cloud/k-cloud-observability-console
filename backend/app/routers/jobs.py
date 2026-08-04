@@ -76,9 +76,7 @@ def submit_train_job(
         job_type="train",
         model_id=req.model_id,
         batch=req.batch,
-        precision=req.precision,
         priority_pref=req.priority_pref,
-        sla_target=None,
     )
 
 
@@ -91,7 +89,5 @@ def submit_infer_job(
         job_type="infer",
         model_id=req.model_id,
         batch=req.batch,
-        precision=req.precision,
         priority_pref=req.priority_pref,
-        sla_target=req.sla_target,
     )
