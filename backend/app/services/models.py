@@ -8,6 +8,13 @@ def list_models(db: Session) -> list[schemas.ModelSummary]:
     return [schemas.ModelSummary(id=m.id, name=m.name, type=m.type) for m in rows]
 
 
+def list_datasets(db: Session, model_id: int | None = None) -> list[schemas.DatasetItem]:
+    query = db.query(models.Dataset)
+    if model_id is not None:
+        query = query.filter(models.Dataset.model_id == model_id)
+    return [schemas.DatasetItem(id=d.id, name=d.name, model_id=d.model_id) for d in query.all()]
+
+
 def get_model_layers(db: Session, model_id: int) -> schemas.ModelLayersResponse | None:
     model = db.query(models.Model).filter(models.Model.id == model_id).first()
     if model is None:

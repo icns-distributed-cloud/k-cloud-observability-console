@@ -1,15 +1,14 @@
 from datetime import datetime, timedelta
 from decimal import Decimal
 
-from fastapi import Depends
+from fastapi import Depends, HTTPException
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
 from app import clock, models, schemas
 from app.database import get_db
 
-DURATION_SEC = {"train": 180, "infer": 30}
-REQUIRED_KIND = {"train": "GPU"}  # infer: no kind restriction
+DURATION_SEC = {"train": 15, "infer": 15}
 
 # one metric-card template set per job.type, copied verbatim into job_metric_profile on submission
 METRIC_TEMPLATES: dict[str, list[dict]] = {
@@ -117,39 +116,20 @@ METRIC_TEMPLATES: dict[str, list[dict]] = {
             "featured": False,
         },
     ],
-    "distributed": [
-        {
-            "seq": 1,
-            "label": "글로벌 정확도",
-            "unit": "%",
-            "start_value": Decimal("60"),
-            "target_value": Decimal("92"),
-            "curve_shape": "exp_approach",
-            "total_count": None,
-            "featured": True,
-        },
-        {
-            "seq": 2,
-            "label": "라운드",
-            "unit": None,
-            "start_value": None,
-            "target_value": None,
-            "curve_shape": None,
-            "total_count": 50,
-            "featured": False,
-        },
-        {
-            "seq": 3,
-            "label": "참여 사이트",
-            "unit": "곳",
-            "start_value": Decimal("3"),
-            "target_value": Decimal("3"),
-            "curve_shape": None,
-            "total_count": None,
-            "featured": False,
-        },
-    ],
 }
+
+
+def _to_selected_tier(tier: models.ResourceTier | None) -> schemas.SelectedTierSummary | None:
+    if tier is None:
+        return None
+    return schemas.SelectedTierSummary(
+        id=tier.id,
+        tier_no=tier.tier_no,
+        cost_per_hour=tier.cost_per_hour,
+        requirements=[
+            schemas.TierRequirementItem(kind=r.kind, node_count=r.node_count) for r in tier.requirements
+        ],
+    )
 
 
 def _to_job_summary(job: models.Job) -> schemas.JobSummary:
@@ -157,15 +137,26 @@ def _to_job_summary(job: models.Job) -> schemas.JobSummary:
         id=job.id,
         model_id=job.model_id,
         model_name=job.model.name,
+        user_id=job.user_id,
         type=job.type,
         status=job.status,
         batch=job.batch,
-        precision=job.precision,
         priority_pref=job.priority_pref,
-        sla_target=job.sla_target,
         submitted_at=job.submitted_at,
         started_at=job.started_at,
         finished_at=job.finished_at,
+        dataset_id=job.dataset_id,
+        dataset_name=job.dataset.name if job.dataset is not None else None,
+        selected_tier=_to_selected_tier(job.selected_tier),
+        assigned_nodes=[
+            schemas.AssignedNodeItem(
+                node_id=a.node.id,
+                node_name=a.node.name,
+                cluster_id=a.node.cluster.id,
+                cluster_name=a.node.cluster.name,
+            )
+            for a in job.assignments
+        ],
     )
 
 
@@ -190,17 +181,70 @@ def _occupied_node_ids(live_cluster: models.Cluster, now: datetime) -> set[int]:
     }
 
 
-def _pick_free_node(
-    live_cluster: models.Cluster, job_type: str, occupied_node_ids: set[int]
-) -> models.Node | None:
-    required_kind = REQUIRED_KIND.get(job_type)
+def _pick_free_nodes_for_tier(
+    live_cluster: models.Cluster, tier: models.ResourceTier, occupied_node_ids: set[int]
+) -> list[models.Node] | None:
+    free_by_kind: dict[str, list[models.Node]] = {}
     for node in live_cluster.nodes:
-        if node.id in occupied_node_ids:
+        if node.id in occupied_node_ids or node.purpose != tier.job_type:
             continue
-        if required_kind and not any(a.kind == required_kind for a in node.accelerators):
+        for kind in {a.kind for a in node.accelerators}:
+            free_by_kind.setdefault(kind, []).append(node)
+
+    picked: list[models.Node] = []
+    picked_ids: set[int] = set()
+    for req in tier.requirements:
+        candidates = [n for n in free_by_kind.get(req.kind, []) if n.id not in picked_ids]
+        if len(candidates) < req.node_count:
+            return None
+        for node in candidates[: req.node_count]:
+            picked.append(node)
+            picked_ids.add(node.id)
+    return picked
+
+
+def _free_node_counts_by_kind(
+    live_cluster: models.Cluster, job_type: str, occupied_node_ids: set[int]
+) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for node in live_cluster.nodes:
+        if node.id in occupied_node_ids or node.purpose != job_type:
             continue
-        return node
-    return None
+        for kind in {a.kind for a in node.accelerators}:
+            counts[kind] = counts.get(kind, 0) + 1
+    return counts
+
+
+def list_resource_tiers(db: Session, job_type: str) -> list[schemas.ResourceTierItem]:
+    live_cluster = _load_live_cluster(db)
+    if live_cluster is None:
+        return []
+
+    occupied = _occupied_node_ids(live_cluster, clock.now())
+    free_counts = _free_node_counts_by_kind(live_cluster, job_type, occupied)
+
+    tiers = (
+        db.query(models.ResourceTier)
+        .options(selectinload(models.ResourceTier.requirements))
+        .filter(
+            models.ResourceTier.cluster_id == live_cluster.id,
+            models.ResourceTier.job_type == job_type,
+        )
+        .order_by(models.ResourceTier.tier_no)
+        .all()
+    )
+    return [
+        schemas.ResourceTierItem(
+            id=t.id,
+            tier_no=t.tier_no,
+            cost_per_hour=t.cost_per_hour,
+            requirements=[
+                schemas.TierRequirementItem(kind=r.kind, node_count=r.node_count) for r in t.requirements
+            ],
+            available=all(free_counts.get(r.kind, 0) >= r.node_count for r in t.requirements),
+        )
+        for t in tiers
+    ]
 
 
 def _log_event(
@@ -228,13 +272,16 @@ def _seed_metric_profiles(db: Session, job: models.Job) -> None:
         db.add(models.JobMetricProfile(job_id=job.id, **template))
 
 
-def _admit(db: Session, job: models.Job, node: models.Node, start_time: datetime, event_type: str) -> None:
-    db.add(models.Assignment(job_id=job.id, node_id=node.id, from_t=start_time, to_t=None))
+def _admit(
+    db: Session, job: models.Job, nodes: list[models.Node], start_time: datetime, event_type: str
+) -> None:
     job.status = "running"
     job.started_at = start_time
-    _log_event(
-        db, type=event_type, now=start_time, job_id=job.id, node_id=node.id, cluster_id=node.cluster_id
-    )
+    for node in nodes:
+        db.add(models.Assignment(job_id=job.id, node_id=node.id, from_t=start_time, to_t=None))
+        _log_event(
+            db, type=event_type, now=start_time, job_id=job.id, node_id=node.id, cluster_id=node.cluster_id
+        )
 
 
 def sweep_and_backfill(db: Session) -> None:
@@ -273,15 +320,20 @@ def sweep_and_backfill(db: Session) -> None:
         queued_jobs = (
             db.query(models.Job)
             .filter(models.Job.status == "queued")
+            .options(selectinload(models.Job.selected_tier).selectinload(models.ResourceTier.requirements))
             .order_by(models.Job.submitted_at)
             .all()
         )
         for job in queued_jobs:
-            node = _pick_free_node(live_cluster, job.type, occupied)
-            if node is not None:
-                start_time = max(job.submitted_at, freed_at.get(node.id, job.submitted_at))
-                _admit(db, job, node, start_time, event_type="BACKFILL")
-                occupied.add(node.id)
+            if job.selected_tier is None:
+                continue
+            nodes = _pick_free_nodes_for_tier(live_cluster, job.selected_tier, occupied)
+            if nodes is not None:
+                start_time = max(
+                    [job.submitted_at] + [freed_at.get(n.id, job.submitted_at) for n in nodes]
+                )
+                _admit(db, job, nodes, start_time, event_type="BACKFILL")
+                occupied.update(n.id for n in nodes)
 
     db.commit()
 
@@ -290,10 +342,17 @@ def sweep_dependency(db: Session = Depends(get_db)) -> None:
     sweep_and_backfill(db)
 
 
-def list_jobs(db: Session, status: str | None = None) -> list[schemas.JobSummary]:
-    query = db.query(models.Job).options(selectinload(models.Job.model))
+def list_jobs(db: Session, status: str | None = None, user_id: int | None = None) -> list[schemas.JobSummary]:
+    query = db.query(models.Job).options(
+        selectinload(models.Job.model),
+        selectinload(models.Job.dataset),
+        selectinload(models.Job.selected_tier).selectinload(models.ResourceTier.requirements),
+        selectinload(models.Job.assignments).selectinload(models.Assignment.node).selectinload(models.Node.cluster),
+    )
     if status is not None:
         query = query.filter(models.Job.status == status)
+    if user_id is not None:
+        query = query.filter(models.Job.user_id == user_id)
     return [_to_job_summary(job) for job in query.all()]
 
 
@@ -302,9 +361,14 @@ def get_job_detail(db: Session, job_id: int) -> schemas.JobDetail | None:
         db.query(models.Job)
         .options(
             selectinload(models.Job.model),
+            selectinload(models.Job.dataset),
             selectinload(models.Job.metric_profiles),
             selectinload(models.Job.cache_profile),
             selectinload(models.Job.cache_tiers),
+            selectinload(models.Job.selected_tier).selectinload(models.ResourceTier.requirements),
+            selectinload(models.Job.assignments)
+            .selectinload(models.Assignment.node)
+            .selectinload(models.Node.cluster),
         )
         .filter(models.Job.id == job_id)
         .first()
@@ -469,20 +533,33 @@ def submit_job(
     job_type: str,
     model_id: int,
     batch: int,
-    precision: str,
     priority_pref: str,
-    sla_target: Decimal | None,
+    tier_id: int,
+    user_id: int,
+    dataset_id: int | None = None,
 ) -> schemas.JobSummary:
+    tier = (
+        db.query(models.ResourceTier)
+        .options(selectinload(models.ResourceTier.requirements))
+        .filter(models.ResourceTier.id == tier_id)
+        .first()
+    )
+    if tier is None:
+        raise HTTPException(status_code=400, detail="invalid tier_id")
+    if tier.job_type != job_type:
+        raise HTTPException(status_code=400, detail="tier_id does not match job type")
+
     now = clock.now()
     job = models.Job(
         model_id=model_id,
+        user_id=user_id,
         type=job_type,
         status="queued",
         batch=batch,
-        precision=precision,
         priority_pref=priority_pref,
-        sla_target=sla_target,
         submitted_at=now,
+        dataset_id=dataset_id,
+        selected_tier_id=tier_id,
     )
     db.add(job)
     db.flush()
@@ -490,14 +567,14 @@ def submit_job(
     _log_event(db, type="ARRIVAL", now=now, job_id=job.id)
 
     live_cluster = _load_live_cluster(db)
-    node = None
+    nodes = None
     if live_cluster is not None:
         occupied = _occupied_node_ids(live_cluster, now)
-        node = _pick_free_node(live_cluster, job.type, occupied)
-        if node is not None:
-            _admit(db, job, node, now, event_type="START")
+        nodes = _pick_free_nodes_for_tier(live_cluster, tier, occupied)
+        if nodes is not None:
+            _admit(db, job, nodes, now, event_type="START")
 
-    if node is None:
+    if nodes is None:
         _log_event(db, type="QUEUE", now=now, job_id=job.id)
 
     db.commit()

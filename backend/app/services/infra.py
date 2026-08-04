@@ -172,6 +172,7 @@ def get_cluster_detail(db: Session, cluster_id: int) -> schemas.ClusterDetail | 
                 id=node.id,
                 name=node.name,
                 cluster_id=cluster.id,
+                purpose=node.purpose,
                 metric_profiles=_as_metric_points(node.metric_profiles),
                 alerts=_as_alert_items(node.alerts),
             )
@@ -234,6 +235,7 @@ def get_node_detail(db: Session, node_id: int) -> schemas.NodeDetail | None:
         id=node.id,
         name=node.name,
         cluster_id=node.cluster_id,
+        purpose=node.purpose,
         accelerators=_group_accelerators(node.accelerators),
         metric_profiles=_as_metric_points(node.metric_profiles),
         alerts=_as_alert_items(node.alerts),

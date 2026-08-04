@@ -10,9 +10,12 @@ router = APIRouter(tags=["jobs"])
 
 @router.get("/jobs", response_model=list[schemas.JobSummary])
 def list_jobs(
-    status: str | None = None, db: Session = Depends(get_db), _: None = Depends(jobs_service.sweep_dependency)
+    status: str | None = None,
+    user_id: int | None = None,
+    db: Session = Depends(get_db),
+    _: None = Depends(jobs_service.sweep_dependency),
 ) -> list[schemas.JobSummary]:
-    return jobs_service.list_jobs(db, status=status)
+    return jobs_service.list_jobs(db, status=status, user_id=user_id)
 
 
 @router.get("/jobs/{job_id}", response_model=schemas.JobDetail)
@@ -67,6 +70,11 @@ def get_negotiations(
     return jobs_service.get_negotiations(db, job_id)
 
 
+@router.get("/resource-tiers", response_model=list[schemas.ResourceTierItem])
+def list_resource_tiers(job_type: str, db: Session = Depends(get_db)) -> list[schemas.ResourceTierItem]:
+    return jobs_service.list_resource_tiers(db, job_type)
+
+
 @router.post("/jobs/train", response_model=schemas.JobSummary, status_code=201)
 def submit_train_job(
     req: schemas.TrainJobRequest, db: Session = Depends(get_db), _: None = Depends(jobs_service.sweep_dependency)
@@ -76,9 +84,10 @@ def submit_train_job(
         job_type="train",
         model_id=req.model_id,
         batch=req.batch,
-        precision=req.precision,
         priority_pref=req.priority_pref,
-        sla_target=None,
+        tier_id=req.tier_id,
+        user_id=req.user_id,
+        dataset_id=req.dataset_id,
     )
 
 
@@ -91,7 +100,7 @@ def submit_infer_job(
         job_type="infer",
         model_id=req.model_id,
         batch=req.batch,
-        precision=req.precision,
         priority_pref=req.priority_pref,
-        sla_target=req.sla_target,
+        tier_id=req.tier_id,
+        user_id=req.user_id,
     )

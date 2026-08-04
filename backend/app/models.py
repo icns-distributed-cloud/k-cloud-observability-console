@@ -54,6 +54,7 @@ class Node(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     cluster_id: Mapped[int] = mapped_column(ForeignKey("cluster.id"))
     name: Mapped[str]
+    purpose: Mapped[str]
 
     cluster: Mapped["Cluster"] = relationship(back_populates="nodes")
     accelerators: Mapped[list["Accelerator"]] = relationship(back_populates="node")
@@ -154,6 +155,52 @@ class Model(Base):
 
     jobs: Mapped[list["Job"]] = relationship(back_populates="model")
     layers: Mapped[list["ModelLayer"]] = relationship(back_populates="model")
+    datasets: Mapped[list["Dataset"]] = relationship(back_populates="model")
+
+
+class Dataset(Base):
+    __tablename__ = "dataset"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str]
+    model_id: Mapped[Optional[int]] = mapped_column(ForeignKey("model.id"))
+
+    model: Mapped[Optional["Model"]] = relationship(back_populates="datasets")
+    jobs: Mapped[list["Job"]] = relationship(back_populates="dataset")
+
+
+class ResourceTier(Base):
+    __tablename__ = "resource_tier"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    cluster_id: Mapped[int] = mapped_column(ForeignKey("cluster.id"))
+    job_type: Mapped[str]
+    tier_no: Mapped[int]
+    cost_per_hour: Mapped[Decimal]
+
+    cluster: Mapped["Cluster"] = relationship()
+    requirements: Mapped[list["ResourceTierRequirement"]] = relationship(back_populates="tier")
+    jobs: Mapped[list["Job"]] = relationship(back_populates="selected_tier")
+
+
+class ResourceTierRequirement(Base):
+    __tablename__ = "resource_tier_requirement"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    tier_id: Mapped[int] = mapped_column(ForeignKey("resource_tier.id"))
+    kind: Mapped[str]
+    node_count: Mapped[int]
+
+    tier: Mapped["ResourceTier"] = relationship(back_populates="requirements")
+
+
+class User(Base):
+    __tablename__ = "user"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str]
+
+    jobs: Mapped[list["Job"]] = relationship(back_populates="user")
 
 
 class Job(Base):
@@ -161,17 +208,21 @@ class Job(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     model_id: Mapped[int] = mapped_column(ForeignKey("model.id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("user.id"))
     type: Mapped[str]
     status: Mapped[str]
     batch: Mapped[int]
-    precision: Mapped[str]
     priority_pref: Mapped[str]
-    sla_target: Mapped[Optional[Decimal]]
     submitted_at: Mapped[datetime]
     started_at: Mapped[Optional[datetime]]
     finished_at: Mapped[Optional[datetime]]
+    dataset_id: Mapped[Optional[int]] = mapped_column(ForeignKey("dataset.id"))
+    selected_tier_id: Mapped[Optional[int]] = mapped_column(ForeignKey("resource_tier.id"))
 
     model: Mapped["Model"] = relationship(back_populates="jobs")
+    user: Mapped["User"] = relationship(back_populates="jobs")
+    dataset: Mapped[Optional["Dataset"]] = relationship(back_populates="jobs")
+    selected_tier: Mapped[Optional["ResourceTier"]] = relationship(back_populates="jobs")
     assignments: Mapped[list["Assignment"]] = relationship(back_populates="job")
     events: Mapped[list["Event"]] = relationship(back_populates="job")
     metric_profiles: Mapped[list["JobMetricProfile"]] = relationship(back_populates="job")

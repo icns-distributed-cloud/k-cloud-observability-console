@@ -17,11 +17,12 @@ TRUNCATE
   provider, region, cluster, node, accelerator,
   cluster_metric_profile, node_metric_profile, accelerator_metric_profile,
   cluster_distributed_link, node_alert,
-  model, model_layer, model_layer_edge,
-  job, assignment, event,
+  model, model_layer, model_layer_edge, dataset,
+  "user", job, assignment, event,
   job_metric_profile, job_cache_profile, job_cache_tier,
   hyperparam_adjustment, job_kqv_benchmark, reallocation,
-  job_negotiation, job_negotiation_item
+  job_negotiation, job_negotiation_item,
+  resource_tier, resource_tier_requirement
 RESTART IDENTITY CASCADE;
 
 -- ---------- infra ----------
@@ -76,7 +77,7 @@ INSERT INTO cluster (region_id, name, status, is_live, cost_per_hour) VALUES
   (2, 'khu-suwon-01', 'active', true, 0),
   (3, 'khu-daejeon-01', 'standby', false, 0),
   (4, 'khu-busan-01', 'active', false, 0),
-  (5, 'aws-use1-a', 'active', true, 123.00),
+  (5, 'aws-use1-a', 'active', false, 123.00),
   (6, 'aws-apne1-a', 'active', false, 98.50),
   (7, 'aws-euw1-a', 'standby', false, 0),
   (8, 'gcp-usc1-a', 'active', false, 110.00),
@@ -89,40 +90,52 @@ INSERT INTO cluster (region_id, name, status, is_live, cost_per_hour) VALUES
   (13, 'aws-afs1-a', 'active', false, 88.00),
   (14, 'gcp-euw4-a', 'active', false, 108.00),
   (15, 'gcp-ause1-a', 'active', false, 120.00),
-  (16, 'azure-eas-a', 'active', true, 99.00),
+  (16, 'azure-eas-a', 'active', false, 99.00),
   (17, 'azure-uks-a', 'standby', false, 0),
   (18, 'azure-cac-a', 'active', false, 101.00);
 
-INSERT INTO node (cluster_id, name) VALUES
-  (1, 'srv-01'),
-  (2, 'srv-02'),
-  (3, 'suwon-srv-01'),
-  (3, 'suwon-srv-02'),
-  (4, 'daejeon-srv-01'),
-  (4, 'daejeon-srv-02'),
-  (5, 'busan-srv-01'),
-  (5, 'busan-srv-02'),
-  (6, 'use1-node-a'),
-  (6, 'use1-node-b'),
-  (7, 'apne1-node-a'),
-  (7, 'apne1-node-b'),
-  (8, 'euw1-node-a'),
-  (8, 'euw1-node-b'),
-  (9, 'usc1-node-a'),
-  (9, 'usc1-node-b'),
-  (10, 'sea1-node-a'),
-  (10, 'sea1-node-b');
+-- purpose only matters for admission on the live cluster (khu-suwon-01, id 3) - every
+-- other node just gets 'train' as an arbitrary default since nothing reads it there.
+INSERT INTO node (cluster_id, name, purpose) VALUES
+  (1, 'srv-01', 'train'),
+  (2, 'srv-02', 'train'),
+  (3, 'suwon-srv-01', 'train'),
+  (3, 'suwon-srv-02', 'train'),
+  (4, 'daejeon-srv-01', 'train'),
+  (4, 'daejeon-srv-02', 'train'),
+  (5, 'busan-srv-01', 'train'),
+  (5, 'busan-srv-02', 'train'),
+  (6, 'use1-node-a', 'train'),
+  (6, 'use1-node-b', 'train'),
+  (7, 'apne1-node-a', 'train'),
+  (7, 'apne1-node-b', 'train'),
+  (8, 'euw1-node-a', 'train'),
+  (8, 'euw1-node-b', 'train'),
+  (9, 'usc1-node-a', 'train'),
+  (9, 'usc1-node-b', 'train'),
+  (10, 'sea1-node-a', 'train'),
+  (10, 'sea1-node-b', 'train');
 
-INSERT INTO node (cluster_id, name) VALUES
-  (11, 'euc1-node-a'),
-  (12, 'aps1-node-a'),
-  (13, 'sae1-node-a'),
-  (14, 'afs1-node-a'),
-  (15, 'euw4-node-a'),
-  (16, 'ause1-node-a'),
-  (17, 'eas-node-a'),
-  (18, 'uks-node-a'),
-  (19, 'cac-node-a');
+INSERT INTO node (cluster_id, name, purpose) VALUES
+  (11, 'euc1-node-a', 'train'),
+  (12, 'aps1-node-a', 'train'),
+  (13, 'sae1-node-a', 'train'),
+  (14, 'afs1-node-a', 'train'),
+  (15, 'euw4-node-a', 'train'),
+  (16, 'ause1-node-a', 'train'),
+  (17, 'eas-node-a', 'train'),
+  (18, 'uks-node-a', 'train'),
+  (19, 'cac-node-a', 'train');
+
+-- live cluster (khu-suwon-01) node pool, split by purpose so admission/resource-tier
+-- availability can be demoed cleanly: train gets GPUx3 + NPUx1 (4 nodes), infer gets
+-- NPUx1 + PIMx1 (2 nodes). suwon-srv-01/02 (GPU) and suwon-srv-03 (NPU) already existed;
+-- 04-06 are new.
+INSERT INTO node (cluster_id, name, purpose) VALUES
+  (3, 'suwon-srv-03', 'train'),
+  (3, 'suwon-srv-04', 'train'),
+  (3, 'suwon-srv-05', 'infer'),
+  (3, 'suwon-srv-06', 'infer');
 
 INSERT INTO accelerator (node_id, kind, model_name, tflops, memory_gb, memory_type, tdp_w) VALUES
   (1, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
@@ -171,6 +184,12 @@ INSERT INTO accelerator (node_id, kind, model_name, tflops, memory_gb, memory_ty
   (25, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
   (26, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
   (27, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400);
+
+INSERT INTO accelerator (node_id, kind, model_name, tflops, memory_gb, memory_type, tdp_w) VALUES
+  (28, 'NPU', 'Furiosa RNGD', 256, 48, 'GDDR6', 180),
+  (29, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
+  (30, 'NPU', 'Furiosa RNGD', 256, 48, 'GDDR6', 180),
+  (31, 'PIM', 'SK hynix AiM', 128, 32, 'HBM-PIM', 150);
 
 -- All metric_profile tables render as: value(t) = baseline + amplitude * sin(2*pi*t / period_sec)
 -- t = current unix epoch seconds (matches app/services/infra.py's _evaluate, which uses
@@ -256,7 +275,11 @@ INSERT INTO node_metric_profile (node_id, metric_type, baseline, amplitude, peri
   (21, 'util', 45, 10, 55, 'pct'), (22, 'util', 55, 11, 50, 'pct'),
   (23, 'util', 48, 10, 55, 'pct'), (24, 'util', 62, 13, 45, 'pct'),
   (25, 'util', 68, 12, 40, 'pct'), (26, 'util', 30, 8, 60, 'pct'),
-  (27, 'util', 52, 10, 50, 'pct');
+  (27, 'util', 52, 10, 50, 'pct'),
+  (28, 'util', 40, 12, 40, 'pct'), (28, 'temp', 48, 3, 45, 'C'),
+  (29, 'util', 45, 13, 42, 'pct'), (29, 'temp', 50, 3, 46, 'C'),
+  (30, 'util', 38, 11, 41, 'pct'), (30, 'temp', 47, 3, 44, 'C'),
+  (31, 'util', 32, 9, 43, 'pct'), (31, 'temp', 44, 3, 47, 'C');
 
 -- node power draw (W), scaled roughly to what each node's accelerators pull
 -- (A100 nodes ~300-560W, H100 nodes ~950-2100W, NPU/PIM nodes ~130-150W)
@@ -287,7 +310,11 @@ INSERT INTO node_metric_profile (node_id, metric_type, baseline, amplitude, peri
   (24, 'power', 335, 63, 42, 'W'),
   (25, 'power', 340, 65, 40, 'W'),
   (26, 'power', 300, 55, 48, 'W'),
-  (27, 'power', 320, 60, 45, 'W');
+  (27, 'power', 320, 60, 45, 'W'),
+  (28, 'power', 160, 30, 35, 'W'),
+  (29, 'power', 310, 58, 44, 'W'),
+  (30, 'power', 155, 28, 36, 'W'),
+  (31, 'power', 120, 22, 38, 'W');
 
 -- accelerator_metric_profile: accelerator 1,2 keep original full coverage; every new
 -- accelerator gets a single 'util' row (kept light since there are 32 new ones)
@@ -317,7 +344,10 @@ INSERT INTO accelerator_metric_profile (accelerator_id, metric_type, baseline, a
   (38, 'util', 45, 10, 35, 'pct'), (39, 'util', 55, 11, 32, 'pct'),
   (40, 'util', 48, 10, 33, 'pct'), (41, 'util', 62, 13, 27, 'pct'),
   (42, 'util', 68, 12, 25, 'pct'), (43, 'util', 30, 8, 38, 'pct'),
-  (44, 'util', 52, 10, 30, 'pct');
+  (44, 'util', 52, 10, 30, 'pct'),
+  (45, 'util', 42, 14, 30, 'pct'),
+  (46, 'util', 44, 13, 31, 'pct'), (47, 'util', 40, 12, 32, 'pct'),
+  (48, 'util', 33, 10, 34, 'pct');
 
 -- distributed links: domestic-domestic ones only ever draw in Korea-mode view.
 -- (1, 6, true) is domestic(서울, cluster 1) <-> overseas(aws-use1-a, cluster 6) so it
@@ -344,25 +374,68 @@ INSERT INTO model_layer (model_id, op_name, shape, gflops, mem_mb, characteristi
 INSERT INTO model_layer_edge (from_layer_id, to_layer_id) VALUES
   (1, 2);
 
+INSERT INTO dataset (name, model_id) VALUES
+  ('SST-2', 1),
+  ('GLUE-MNLI', 1),
+  ('CIFAR-100', NULL);
+
+-- csc-user-01 is the "logged in" user the CSC portal fixes on (no real auth); the
+-- others exist so /jobs?user_id= filtering has something to actually filter out.
+INSERT INTO "user" (name) VALUES
+  ('csc-user-01'),
+  ('csc-user-02'),
+  ('csc-user-03');
+
+-- ---------- resource tiers ----------
+-- attached to cluster 3 (khu-suwon-01), the only is_live=true cluster. Its nodes are
+-- purpose-split: train pool = suwon-srv-01/02/04 (GPU x3) + suwon-srv-03 (NPU x1);
+-- infer pool = suwon-srv-05 (NPU x1) + suwon-srv-06 (PIM x1). Requirements below are
+-- kept within each pool's actual kinds so "available" varies realistically instead of
+-- being permanently stuck true/false. "available" in GET /resource-tiers is computed
+-- live from free node counts (now purpose-filtered too), not stored.
+INSERT INTO resource_tier (cluster_id, job_type, tier_no, cost_per_hour) VALUES
+  (3, 'train', 1, 12.0),
+  (3, 'train', 2, 5.0),
+  (3, 'train', 3, 3.0),
+  (3, 'train', 4, 2.0),
+  (3, 'infer', 1, 8.0),
+  (3, 'infer', 2, 4.0),
+  (3, 'infer', 3, 3.0);
+
+INSERT INTO resource_tier_requirement (tier_id, kind, node_count) VALUES
+  (1, 'GPU', 2), (1, 'NPU', 1),  -- train tier 1: 고성능 혼합
+  (2, 'GPU', 1),                 -- train tier 2: GPU 1대
+  (3, 'NPU', 1),                 -- train tier 3: NPU 1대
+  (4, 'GPU', 3),                 -- train tier 4: GPU 노드 3대 전부 필요 - 가끔만 available
+  (5, 'NPU', 1), (5, 'PIM', 1),  -- infer tier 1: 저지연 혼합, 두 infer 노드 다 필요
+  (6, 'NPU', 1),                 -- infer tier 2: NPU 1대
+  (7, 'PIM', 2);                 -- infer tier 3: PIM 노드가 1대뿐이라 항상 대기 예상
+
 -- ---------- jobs ----------
+-- precision/sla_target were dropped from job (see migration 5fcc49cbc30e) - CSC wizard
+-- never collected them. dataset_id/selected_tier_id are nullable and left unset here;
+-- they get wired up once the CSC job-submission API seeds real dataset/resource_tier rows.
+-- user_id 1 (csc-user-01) is the CSC portal's fixed "logged in" user - jobs 1/2/4 are
+-- theirs so /jobs?user_id=1 has something to show; job 3 belongs to user 2 so CSC
+-- filtering actually excludes something (CSP's unfiltered list still shows all 4).
 -- job 1: train, currently running (started now, 180s duration)
-INSERT INTO job (model_id, type, status, batch, precision, priority_pref, sla_target, submitted_at, started_at, finished_at) VALUES
-  (1, 'train', 'running', 128, 'FP16', 'time', NULL, now(), now(), NULL);
+INSERT INTO job (model_id, user_id, type, status, batch, priority_pref, submitted_at, started_at, finished_at) VALUES
+  (1, 1, 'train', 'running', 128, 'time', now(), now(), NULL);
 
 -- job 2: infer, already finished
-INSERT INTO job (model_id, type, status, batch, precision, priority_pref, sla_target, submitted_at, started_at, finished_at) VALUES
-  (1, 'infer', 'done', 32, 'INT8', 'cost', 99.0, now() - interval '15 minutes', now() - interval '10 minutes', now() - interval '5 minutes');
+INSERT INTO job (model_id, user_id, type, status, batch, priority_pref, submitted_at, started_at, finished_at) VALUES
+  (1, 1, 'infer', 'done', 32, 'cost', now() - interval '15 minutes', now() - interval '10 minutes', now() - interval '5 minutes');
 
--- job 3: infer, still queued (no free node)
-INSERT INTO job (model_id, type, status, batch, precision, priority_pref, sla_target, submitted_at, started_at, finished_at) VALUES
-  (1, 'infer', 'queued', 16, 'INT8', 'balanced', 99.5, now() - interval '1 minute', NULL, NULL);
+-- job 3: infer, still queued (no free node) - belongs to a different user
+INSERT INTO job (model_id, user_id, type, status, batch, priority_pref, submitted_at, started_at, finished_at) VALUES
+  (1, 2, 'infer', 'queued', 16, 'balanced', now() - interval '1 minute', NULL, NULL);
 
 -- job 4: train, already finished - donated node1 to job1 (see reallocation below).
 -- Reallocation is a train-only concept, so the donor here has to be a train job,
 -- not job2 (infer) - that was the bug that made the "재할당" tab show up on an
 -- infer job's detail page.
-INSERT INTO job (model_id, type, status, batch, precision, priority_pref, sla_target, submitted_at, started_at, finished_at) VALUES
-  (1, 'train', 'done', 64, 'FP16', 'time', NULL, now() - interval '12 minutes', now() - interval '11 minutes', now() - interval '1 minute');
+INSERT INTO job (model_id, user_id, type, status, batch, priority_pref, submitted_at, started_at, finished_at) VALUES
+  (1, 1, 'train', 'done', 64, 'time', now() - interval '12 minutes', now() - interval '11 minutes', now() - interval '1 minute');
 
 INSERT INTO assignment (job_id, node_id, from_t, to_t) VALUES
   (1, 1, now(), NULL),

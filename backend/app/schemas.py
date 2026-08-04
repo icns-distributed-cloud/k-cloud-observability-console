@@ -81,6 +81,7 @@ class NodeSummary(BaseModel):
     id: int
     name: str
     cluster_id: int
+    purpose: str
     metric_profiles: list[MetricProfilePoint]
     alerts: list[NodeAlertItem]
 
@@ -127,33 +128,57 @@ class EventItem(BaseModel):
 class TrainJobRequest(BaseModel):
     model_id: int
     batch: int
-    precision: str
     priority_pref: str
+    tier_id: int
+    user_id: int
+    dataset_id: Optional[int] = None
 
 
 # ---------- POST /api/v1/jobs/infer ----------
 class InferJobRequest(BaseModel):
     model_id: int
     batch: int
-    precision: str
     priority_pref: str
-    sla_target: Decimal
+    tier_id: int
+    user_id: int
 
 
 # ---------- GET /api/v1/jobs ----------
+class TierRequirementItem(BaseModel):
+    kind: str
+    node_count: int
+
+
+class SelectedTierSummary(BaseModel):
+    id: int
+    tier_no: int
+    cost_per_hour: Decimal
+    requirements: list[TierRequirementItem]
+
+
+class AssignedNodeItem(BaseModel):
+    node_id: int
+    node_name: str
+    cluster_id: int
+    cluster_name: str
+
+
 class JobSummary(BaseModel):
     id: int
     model_id: int
     model_name: str
+    user_id: int
     type: str
     status: str
     batch: int
-    precision: str
     priority_pref: str
-    sla_target: Optional[Decimal]
     submitted_at: datetime
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
+    dataset_id: Optional[int]
+    dataset_name: Optional[str]
+    selected_tier: Optional[SelectedTierSummary]
+    assigned_nodes: list[AssignedNodeItem]
 
 
 # ---------- GET /api/v1/jobs/{job_id} ----------
@@ -230,6 +255,18 @@ class ModelSummary(BaseModel):
     type: str
 
 
+# ---------- GET /api/v1/datasets ----------
+class DatasetItem(BaseModel):
+    id: int
+    name: str
+    model_id: Optional[int]
+
+
+# ---------- GET /api/v1/resource-tiers ----------
+class ResourceTierItem(SelectedTierSummary):
+    available: bool
+
+
 # ---------- GET /api/v1/models/{model_id}/layers ----------
 class ModelLayerItem(BaseModel):
     id: int
@@ -257,6 +294,7 @@ class NodeDetail(BaseModel):
     id: int
     name: str
     cluster_id: int
+    purpose: str
     accelerators: list[AcceleratorGroup]
     metric_profiles: list[MetricProfilePoint]
     alerts: list[NodeAlertItem]
