@@ -25,6 +25,14 @@ def get_job_detail(
     return detail
 
 
+@router.get("/jobs/{job_id}/assignments", response_model=list[schemas.AssignmentItem])
+def list_job_assignments(job_id: int, db: Session = Depends(get_db)) -> list[schemas.AssignmentItem]:
+    result = jobs_service.list_job_assignments(db, job_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="job not found")
+    return result
+
+
 @router.get(
     "/jobs/{job_id}/hyperparam-adjustment", response_model=list[schemas.HyperparamAdjustmentItem]
 )

@@ -369,6 +369,29 @@ def get_negotiations(db: Session, job_id: int) -> schemas.JobNegotiationResponse
     )
 
 
+def list_job_assignments(db: Session, job_id: int) -> list[schemas.AssignmentItem] | None:
+    job = db.query(models.Job).filter(models.Job.id == job_id).first()
+    if job is None:
+        return None
+
+    assignments = (
+        db.query(models.Assignment)
+        .filter(models.Assignment.job_id == job_id)
+        .order_by(models.Assignment.from_t)
+        .all()
+    )
+    return [
+        schemas.AssignmentItem(
+            id=a.id,
+            job_id=a.job_id,
+            node_id=a.node_id,
+            from_t=a.from_t,
+            to_t=a.to_t,
+        )
+        for a in assignments
+    ]
+
+
 def list_reallocations(db: Session, job_id: int) -> list[schemas.ReallocationItem] | None:
     job = db.query(models.Job).filter(models.Job.id == job_id).first()
     if job is None:
