@@ -48,10 +48,70 @@ METRIC_TEMPLATES: dict[str, list[dict]] = {
         },
         {
             "seq": 2,
-            "label": "p99 지연",
+            "label": "응답지연 p50",
             "unit": "ms",
-            "start_value": Decimal("38"),
+            "start_value": None,
+            "target_value": Decimal("12"),
+            "curve_shape": None,
+            "total_count": None,
+            "featured": False,
+        },
+        {
+            "seq": 3,
+            "label": "응답지연 p99",
+            "unit": "ms",
+            "start_value": None,
             "target_value": Decimal("38"),
+            "curve_shape": None,
+            "total_count": None,
+            "featured": False,
+        },
+        {
+            "seq": 4,
+            "label": "누적 요청 수",
+            "unit": None,
+            "start_value": None,
+            "target_value": None,
+            "curve_shape": None,
+            "total_count": 12000,
+            "featured": False,
+        },
+        {
+            "seq": 5,
+            "label": "KV 캐시 적중률",
+            "unit": "%",
+            "start_value": Decimal("45"),
+            "target_value": Decimal("88"),
+            "curve_shape": "exp_approach",
+            "total_count": None,
+            "featured": False,
+        },
+        {
+            "seq": 6,
+            "label": "요청당 전력",
+            "unit": "J",
+            "start_value": None,
+            "target_value": Decimal("0.42"),
+            "curve_shape": None,
+            "total_count": None,
+            "featured": False,
+        },
+        {
+            "seq": 7,
+            "label": "Prefill 비율",
+            "unit": "%",
+            "start_value": None,
+            "target_value": Decimal("35"),
+            "curve_shape": None,
+            "total_count": None,
+            "featured": False,
+        },
+        {
+            "seq": 8,
+            "label": "Decode 비율",
+            "unit": "%",
+            "start_value": None,
+            "target_value": Decimal("65"),
             "curve_shape": None,
             "total_count": None,
             "featured": False,
@@ -307,6 +367,29 @@ def get_negotiations(db: Session, job_id: int) -> schemas.JobNegotiationResponse
         proposed=[i.text for i in items if i.side == "proposed"],
         agreed=[i.text for i in items if i.side == "agreed"],
     )
+
+
+def list_job_assignments(db: Session, job_id: int) -> list[schemas.AssignmentItem] | None:
+    job = db.query(models.Job).filter(models.Job.id == job_id).first()
+    if job is None:
+        return None
+
+    assignments = (
+        db.query(models.Assignment)
+        .filter(models.Assignment.job_id == job_id)
+        .order_by(models.Assignment.from_t)
+        .all()
+    )
+    return [
+        schemas.AssignmentItem(
+            id=a.id,
+            job_id=a.job_id,
+            node_id=a.node_id,
+            from_t=a.from_t,
+            to_t=a.to_t,
+        )
+        for a in assignments
+    ]
 
 
 def list_reallocations(db: Session, job_id: int) -> list[schemas.ReallocationItem] | None:
