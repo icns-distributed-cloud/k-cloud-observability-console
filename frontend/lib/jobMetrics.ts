@@ -5,8 +5,8 @@ import type { JobMetricProfileItem, JobSummary, JobType } from '@/app/types'
  * 백엔드에 실제 소요 시간 정보가 없어 협의된 값으로 고정.
  */
 export const DURATION_SEC: Record<JobType, number> = {
-    train: 180,
-    infer: 30,
+    train: 40,
+    infer: 15,
     distributed: 300,
 }
 
