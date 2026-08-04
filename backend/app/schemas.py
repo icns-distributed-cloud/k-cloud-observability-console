@@ -128,6 +128,8 @@ class TrainJobRequest(BaseModel):
     model_id: int
     batch: int
     priority_pref: str
+    tier_id: int
+    dataset_id: Optional[int] = None
 
 
 # ---------- POST /api/v1/jobs/infer ----------
@@ -135,6 +137,7 @@ class InferJobRequest(BaseModel):
     model_id: int
     batch: int
     priority_pref: str
+    tier_id: int
 
 
 # ---------- GET /api/v1/jobs ----------
