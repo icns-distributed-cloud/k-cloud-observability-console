@@ -258,6 +258,37 @@ INSERT INTO node_metric_profile (node_id, metric_type, baseline, amplitude, peri
   (25, 'util', 68, 12, 40, 'pct'), (26, 'util', 30, 8, 60, 'pct'),
   (27, 'util', 52, 10, 50, 'pct');
 
+-- node power draw (W), scaled roughly to what each node's accelerators pull
+-- (A100 nodes ~300-560W, H100 nodes ~950-2100W, NPU/PIM nodes ~130-150W)
+INSERT INTO node_metric_profile (node_id, metric_type, baseline, amplitude, period_sec, unit) VALUES
+  (1, 'power', 560, 130, 42, 'W'),
+  (2, 'power', 320, 60, 45, 'W'),
+  (3, 'power', 540, 110, 40, 'W'),
+  (4, 'power', 300, 55, 46, 'W'),
+  (5, 'power', 150, 30, 35, 'W'),
+  (6, 'power', 310, 58, 44, 'W'),
+  (7, 'power', 950, 180, 36, 'W'),
+  (8, 'power', 520, 100, 40, 'W'),
+  (9, 'power', 1050, 200, 30, 'W'),
+  (10, 'power', 1000, 190, 32, 'W'),
+  (11, 'power', 540, 105, 38, 'W'),
+  (12, 'power', 520, 100, 39, 'W'),
+  (13, 'power', 500, 95, 42, 'W'),
+  (14, 'power', 300, 55, 45, 'W'),
+  (15, 'power', 2100, 350, 26, 'W'),
+  (16, 'power', 1150, 210, 29, 'W'),
+  (17, 'power', 530, 100, 40, 'W'),
+  (18, 'power', 130, 25, 50, 'W'),
+  (19, 'power', 320, 60, 45, 'W'),
+  (20, 'power', 330, 62, 44, 'W'),
+  (21, 'power', 310, 58, 46, 'W'),
+  (22, 'power', 325, 60, 43, 'W'),
+  (23, 'power', 315, 57, 47, 'W'),
+  (24, 'power', 335, 63, 42, 'W'),
+  (25, 'power', 340, 65, 40, 'W'),
+  (26, 'power', 300, 55, 48, 'W'),
+  (27, 'power', 320, 60, 45, 'W');
+
 -- accelerator_metric_profile: accelerator 1,2 keep original full coverage; every new
 -- accelerator gets a single 'util' row (kept light since there are 32 new ones)
 INSERT INTO accelerator_metric_profile (accelerator_id, metric_type, baseline, amplitude, period_sec, unit) VALUES
