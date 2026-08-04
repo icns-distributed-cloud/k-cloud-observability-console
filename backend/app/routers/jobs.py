@@ -82,6 +82,8 @@ def submit_train_job(
         model_id=req.model_id,
         batch=req.batch,
         priority_pref=req.priority_pref,
+        tier_id=req.tier_id,
+        dataset_id=req.dataset_id,
     )
 
 
@@ -95,4 +97,5 @@ def submit_infer_job(
         model_id=req.model_id,
         batch=req.batch,
         priority_pref=req.priority_pref,
+        tier_id=req.tier_id,
     )

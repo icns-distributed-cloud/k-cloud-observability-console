@@ -1,15 +1,14 @@
 from datetime import datetime, timedelta
 from decimal import Decimal
 
-from fastapi import Depends
+from fastapi import Depends, HTTPException
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
 from app import clock, models, schemas
 from app.database import get_db
 
-DURATION_SEC = {"train": 180, "infer": 30}
-REQUIRED_KIND = {"train": "GPU"}  # infer: no kind restriction
+DURATION_SEC = {"train": 15, "infer": 15}
 
 # one metric-card template set per job.type, copied verbatim into job_metric_profile on submission
 METRIC_TEMPLATES: dict[str, list[dict]] = {
@@ -170,17 +169,26 @@ def _occupied_node_ids(live_cluster: models.Cluster, now: datetime) -> set[int]:
     }
 
 
-def _pick_free_node(
-    live_cluster: models.Cluster, job_type: str, occupied_node_ids: set[int]
-) -> models.Node | None:
-    required_kind = REQUIRED_KIND.get(job_type)
+def _pick_free_nodes_for_tier(
+    live_cluster: models.Cluster, tier: models.ResourceTier, occupied_node_ids: set[int]
+) -> list[models.Node] | None:
+    free_by_kind: dict[str, list[models.Node]] = {}
     for node in live_cluster.nodes:
         if node.id in occupied_node_ids:
             continue
-        if required_kind and not any(a.kind == required_kind for a in node.accelerators):
-            continue
-        return node
-    return None
+        for kind in {a.kind for a in node.accelerators}:
+            free_by_kind.setdefault(kind, []).append(node)
+
+    picked: list[models.Node] = []
+    picked_ids: set[int] = set()
+    for req in tier.requirements:
+        candidates = [n for n in free_by_kind.get(req.kind, []) if n.id not in picked_ids]
+        if len(candidates) < req.node_count:
+            return None
+        for node in candidates[: req.node_count]:
+            picked.append(node)
+            picked_ids.add(node.id)
+    return picked
 
 
 def _free_node_counts_by_kind(live_cluster: models.Cluster, occupied_node_ids: set[int]) -> dict[str, int]:
@@ -250,13 +258,16 @@ def _seed_metric_profiles(db: Session, job: models.Job) -> None:
         db.add(models.JobMetricProfile(job_id=job.id, **template))
 
 
-def _admit(db: Session, job: models.Job, node: models.Node, start_time: datetime, event_type: str) -> None:
-    db.add(models.Assignment(job_id=job.id, node_id=node.id, from_t=start_time, to_t=None))
+def _admit(
+    db: Session, job: models.Job, nodes: list[models.Node], start_time: datetime, event_type: str
+) -> None:
     job.status = "running"
     job.started_at = start_time
-    _log_event(
-        db, type=event_type, now=start_time, job_id=job.id, node_id=node.id, cluster_id=node.cluster_id
-    )
+    for node in nodes:
+        db.add(models.Assignment(job_id=job.id, node_id=node.id, from_t=start_time, to_t=None))
+        _log_event(
+            db, type=event_type, now=start_time, job_id=job.id, node_id=node.id, cluster_id=node.cluster_id
+        )
 
 
 def sweep_and_backfill(db: Session) -> None:
@@ -295,15 +306,20 @@ def sweep_and_backfill(db: Session) -> None:
         queued_jobs = (
             db.query(models.Job)
             .filter(models.Job.status == "queued")
+            .options(selectinload(models.Job.selected_tier).selectinload(models.ResourceTier.requirements))
             .order_by(models.Job.submitted_at)
             .all()
         )
         for job in queued_jobs:
-            node = _pick_free_node(live_cluster, job.type, occupied)
-            if node is not None:
-                start_time = max(job.submitted_at, freed_at.get(node.id, job.submitted_at))
-                _admit(db, job, node, start_time, event_type="BACKFILL")
-                occupied.add(node.id)
+            if job.selected_tier is None:
+                continue
+            nodes = _pick_free_nodes_for_tier(live_cluster, job.selected_tier, occupied)
+            if nodes is not None:
+                start_time = max(
+                    [job.submitted_at] + [freed_at.get(n.id, job.submitted_at) for n in nodes]
+                )
+                _admit(db, job, nodes, start_time, event_type="BACKFILL")
+                occupied.update(n.id for n in nodes)
 
     db.commit()
 
@@ -496,7 +512,18 @@ def submit_job(
     model_id: int,
     batch: int,
     priority_pref: str,
+    tier_id: int,
+    dataset_id: int | None = None,
 ) -> schemas.JobSummary:
+    tier = (
+        db.query(models.ResourceTier)
+        .options(selectinload(models.ResourceTier.requirements))
+        .filter(models.ResourceTier.id == tier_id)
+        .first()
+    )
+    if tier is None:
+        raise HTTPException(status_code=400, detail="invalid tier_id")
+
     now = clock.now()
     job = models.Job(
         model_id=model_id,
@@ -505,6 +532,8 @@ def submit_job(
         batch=batch,
         priority_pref=priority_pref,
         submitted_at=now,
+        dataset_id=dataset_id,
+        selected_tier_id=tier_id,
     )
     db.add(job)
     db.flush()
@@ -512,14 +541,14 @@ def submit_job(
     _log_event(db, type="ARRIVAL", now=now, job_id=job.id)
 
     live_cluster = _load_live_cluster(db)
-    node = None
+    nodes = None
     if live_cluster is not None:
         occupied = _occupied_node_ids(live_cluster, now)
-        node = _pick_free_node(live_cluster, job.type, occupied)
-        if node is not None:
-            _admit(db, job, node, now, event_type="START")
+        nodes = _pick_free_nodes_for_tier(live_cluster, tier, occupied)
+        if nodes is not None:
+            _admit(db, job, nodes, now, event_type="START")
 
-    if node is None:
+    if nodes is None:
         _log_event(db, type="QUEUE", now=now, job_id=job.id)
 
     db.commit()
