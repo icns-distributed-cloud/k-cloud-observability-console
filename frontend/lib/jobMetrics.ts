@@ -24,6 +24,24 @@ export function jobProgress(job: JobSummary, nowMs: number): number {
 }
 
 /**
+ * 경과 시간 라벨. 시작 전이면 "—", 완료된 작업은 finished_at까지.
+ * jobProgress와 달리 가정 소요시간이 아니라 실제 타임스탬프를 쓴다.
+ */
+export function elapsedLabel(job: JobSummary, nowMs: number): string {
+    if (!job.started_at) return '—'
+
+    const end = job.finished_at ? new Date(job.finished_at).getTime() : nowMs
+    const sec = Math.max(0, (end - new Date(job.started_at).getTime()) / 1000)
+    const h = Math.floor(sec / 3600)
+    const m = Math.floor((sec % 3600) / 60)
+    const s = Math.floor(sec % 60)
+
+    if (h > 0) return `${h}h ${m}m`
+    if (m > 0) return `${m}m ${s}s`
+    return `${s}s`
+}
+
+/**
  * 곡선 형태에 따라 진행률을 보간 비율로 변환한다.
  * - exp_approach: 초반에 빠르게 오르고 점점 완만해짐
  * - flat: 거의 안 변함 (미세 변동만)
