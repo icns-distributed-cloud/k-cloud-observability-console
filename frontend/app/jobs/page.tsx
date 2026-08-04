@@ -49,7 +49,7 @@ export default function JobListPage() {
     const [raw, setRaw] = useState<RawResources | null>(null);
 
     useEffect(() => {
-        fetchJobs(filter === "all" ? undefined : filter)
+        fetchJobs(filter === "all" ? undefined : { status: filter })
             .then(setJobs)
             .catch((e) => setError(String(e)));
     }, [filter]);
@@ -228,7 +228,8 @@ export default function JobListPage() {
                                         {j.model_name}
                                     </div>
                                     <div style={{ fontSize: 12.5, color: "var(--sub)", marginTop: 2 }}>
-                                        {TYPE_LABELS[j.type] ?? j.type} · 배치 {j.batch} · {j.precision}
+                                        {TYPE_LABELS[j.type] ?? j.type} · 배치 {j.batch}
+                                        {j.dataset_name && ` · ${j.dataset_name}`}
                                     </div>
                                 </div>
 
