@@ -3,11 +3,11 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Breadcrumb from "@/components/Breadcrumb";
 import Tabs from "@/components/Tabs";
-import { fetchClusterAssignments, fetchClusterDetail, fetchJobs, fetchProviders } from "@/lib/api";
+import { fetchJobAssignments, fetchJobs, fetchNodeDetail } from "@/lib/api";
 import { JOB_COLORS, JOB_STATUS_LABELS, PRIORITY_LABELS, mapJobNodes } from "@/lib/jobs";
 import { jobProgress } from "@/lib/jobMetrics";
 import { useTime } from "@/lib/TimeContext";
-import type { JobSummary } from "@/app/types";
+import type { JobSummary, NodeDetail } from "@/app/types";
 
 const TYPE_LABELS: Record<string, string> = {
     train: "학습",
@@ -43,24 +43,26 @@ export default function JobListPage() {
             .catch((e) => setError(String(e)));
     }, [filter]);
 
-    // 할당 정보는 클러스터 단위로만 조회된다. 전 클러스터를 병렬로 훑어 작업→노드 매핑을 만든다.
-    // 실패한 클러스터는 건너뛰고 나머지로 진행 (작업 목록 자체는 이미 떠 있다).
+    // 작업별 할당을 직접 조회한 뒤, 점유 중인 노드의 이름만 추가로 받아 매핑을 만든다.
+    // 할당은 node_id만 주므로 이름은 노드 상세에서 가져온다 (중복 제거해서 노드당 1회).
+    // 실패한 호출은 건너뛰고 나머지로 진행 (작업 목록 자체는 이미 떠 있다).
     useEffect(() => {
+        if (jobs.length === 0) {
+            setJobNodes({});
+            return;
+        }
         let cancelled = false;
 
-        fetchProviders()
-            .then(async (providers) => {
-                const ids = providers.flatMap((p) =>
-                    p.regions.flatMap((r) => r.clusters.map((c) => c.id))
+        Promise.all(jobs.map((j) => fetchJobAssignments(j.id).catch(() => [])))
+            .then(async (lists) => {
+                const active = lists.flat().filter((a) => a.to_t === null);
+                const nodeIds = [...new Set(active.map((a) => a.node_id))];
+                const nodes = await Promise.all(
+                    nodeIds.map((id) => fetchNodeDetail(id).catch(() => null))
                 );
-                const [details, assignmentLists] = await Promise.all([
-                    Promise.all(ids.map((id) => fetchClusterDetail(id).catch(() => null))),
-                    Promise.all(ids.map((id) => fetchClusterAssignments(id).catch(() => []))),
-                ]);
                 if (cancelled) return;
 
-                const nodes = details.flatMap((d) => d?.nodes ?? []);
-                setJobNodes(mapJobNodes(assignmentLists.flat(), nodes));
+                setJobNodes(mapJobNodes(active, nodes.filter((n): n is NodeDetail => n !== null)));
             })
             .catch(() => {
                 if (!cancelled) setJobNodes({});
@@ -69,7 +71,7 @@ export default function JobListPage() {
         return () => {
             cancelled = true;
         };
-    }, []);
+    }, [jobs]);
 
     if (error) return <main style={{ padding: 24 }}>불러오기 실패: {error}</main>;
 

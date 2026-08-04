@@ -60,6 +60,10 @@ export function fetchJobDetail(jobId: number) {
   return get<JobDetail>(`/jobs/${jobId}`)
 }
 
+export function fetchJobAssignments(jobId: number) {
+  return get<AssignmentItem[]>(`/jobs/${jobId}/assignments`)
+}
+
 export function fetchHyperparamAdjustments(jobId: number) {
   return get<HyperparamAdjustmentItem[]>(`/jobs/${jobId}/hyperparam-adjustment`)
 }

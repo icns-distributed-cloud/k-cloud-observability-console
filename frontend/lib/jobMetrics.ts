@@ -61,7 +61,8 @@ export function metricDisplay(
     const v = metricCurrentValue(metric, progress)
     if (v === null) return { value: '—', unit: metric.unit }
 
-    return { value: v.toFixed(1), unit: metric.unit }
+    // 요청당 전력(0.42 J)처럼 1 미만인 지표는 소수 1자리로는 유효숫자가 사라진다
+    return { value: v.toFixed(Math.abs(v) < 1 ? 2 : 1), unit: metric.unit }
 }
 
 /** featured 지표의 시계열 (과거 ~ 현재). 큰 그래프용. */
