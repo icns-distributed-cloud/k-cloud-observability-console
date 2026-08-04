@@ -107,7 +107,7 @@ export default function JobListPage() {
         <main style={{ padding: "24px 28px" }}>
             <Breadcrumb
                 segments={[
-                    { label: "지도", onClick: () => router.push("/") },
+                    { label: "지도", onClick: () => router.push("/csp") },
                     { label: "작업 목록" },
                 ]}
             />
@@ -121,7 +121,7 @@ export default function JobListPage() {
 
             <div style={{ marginBottom: 16 }}>
                 <button
-                    onClick={() => router.push("/jobs/new")}
+                    onClick={() => router.push("/csp/jobs/new")}
                     style={{
                         border: "none",
                         background: "var(--accent)",
@@ -192,7 +192,7 @@ export default function JobListPage() {
                         return (
                             <div
                                 key={j.id}
-                                onClick={() => router.push(`/jobs/${j.id}`)}
+                                onClick={() => router.push(`/csp/jobs/${j.id}`)}
                                 style={{
                                     display: "flex",
                                     alignItems: "center",

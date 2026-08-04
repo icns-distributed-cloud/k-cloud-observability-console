@@ -31,6 +31,8 @@ interface NodeRef {
   id: number;
   name: string;
   purpose: NodePurpose;
+  /** 소속 클러스터가 라이브인지. 스케줄러 행 정렬 우선순위에 쓴다 */
+  isLive: boolean;
 }
 
 interface SchedulerData {
@@ -74,8 +76,17 @@ export default function SchedulerPage() {
         ]);
         if (cancelled) return;
 
+        // is_live는 ClusterDetail이 Cluster를 확장하며 그대로 들고 오므로 d에서 바로 읽는다.
+        // targets와 인덱스를 맞춰 꺼내면 조회 실패(null)가 섞였을 때 어긋날 여지가 생긴다.
         const allNodes: NodeRef[] = details.flatMap((d) =>
-          d ? d.nodes.map((n) => ({ id: n.id, name: n.name, purpose: n.purpose })) : []
+          d
+            ? d.nodes.map((n) => ({
+                id: n.id,
+                name: n.name,
+                purpose: n.purpose,
+                isLive: d.is_live,
+              }))
+            : []
         );
         const allAssignments = assignmentLists.flat();
         const { train, infer } = selectSchedulerNodes(allNodes, allAssignments);
@@ -120,7 +131,7 @@ export default function SchedulerPage() {
     <main style={{ padding: "24px 28px" }}>
       <Breadcrumb
         segments={[
-          { label: "지도", onClick: () => router.push("/") },
+          { label: "지도", onClick: () => router.push("/csp") },
           { label: "스케줄러" },
         ]}
       />
@@ -143,13 +154,13 @@ export default function SchedulerPage() {
           <Section
             title="학습 스케줄러"
             data={trainTimeline}
-            onSelectJob={(id) => router.push(`/jobs/${id}`)}
+            onSelectJob={(id) => router.push(`/csp/jobs/${id}`)}
           />
           <div style={{ height: 28 }} />
           <Section
             title="추론 스케줄러"
             data={inferTimeline}
-            onSelectJob={(id) => router.push(`/jobs/${id}`)}
+            onSelectJob={(id) => router.push(`/csp/jobs/${id}`)}
           />
         </>
       )}

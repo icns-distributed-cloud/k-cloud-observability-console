@@ -41,23 +41,31 @@ export interface SchedulerSection<T> {
 /* 스케줄러 두 섹션(학습/추론)을 나눈다.
  * node.purpose가 용도를 직접 알려주므로, 배정된 작업 타입으로 역산할 필요가 없다.
  * 할당 이력이 없는 유휴 노드도 제 풀에 정확히 들어간다.
- * 막대가 있는 노드를 앞에 두어 perSection으로 잘라도 활동이 먼저 보이게 한다.
+ *
+ * 정렬은 라이브 클러스터 여부를 막대 유무보다 우선한다.
+ * 새 작업은 라이브 클러스터에만 배정되므로, 그 노드가 비어 있더라도
+ * 자리를 잡고 있어야 제출 직후 막대가 나타날 행이 존재한다.
+ * 막대 유무만으로 정렬하면 과거 이력이 쌓인 다른 클러스터 노드가
+ * 앞자리를 채워, 정작 배정 대상 노드가 잘려나가 막대가 안 보였다.
  */
-export function selectSchedulerNodes<T extends { id: number; purpose: NodePurpose }>(
+export function selectSchedulerNodes<
+  T extends { id: number; purpose: NodePurpose; isLive: boolean },
+>(
   nodes: T[],
   assignments: AssignmentItem[],
-  perSection = 4
+  // 시드 기준 라이브 클러스터의 train 풀만 4개라, 4칸이면 다른 클러스터가 아예 안 낀다
+  perSection = 6
 ): { train: SchedulerSection<T>; infer: SchedulerSection<T> } {
   const section = (purpose: NodePurpose): SchedulerSection<T> => {
     const pool = nodes.filter((n) => n.purpose === purpose)
     const poolIds = new Set(pool.map((n) => n.id))
     const sectionAssignments = assignments.filter((a) => poolIds.has(a.node_id))
 
+    // 라이브(0/1) → 막대 유무(0/1) 순으로 가중치를 더해 4단계 우선순위를 만든다.
+    // sort는 안정 정렬이라 같은 순위끼리는 원래 순서(=클러스터 조회 순)를 유지한다.
     const busyIds = new Set(sectionAssignments.map((a) => a.node_id))
-    const ordered = [
-      ...pool.filter((n) => busyIds.has(n.id)),
-      ...pool.filter((n) => !busyIds.has(n.id)),
-    ]
+    const rank = (n: T) => (n.isLive ? 0 : 2) + (busyIds.has(n.id) ? 0 : 1)
+    const ordered = [...pool].sort((a, b) => rank(a) - rank(b))
 
     return { nodes: ordered.slice(0, perSection), assignments: sectionAssignments }
   }

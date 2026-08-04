@@ -101,7 +101,7 @@ export default function ClusterPage({ params }: { params: Promise<{ id: string }
     <main style={{ padding: "24px 28px" }}>
       <Breadcrumb
         segments={[
-          { label: "지도", onClick: () => router.push("/") },
+          { label: "지도", onClick: () => router.push("/csp") },
           { label: cluster.name },
         ]}
       />
@@ -156,7 +156,7 @@ export default function ClusterPage({ params }: { params: Promise<{ id: string }
               jobColor={job ? JOB_COLORS[job.type] : undefined}
               hasAlert={node.alerts.length > 0}
               alertSeverity={node.alerts[0]?.severity === "sla" ? "sla" : "physical"}
-              onClick={() => router.push(`/nodes/${node.id}`)}
+              onClick={() => router.push(`/csp/nodes/${node.id}`)}
             />
           );
         })}

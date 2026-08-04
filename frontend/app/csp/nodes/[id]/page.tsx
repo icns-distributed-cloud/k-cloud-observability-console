@@ -66,10 +66,10 @@ export default function NodePage({ params }: { params: Promise<{ id: string }> }
     <main style={{ padding: "24px 28px" }}>
       <Breadcrumb
         segments={[
-          { label: "지도", onClick: () => router.push("/") },
+          { label: "지도", onClick: () => router.push("/csp") },
           {
             label: clusterName || `클러스터 ${node.cluster_id}`,
-            onClick: () => router.push(`/clusters/${node.cluster_id}`),
+            onClick: () => router.push(`/csp/clusters/${node.cluster_id}`),
           },
           { label: `노드 ${node.name}` },
         ]}
@@ -115,7 +115,7 @@ export default function NodePage({ params }: { params: Promise<{ id: string }> }
       {job ? (
         <div
           onClick={() =>
-            router.push(`/clusters/${node.cluster_id}/nodes/${node.id}/jobs/${job.id}`)
+            router.push(`/csp/clusters/${node.cluster_id}/nodes/${node.id}/jobs/${job.id}`)
           }
           style={{
             background: "var(--panel)",

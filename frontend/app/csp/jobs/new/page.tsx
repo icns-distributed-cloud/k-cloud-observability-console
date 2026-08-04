@@ -77,8 +77,8 @@ export default function NewJobPage() {
       <main style={{ padding: "24px 28px" }}>
         <Breadcrumb
           segments={[
-            { label: "지도", onClick: () => router.push("/") },
-            { label: "작업 목록", onClick: () => router.push("/jobs") },
+            { label: "지도", onClick: () => router.push("/csp") },
+            { label: "작업 목록", onClick: () => router.push("/csp/jobs") },
             { label: "제출 완료" },
           ]}
         />
@@ -114,10 +114,10 @@ export default function NewJobPage() {
             </div>
 
             <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
-              <button onClick={() => router.push("/timeline")} style={primaryBtn}>
+              <button onClick={() => router.push("/csp/timeline")} style={primaryBtn}>
                 스케줄러에서 보기
               </button>
-              <button onClick={() => router.push(`/jobs/${result.id}`)} style={secondaryBtn}>
+              <button onClick={() => router.push(`/csp/jobs/${result.id}`)} style={secondaryBtn}>
                 작업 상세 보기
               </button>
               <button onClick={() => setResult(null)} style={secondaryBtn}>
@@ -134,8 +134,8 @@ export default function NewJobPage() {
     <main style={{ padding: "24px 28px" }}>
       <Breadcrumb
         segments={[
-          { label: "지도", onClick: () => router.push("/") },
-          { label: "작업 목록", onClick: () => router.push("/jobs") },
+          { label: "지도", onClick: () => router.push("/csp") },
+          { label: "작업 목록", onClick: () => router.push("/csp/jobs") },
           { label: "작업 제출" },
         ]}
       />

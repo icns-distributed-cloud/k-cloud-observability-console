@@ -38,7 +38,7 @@ export default function InfraPage() {
     <main style={{ padding: "24px 28px" }}>
       <Breadcrumb
         segments={[
-          { label: "지도", onClick: () => router.push("/") },
+          { label: "지도", onClick: () => router.push("/csp") },
           { label: "클러스터 현황" },
         ]}
       />
@@ -84,7 +84,7 @@ export default function InfraPage() {
                 r.clusters.map((c) => (
                   <tr
                     key={c.id}
-                    onClick={() => router.push(`/clusters/${c.id}`)}
+                    onClick={() => router.push(`/csp/clusters/${c.id}`)}
                     style={{ borderTop: "1px solid var(--line)", cursor: "pointer" }}
                   >
                     <Td>
