@@ -215,7 +215,24 @@ def _free_node_counts_by_kind(
     return counts
 
 
-def list_resource_tiers(db: Session, job_type: str) -> list[schemas.ResourceTierItem]:
+def _sort_tiers_by_priority(
+    tiers: list[schemas.ResourceTierItem], priority_pref: str | None
+) -> list[schemas.ResourceTierItem]:
+    # tier_no already IS the performance rank (1 = best, set at seed time), so "time
+    # 우선" just sorts by it directly - no separate score field needed.
+    if priority_pref == "time":
+        return sorted(tiers, key=lambda t: t.tier_no)
+    if priority_pref == "cost":
+        return sorted(tiers, key=lambda t: t.cost_per_hour)
+    if priority_pref == "balanced":
+        cost_rank = {t.id: rank for rank, t in enumerate(sorted(tiers, key=lambda t: t.cost_per_hour), start=1)}
+        return sorted(tiers, key=lambda t: cost_rank[t.id] + t.tier_no)
+    return tiers
+
+
+def list_resource_tiers(
+    db: Session, job_type: str, priority_pref: str | None = None
+) -> list[schemas.ResourceTierItem]:
     live_cluster = _load_live_cluster(db)
     if live_cluster is None:
         return []
@@ -233,7 +250,7 @@ def list_resource_tiers(db: Session, job_type: str) -> list[schemas.ResourceTier
         .order_by(models.ResourceTier.tier_no)
         .all()
     )
-    return [
+    items = [
         schemas.ResourceTierItem(
             id=t.id,
             tier_no=t.tier_no,
@@ -245,6 +262,7 @@ def list_resource_tiers(db: Session, job_type: str) -> list[schemas.ResourceTier
         )
         for t in tiers
     ]
+    return _sort_tiers_by_priority(items, priority_pref)
 
 
 def _log_event(
