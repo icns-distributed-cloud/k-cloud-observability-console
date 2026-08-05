@@ -393,14 +393,18 @@ INSERT INTO "user" (name) VALUES
 -- kept within each pool's actual kinds so "available" varies realistically instead of
 -- being permanently stuck true/false. "available" in GET /resource-tiers is computed
 -- live from free node counts (now purpose-filtered too), not stored.
+-- train tier 3's cost (6.0) and infer tier 3's cost (6.0) are both deliberately NOT
+-- the cheapest despite being the lowest-performing tier in their job_type - breaks the
+-- otherwise-perfect cost/perf anti-correlation so priority_pref=balanced actually
+-- diverges from time/cost sorting instead of tying out to tier_no order.
 INSERT INTO resource_tier (cluster_id, job_type, tier_no, cost_per_hour) VALUES
   (3, 'train', 1, 12.0),
   (3, 'train', 2, 5.0),
-  (3, 'train', 3, 3.0),
+  (3, 'train', 3, 6.0),
   (3, 'train', 4, 2.0),
   (3, 'infer', 1, 8.0),
   (3, 'infer', 2, 4.0),
-  (3, 'infer', 3, 3.0);
+  (3, 'infer', 3, 6.0);
 
 INSERT INTO resource_tier_requirement (tier_id, kind, node_count) VALUES
   (1, 'GPU', 2), (1, 'NPU', 1),  -- train tier 1: 고성능 혼합
