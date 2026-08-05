@@ -413,12 +413,19 @@ INSERT INTO resource_tier_requirement (tier_id, kind, node_count) VALUES
 
 -- ---------- jobs ----------
 -- precision/sla_target were dropped from job (see migration 5fcc49cbc30e) - CSC wizard
--- never collected them. dataset_id/selected_tier_id are nullable and left unset here;
--- they get wired up once the CSC job-submission API seeds real dataset/resource_tier rows.
+-- never collected them. Duration is config, not stored on the job - see
+-- services/jobs.py DURATION_SEC (train=40s, infer=15s, agreed with frontend).
 -- user_id 1 (csc-user-01) is the CSC portal's fixed "logged in" user - jobs 1/2/4 are
--- theirs so /jobs?user_id=1 has something to show; job 3 belongs to user 2 so CSC
--- filtering actually excludes something (CSP's unfiltered list still shows all 4).
--- job 1: train, currently running (started now, 180s duration)
+-- theirs so /jobs?user_id=1 has something to show; jobs 3/7 belong to other users so
+-- CSC filtering actually excludes something (CSP's unfiltered list shows everything).
+--
+-- Jobs 1-4 predate node.purpose / resource_tier and run on cluster 1/2's nodes
+-- (srv-01/02, node_id 1/2) - left exactly as they were, dataset_id/selected_tier_id
+-- unset. Jobs 5-7 are new: they live on the actual live cluster (khu-suwon-01, id 3)
+-- and use its purpose-tagged nodes + seeded resource_tier rows correctly, so the
+-- scheduler timeline has real train/infer assignment history to show instead of an
+-- empty pool with no bars.
+-- job 1: train, currently running (started now)
 INSERT INTO job (model_id, user_id, type, status, batch, priority_pref, submitted_at, started_at, finished_at) VALUES
   (1, 1, 'train', 'running', 128, 'time', now(), now(), NULL);
 
@@ -437,10 +444,27 @@ INSERT INTO job (model_id, user_id, type, status, batch, priority_pref, submitte
 INSERT INTO job (model_id, user_id, type, status, batch, priority_pref, submitted_at, started_at, finished_at) VALUES
   (1, 1, 'train', 'done', 64, 'time', now() - interval '12 minutes', now() - interval '11 minutes', now() - interval '1 minute');
 
+-- job 5: train, running on the live cluster's GPU pool (node 3 = suwon-srv-01), tier 2
+-- (GPU x1) - user 2, so /jobs?user_id=1 correctly excludes this one too.
+INSERT INTO job (model_id, user_id, type, status, batch, priority_pref, dataset_id, selected_tier_id, submitted_at, started_at, finished_at) VALUES
+  (1, 2, 'train', 'running', 32, 'time', 1, 2, now() - interval '15 seconds', now() - interval '15 seconds', NULL);
+
+-- job 6: infer, already finished on the live cluster's NPU pool (node 30 =
+-- suwon-srv-05), tier 6 (NPU x1) - user 3.
+INSERT INTO job (model_id, user_id, type, status, batch, priority_pref, selected_tier_id, submitted_at, started_at, finished_at) VALUES
+  (1, 3, 'infer', 'done', 16, 'balanced', 6, now() - interval '35 seconds', now() - interval '30 seconds', now() - interval '15 seconds');
+
+-- job 7: infer, queued - asks for tier 7 (PIM x2), which this cluster can never satisfy
+-- (only 1 PIM node exists), so it demonstrates a permanently-queued job on this pool.
+INSERT INTO job (model_id, user_id, type, status, batch, priority_pref, selected_tier_id, submitted_at, started_at, finished_at) VALUES
+  (1, 1, 'infer', 'queued', 8, 'cost', 7, now() - interval '5 seconds', NULL, NULL);
+
 INSERT INTO assignment (job_id, node_id, from_t, to_t) VALUES
   (1, 1, now(), NULL),
   (2, 2, now() - interval '10 minutes', now() - interval '5 minutes'),
-  (4, 1, now() - interval '11 minutes', now() - interval '1 minute');
+  (4, 1, now() - interval '11 minutes', now() - interval '1 minute'),
+  (5, 3, now() - interval '15 seconds', NULL),
+  (6, 30, now() - interval '30 seconds', now() - interval '15 seconds');
 
 INSERT INTO event (type, job_id, node_id, cluster_id, occurred_at) VALUES
   ('ARRIVAL', 1, NULL, NULL, now()),
@@ -449,9 +473,33 @@ INSERT INTO event (type, job_id, node_id, cluster_id, occurred_at) VALUES
   ('START', 2, 2, 2, now() - interval '10 minutes'),
   ('FINISH', 2, 2, 2, now() - interval '5 minutes'),
   ('ARRIVAL', 3, NULL, NULL, now() - interval '1 minute'),
+  ('QUEUE', 3, NULL, NULL, now() - interval '1 minute'),
   ('ARRIVAL', 4, NULL, NULL, now() - interval '12 minutes'),
   ('START', 4, 1, 1, now() - interval '11 minutes'),
-  ('FINISH', 4, 1, 1, now() - interval '1 minute');
+  ('FINISH', 4, 1, 1, now() - interval '1 minute'),
+  ('ARRIVAL', 5, NULL, NULL, now() - interval '15 seconds'),
+  ('START', 5, 3, 3, now() - interval '15 seconds'),
+  ('ARRIVAL', 6, NULL, NULL, now() - interval '30 seconds'),
+  ('START', 6, 30, 3, now() - interval '30 seconds'),
+  ('FINISH', 6, 30, 3, now() - interval '15 seconds'),
+  ('ARRIVAL', 7, NULL, NULL, now() - interval '5 seconds'),
+  ('QUEUE', 7, NULL, NULL, now() - interval '5 seconds');
+
+-- job 5 (train) overview cards - matches METRIC_TEMPLATES["train"]
+INSERT INTO job_metric_profile (job_id, seq, label, unit, start_value, target_value, curve_shape, total_count, featured) VALUES
+  (5, 1, '정확도', '%', 40, 92, 'exp_approach', NULL, true),
+  (5, 2, '에포크', NULL, NULL, NULL, NULL, 100, false);
+
+-- job 6 (infer) overview cards - matches METRIC_TEMPLATES["infer"]
+INSERT INTO job_metric_profile (job_id, seq, label, unit, start_value, target_value, curve_shape, total_count, featured) VALUES
+  (6, 1, '처리량', 'req/s', 350, 420, 'exp_approach', NULL, true),
+  (6, 2, '응답지연 p50', 'ms', NULL, 12, NULL, NULL, false),
+  (6, 3, '응답지연 p99', 'ms', NULL, 38, NULL, NULL, false),
+  (6, 4, '누적 요청 수', NULL, NULL, NULL, NULL, 12000, false),
+  (6, 5, 'KV 캐시 적중률', '%', 45, 88, 'exp_approach', NULL, false),
+  (6, 6, '요청당 전력', 'J', NULL, 0.42, NULL, NULL, false),
+  (6, 7, 'Prefill 비율', '%', NULL, 35, NULL, NULL, false),
+  (6, 8, 'Decode 비율', '%', NULL, 65, NULL, NULL, false);
 
 -- job 1 (train) overview cards
 INSERT INTO job_metric_profile (job_id, seq, label, unit, start_value, target_value, curve_shape, total_count, featured) VALUES

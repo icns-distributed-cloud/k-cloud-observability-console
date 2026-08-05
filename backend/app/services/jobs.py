@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 from app import clock, models, schemas
 from app.database import get_db
 
-DURATION_SEC = {"train": 15, "infer": 15}
+DURATION_SEC = {"train": 40, "infer": 15}
 
 # one metric-card template set per job.type, copied verbatim into job_metric_profile on submission
 METRIC_TEMPLATES: dict[str, list[dict]] = {
