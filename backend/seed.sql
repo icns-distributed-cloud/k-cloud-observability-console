@@ -399,8 +399,23 @@ INSERT INTO node_alert (node_id, severity, message) VALUES
   (15, 'sla', 'p99 지연 55ms (목표 50ms 초과)');
 
 -- ---------- model ----------
+-- Everything past BERT-base only exists so demo filler jobs (services/jobs.py
+-- _maintain_filler_jobs) pick a random model_id and don't all render as identical
+-- "BERT-base" bars in the scheduler timeline - they have no model_layer rows since
+-- nothing in the demo drills into their layer analysis.
 INSERT INTO model (name, type) VALUES
-  ('BERT-base', 'nlp');
+  ('BERT-base', 'nlp'),
+  ('GPT-2', 'nlp'),
+  ('RoBERTa-large', 'nlp'),
+  ('T5-base', 'nlp'),
+  ('LLaMA-7B', 'nlp'),
+  ('ResNet-50', 'cv'),
+  ('ViT-Base', 'cv'),
+  ('YOLOv8', 'cv'),
+  ('EfficientNet-B4', 'cv'),
+  ('Stable-Diffusion-v2', 'cv'),
+  ('Whisper-base', 'audio'),
+  ('CLIP-ViT', 'multimodal');
 
 INSERT INTO model_layer (model_id, op_name, shape, gflops, mem_mb, characteristic) VALUES
   (1, 'Token Embedding', '512x768', 2.1, 3.1, 'memory_bound'),
@@ -416,10 +431,14 @@ INSERT INTO dataset (name, model_id) VALUES
 
 -- csc-user-01 is the "logged in" user the CSC portal fixes on (no real auth); the
 -- others exist so /jobs?user_id= filtering has something to actually filter out.
+-- csc-demo-filler is looked up by name (services/jobs.py FILLER_USER_NAME) - it owns
+-- the auto-generated jobs that keep the scheduler timeline visibly busy without
+-- anyone needing to re-seed between demo runs. See _maintain_filler_jobs.
 INSERT INTO "user" (name) VALUES
   ('csc-user-01'),
   ('csc-user-02'),
-  ('csc-user-03');
+  ('csc-user-03'),
+  ('csc-demo-filler');
 
 -- ---------- resource tiers ----------
 -- attached to cluster 3 (khu-suwon-01), the only is_live=true cluster.
