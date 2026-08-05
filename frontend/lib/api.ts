@@ -1,11 +1,9 @@
 import type {
   AssignmentItem,
   ClusterDetail,
-  DistributedLinkItem,
   HyperparamAdjustmentItem,
   JobDetail,
   JobKqvBenchmarkResponse,
-  JobNegotiationResponse,
   JobSummary,
   MetricProfilePoint,
   ModelLayersResponse,
@@ -17,6 +15,7 @@ import type {
   ModelItem,
   DatasetItem,
   ResourceTierItem,
+  DistributedLinkItem,
 } from '@/app/types'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
@@ -91,10 +90,6 @@ export function fetchReallocations(jobId: number) {
   return get<ReallocationItem[]>(`/jobs/${jobId}/reallocations`)
 }
 
-export function fetchNegotiations(jobId: number) {
-  return get<JobNegotiationResponse>(`/jobs/${jobId}/negotiations`)
-}
-
 export function fetchModelLayers(modelId: number) {
   return get<ModelLayersResponse>(`/models/${modelId}/layers`)
 }
@@ -103,12 +98,12 @@ export function fetchProviders() {
   return get<ProviderTree[]>('/providers')
 }
 
-export function fetchDistributedLinks() {
-  return get<DistributedLinkItem[]>('/distributed-links')
-}
-
 export function submitTrainJob(body: TrainJobRequest) {
   return post<JobSummary>('/jobs/train', body)
+}
+
+export function fetchDistributedLinks() {
+  return get<DistributedLinkItem[]>('/distributed-links')
 }
 
 export function submitInferJob(body: InferJobRequest) {

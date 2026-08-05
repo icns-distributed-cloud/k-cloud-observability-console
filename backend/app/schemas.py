@@ -146,6 +146,7 @@ class InferJobRequest(BaseModel):
 # ---------- GET /api/v1/jobs ----------
 class TierRequirementItem(BaseModel):
     kind: str
+    model_name: Optional[str]
     node_count: int
 
 
