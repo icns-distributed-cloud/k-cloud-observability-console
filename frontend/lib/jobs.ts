@@ -1,10 +1,9 @@
-import type { AssignmentItem, JobSummary, JobType } from '@/app/types'
+import type { AssignmentItem, JobSummary, JobType, SelectedTierSummary } from '@/app/types'
 
 /** 작업 타입별 색상 */
 export const JOB_COLORS: Record<JobType, string> = {
   train: 'var(--job-train)',
   infer: 'var(--job-infer)',
-  distributed: 'var(--job-distributed)',
 }
 
 /** 작업 상태 라벨 */
@@ -33,15 +32,6 @@ export function mapNodeJobs(
   return result
 }
 
-export interface JobResources {
-  /** 이 작업이 쓴(쓰고 있는) 노드 이름 */
-  nodes: string[]
-  /** 그 노드들의 가속기 구성. 예: "GPU×2 + NPU×1" */
-  mix: string
-  /** 누적 비용(USD). 단가 0인 클러스터만 쓴 작업은 0 */
-  cost: number
-}
-
 /** 구성 표기 순서 (그 외 종류는 뒤로) */
 const KIND_ORDER = ['GPU', 'NPU', 'PIM']
 const kindRank = (k: string) => {
@@ -49,55 +39,29 @@ const kindRank = (k: string) => {
   return i === -1 ? KIND_ORDER.length : i
 }
 
-interface NodeInfo {
-  id: number
-  name: string
-  cluster_id: number
-  accelerators: { kind: string; count: number }[]
+/**
+ * Tier 요구 구성을 "GPU×2 + NPU×1" 형태로 표기한다.
+ * 목록 응답의 selected_tier에 이미 들어 있어 노드를 따로 조회할 필요가 없다.
+ */
+export function tierMix(tier: SelectedTierSummary | null): string {
+  if (!tier || tier.requirements.length === 0) return ''
+  return [...tier.requirements]
+    .sort((a, b) => kindRank(a.kind) - kindRank(b.kind))
+    .map((r) => `${r.kind}×${r.node_count}`)
+    .join(' + ')
 }
 
 /**
- * 작업별 배정 노드 · 가속기 구성 · 누적 비용을 만든다. (mapNodeJobs의 반대 방향)
- * 끝난 할당(to_t != null)도 포함한다 — 완료된 작업도 어디서 얼마에 돌았는지 보여야 한다.
- * 비용 = Σ(노드 점유 시간 × 그 노드가 속한 클러스터의 시간당 단가).
- * 진행 중 작업은 nowMs까지로 계산하므로 화면 틱마다 다시 부르면 값이 흐른다.
+ * 누적 비용 = 경과 시간 × Tier 시간당 단가.
+ * 예전에는 노드별 점유시간 × 클러스터 단가를 합산했지만, 이제 과금 단위가
+ * 작업이 선택한 Tier라 단가 하나로 끝난다.
+ * 진행 중 작업은 nowMs까지로 계산하므로 매 틱 다시 부르면 값이 흐른다.
  */
-export function jobResources(
-  assignments: AssignmentItem[],
-  nodes: NodeInfo[],
-  costPerHourByCluster: Record<number, number>,
-  nowMs: number
-): Record<number, JobResources> {
-  const nodeById = new Map(nodes.map((n) => [n.id, n]))
-  const result: Record<number, JobResources> = {}
-  const kinds: Record<number, Record<string, number>> = {}
-  const seen = new Set<string>()         // `job:node` — 노드는 한 번만 센다
-
-  for (const a of assignments) {
-    const node = nodeById.get(a.node_id)
-    if (!node) continue                  // 조회 실패한 노드
-
-    const r = (result[a.job_id] ??= { nodes: [], mix: '', cost: 0 })
-    const end = a.to_t === null ? nowMs : new Date(a.to_t).getTime()
-    const hours = Math.max(0, end - new Date(a.from_t).getTime()) / 3_600_000
-    r.cost += hours * (costPerHourByCluster[node.cluster_id] ?? 0)
-
-    const key = `${a.job_id}:${a.node_id}`
-    if (seen.has(key)) continue
-    seen.add(key)
-    r.nodes.push(node.name)
-    const k = (kinds[a.job_id] ??= {})
-    for (const acc of node.accelerators) k[acc.kind] = (k[acc.kind] ?? 0) + acc.count
-  }
-
-  for (const [jobId, k] of Object.entries(kinds)) {
-    result[Number(jobId)].mix = Object.keys(k)
-      .sort((a, b) => kindRank(a) - kindRank(b))
-      .map((kind) => `${kind}×${k[kind]}`)
-      .join(' + ')
-  }
-
-  return result
+export function jobCost(job: JobSummary, nowMs: number): number {
+  if (!job.selected_tier || job.started_at === null) return 0
+  const end = job.finished_at === null ? nowMs : new Date(job.finished_at).getTime()
+  const hours = Math.max(0, end - new Date(job.started_at).getTime()) / 3_600_000
+  return hours * Number(job.selected_tier.cost_per_hour)
 }
 
 /** 우선순위 선호 라벨 */

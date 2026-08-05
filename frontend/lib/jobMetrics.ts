@@ -7,7 +7,6 @@ import type { JobMetricProfileItem, JobSummary, JobType } from '@/app/types'
 export const DURATION_SEC: Record<JobType, number> = {
     train: 40,
     infer: 15,
-    distributed: 300,
 }
 
 /**
