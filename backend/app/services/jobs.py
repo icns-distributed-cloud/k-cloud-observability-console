@@ -1,3 +1,4 @@
+import random
 from datetime import datetime, timedelta
 from decimal import Decimal
 
@@ -9,6 +10,17 @@ from app import clock, models, schemas
 from app.database import get_db
 
 DURATION_SEC = {"train": 40, "infer": 15}
+
+# Demo-only: keeps the scheduler timeline visibly busy at an unattended booth without
+# a human re-seeding between runs. Piggybacks on the sweep that already runs on every
+# job-touching request - no separate worker/cron.
+# tier 2 (train, A100 x1) is reserved for whoever is actually running the live demo -
+# fillers must never touch it or its node pool, so tier 4 (train, A100 x3 - same pool)
+# is excluded too. tier 8 (infer, PIM x2) is excluded because only 1 PIM node exists,
+# so it can never be admitted and would just pile up in the queue forever.
+FILLER_USER_NAME = "csc-demo-filler"
+FILLER_EXCLUDED_TIER_IDS = {2, 4, 8}
+FILLER_TARGET_PER_TYPE = 3
 
 # one metric-card template set per job.type, copied verbatim into job_metric_profile on submission
 METRIC_TEMPLATES: dict[str, list[dict]] = {
@@ -127,7 +139,12 @@ def _to_selected_tier(tier: models.ResourceTier | None) -> schemas.SelectedTierS
         tier_no=tier.tier_no,
         cost_per_hour=tier.cost_per_hour,
         requirements=[
-            schemas.TierRequirementItem(kind=r.kind, node_count=r.node_count) for r in tier.requirements
+            schemas.TierRequirementItem(
+                kind=r.kind,
+                model_name=r.accelerator_model.name if r.accelerator_model is not None else None,
+                node_count=r.node_count,
+            )
+            for r in tier.requirements
         ],
     )
 
@@ -181,38 +198,50 @@ def _occupied_node_ids(live_cluster: models.Cluster, now: datetime) -> set[int]:
     }
 
 
+def _node_matches_requirement(node: models.Node, kind: str, accelerator_model_id: int | None) -> bool:
+    return any(
+        a.kind == kind and (accelerator_model_id is None or a.accelerator_model_id == accelerator_model_id)
+        for a in node.accelerators
+    )
+
+
+def _free_nodes_for_requirement(
+    live_cluster: models.Cluster,
+    job_type: str,
+    occupied_node_ids: set[int],
+    excluded_node_ids: set[int],
+    kind: str,
+    accelerator_model_id: int | None,
+) -> list[models.Node]:
+    return [
+        node
+        for node in live_cluster.nodes
+        if node.id not in occupied_node_ids
+        and node.id not in excluded_node_ids
+        and node.purpose == job_type
+        and _node_matches_requirement(node, kind, accelerator_model_id)
+    ]
+
+
 def _pick_free_nodes_for_tier(
     live_cluster: models.Cluster, tier: models.ResourceTier, occupied_node_ids: set[int]
 ) -> list[models.Node] | None:
-    free_by_kind: dict[str, list[models.Node]] = {}
-    for node in live_cluster.nodes:
-        if node.id in occupied_node_ids or node.purpose != tier.job_type:
-            continue
-        for kind in {a.kind for a in node.accelerators}:
-            free_by_kind.setdefault(kind, []).append(node)
-
     picked: list[models.Node] = []
     picked_ids: set[int] = set()
     for req in tier.requirements:
-        candidates = [n for n in free_by_kind.get(req.kind, []) if n.id not in picked_ids]
+        candidates = _free_nodes_for_requirement(
+            live_cluster, tier.job_type, occupied_node_ids, picked_ids, req.kind, req.accelerator_model_id
+        )
         if len(candidates) < req.node_count:
             return None
+        # shuffled so which nodes get picked varies run to run instead of always the
+        # same first-N-by-id - purely cosmetic, doesn't change whether the tier can
+        # be satisfied (still gated by len(candidates) >= req.node_count above)
+        random.shuffle(candidates)
         for node in candidates[: req.node_count]:
             picked.append(node)
             picked_ids.add(node.id)
     return picked
-
-
-def _free_node_counts_by_kind(
-    live_cluster: models.Cluster, job_type: str, occupied_node_ids: set[int]
-) -> dict[str, int]:
-    counts: dict[str, int] = {}
-    for node in live_cluster.nodes:
-        if node.id in occupied_node_ids or node.purpose != job_type:
-            continue
-        for kind in {a.kind for a in node.accelerators}:
-            counts[kind] = counts.get(kind, 0) + 1
-    return counts
 
 
 def _sort_tiers_by_priority(
@@ -238,11 +267,10 @@ def list_resource_tiers(
         return []
 
     occupied = _occupied_node_ids(live_cluster, clock.now())
-    free_counts = _free_node_counts_by_kind(live_cluster, job_type, occupied)
 
     tiers = (
         db.query(models.ResourceTier)
-        .options(selectinload(models.ResourceTier.requirements))
+        .options(selectinload(models.ResourceTier.requirements).selectinload(models.ResourceTierRequirement.accelerator_model))
         .filter(
             models.ResourceTier.cluster_id == live_cluster.id,
             models.ResourceTier.job_type == job_type,
@@ -256,9 +284,22 @@ def list_resource_tiers(
             tier_no=t.tier_no,
             cost_per_hour=t.cost_per_hour,
             requirements=[
-                schemas.TierRequirementItem(kind=r.kind, node_count=r.node_count) for r in t.requirements
+                schemas.TierRequirementItem(
+                    kind=r.kind,
+                    model_name=r.accelerator_model.name if r.accelerator_model is not None else None,
+                    node_count=r.node_count,
+                )
+                for r in t.requirements
             ],
-            available=all(free_counts.get(r.kind, 0) >= r.node_count for r in t.requirements),
+            available=all(
+                len(
+                    _free_nodes_for_requirement(
+                        live_cluster, job_type, occupied, set(), r.kind, r.accelerator_model_id
+                    )
+                )
+                >= r.node_count
+                for r in t.requirements
+            ),
         )
         for t in tiers
     ]
@@ -302,8 +343,59 @@ def _admit(
         )
 
 
+def _maintain_filler_jobs(db: Session, now: datetime) -> None:
+    filler_user = db.query(models.User).filter(models.User.name == FILLER_USER_NAME).first()
+    if filler_user is None:
+        return  # seed hasn't created the demo-filler user - feature quietly does nothing
+
+    model_ids = [m.id for m in db.query(models.Model.id).all()]
+    if not model_ids:
+        return
+
+    tiers = (
+        db.query(models.ResourceTier)
+        .filter(~models.ResourceTier.id.in_(FILLER_EXCLUDED_TIER_IDS))
+        .all()
+    )
+    tiers_by_type: dict[str, list[models.ResourceTier]] = {}
+    for tier in tiers:
+        tiers_by_type.setdefault(tier.job_type, []).append(tier)
+
+    for job_type, type_tiers in tiers_by_type.items():
+        if not type_tiers:
+            continue
+        active_count = (
+            db.query(models.Job)
+            .filter(
+                models.Job.user_id == filler_user.id,
+                models.Job.type == job_type,
+                models.Job.status.in_(["running", "queued"]),
+            )
+            .count()
+        )
+        # at most one per sweep per type, even if further below target - staggers
+        # starts across polls instead of bursting several nodes on at once
+        if active_count < FILLER_TARGET_PER_TYPE:
+            tier = random.choice(type_tiers)
+            job = models.Job(
+                model_id=random.choice(model_ids),
+                user_id=filler_user.id,
+                type=job_type,
+                status="queued",
+                batch=16,
+                priority_pref="time",
+                submitted_at=now,
+                selected_tier_id=tier.id,
+            )
+            db.add(job)
+            db.flush()
+            _seed_metric_profiles(db, job)
+            _log_event(db, type="ARRIVAL", now=now, job_id=job.id)
+
+
 def sweep_and_backfill(db: Session) -> None:
     now = clock.now()
+    _maintain_filler_jobs(db, now)
 
     running_jobs = (
         db.query(models.Job)
@@ -338,7 +430,7 @@ def sweep_and_backfill(db: Session) -> None:
         queued_jobs = (
             db.query(models.Job)
             .filter(models.Job.status == "queued")
-            .options(selectinload(models.Job.selected_tier).selectinload(models.ResourceTier.requirements))
+            .options(selectinload(models.Job.selected_tier).selectinload(models.ResourceTier.requirements).selectinload(models.ResourceTierRequirement.accelerator_model))
             .order_by(models.Job.submitted_at)
             .all()
         )
@@ -364,13 +456,20 @@ def list_jobs(db: Session, status: str | None = None, user_id: int | None = None
     query = db.query(models.Job).options(
         selectinload(models.Job.model),
         selectinload(models.Job.dataset),
-        selectinload(models.Job.selected_tier).selectinload(models.ResourceTier.requirements),
+        selectinload(models.Job.selected_tier).selectinload(models.ResourceTier.requirements).selectinload(models.ResourceTierRequirement.accelerator_model),
         selectinload(models.Job.assignments).selectinload(models.Assignment.node).selectinload(models.Node.cluster),
     )
     if status is not None:
         query = query.filter(models.Job.status == status)
     if user_id is not None:
         query = query.filter(models.Job.user_id == user_id)
+    else:
+        # no explicit user filter means "show everything" (CSP's job list) - demo
+        # filler jobs are noise there, not something a real viewer asked to see.
+        # An explicit ?user_id=<filler id> still works, this only affects the default.
+        filler_user = db.query(models.User).filter(models.User.name == FILLER_USER_NAME).first()
+        if filler_user is not None:
+            query = query.filter(models.Job.user_id != filler_user.id)
     return [_to_job_summary(job) for job in query.all()]
 
 
@@ -383,7 +482,7 @@ def get_job_detail(db: Session, job_id: int) -> schemas.JobDetail | None:
             selectinload(models.Job.metric_profiles),
             selectinload(models.Job.cache_profile),
             selectinload(models.Job.cache_tiers),
-            selectinload(models.Job.selected_tier).selectinload(models.ResourceTier.requirements),
+            selectinload(models.Job.selected_tier).selectinload(models.ResourceTier.requirements).selectinload(models.ResourceTierRequirement.accelerator_model),
             selectinload(models.Job.assignments)
             .selectinload(models.Assignment.node)
             .selectinload(models.Node.cluster),
@@ -558,7 +657,7 @@ def submit_job(
 ) -> schemas.JobSummary:
     tier = (
         db.query(models.ResourceTier)
-        .options(selectinload(models.ResourceTier.requirements))
+        .options(selectinload(models.ResourceTier.requirements).selectinload(models.ResourceTierRequirement.accelerator_model))
         .filter(models.ResourceTier.id == tier_id)
         .first()
     )

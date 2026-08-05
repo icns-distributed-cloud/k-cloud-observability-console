@@ -20,14 +20,14 @@ def _metric_value(profiles: list, metric_type: str) -> float:
 
 
 def _group_accelerators(accelerators: list) -> list[schemas.AcceleratorGroup]:
-    groups: dict[tuple[int, str, str], list] = {}
+    groups: dict[tuple[int, str, int], list] = {}
     for accel in accelerators:
-        groups.setdefault((accel.node_id, accel.kind, accel.model_name), []).append(accel)
+        groups.setdefault((accel.node_id, accel.kind, accel.accelerator_model_id), []).append(accel)
     return [
         schemas.AcceleratorGroup(
             node_id=accels[0].node_id,
             kind=accels[0].kind,
-            model_name=accels[0].model_name,
+            model_name=accels[0].accelerator_model.name,
             tflops=accels[0].tflops,
             memory_gb=accels[0].memory_gb,
             memory_type=accels[0].memory_type,
@@ -136,7 +136,9 @@ def get_cluster_detail(db: Session, cluster_id: int) -> schemas.ClusterDetail | 
         db.query(models.Cluster)
         .options(
             selectinload(models.Cluster.metric_profiles),
-            selectinload(models.Cluster.nodes).selectinload(models.Node.accelerators),
+            selectinload(models.Cluster.nodes)
+            .selectinload(models.Node.accelerators)
+            .selectinload(models.Accelerator.accelerator_model),
             selectinload(models.Cluster.nodes).selectinload(models.Node.metric_profiles),
             selectinload(models.Cluster.nodes).selectinload(models.Node.assignments),
             selectinload(models.Cluster.nodes).selectinload(models.Node.alerts),
@@ -221,7 +223,7 @@ def get_node_detail(db: Session, node_id: int) -> schemas.NodeDetail | None:
     node = (
         db.query(models.Node)
         .options(
-            selectinload(models.Node.accelerators),
+            selectinload(models.Node.accelerators).selectinload(models.Accelerator.accelerator_model),
             selectinload(models.Node.metric_profiles),
             selectinload(models.Node.alerts),
         )
@@ -245,7 +247,10 @@ def get_node_detail(db: Session, node_id: int) -> schemas.NodeDetail | None:
 def get_accelerator_detail(db: Session, accelerator_id: int) -> schemas.AcceleratorDetail | None:
     accelerator = (
         db.query(models.Accelerator)
-        .options(selectinload(models.Accelerator.metric_profiles))
+        .options(
+            selectinload(models.Accelerator.metric_profiles),
+            selectinload(models.Accelerator.accelerator_model),
+        )
         .filter(models.Accelerator.id == accelerator_id)
         .first()
     )
@@ -256,7 +261,7 @@ def get_accelerator_detail(db: Session, accelerator_id: int) -> schemas.Accelera
         id=accelerator.id,
         node_id=accelerator.node_id,
         kind=accelerator.kind,
-        model_name=accelerator.model_name,
+        model_name=accelerator.accelerator_model.name,
         tflops=accelerator.tflops,
         memory_gb=accelerator.memory_gb,
         memory_type=accelerator.memory_type,

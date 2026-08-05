@@ -65,19 +65,30 @@ class Node(Base):
     alerts: Mapped[list["NodeAlert"]] = relationship(back_populates="node")
 
 
+class AcceleratorModel(Base):
+    __tablename__ = "accelerator_model"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str]
+
+    accelerators: Mapped[list["Accelerator"]] = relationship(back_populates="accelerator_model")
+    requirements: Mapped[list["ResourceTierRequirement"]] = relationship(back_populates="accelerator_model")
+
+
 class Accelerator(Base):
     __tablename__ = "accelerator"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     node_id: Mapped[int] = mapped_column(ForeignKey("node.id"))
     kind: Mapped[str]
-    model_name: Mapped[str]
+    accelerator_model_id: Mapped[int] = mapped_column(ForeignKey("accelerator_model.id"))
     tflops: Mapped[Decimal]
     memory_gb: Mapped[Decimal]
     memory_type: Mapped[Optional[str]]
     tdp_w: Mapped[int]
 
     node: Mapped["Node"] = relationship(back_populates="accelerators")
+    accelerator_model: Mapped["AcceleratorModel"] = relationship(back_populates="accelerators")
     metric_profiles: Mapped[list["AcceleratorMetricProfile"]] = relationship(back_populates="accelerator")
 
 
@@ -189,9 +200,11 @@ class ResourceTierRequirement(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     tier_id: Mapped[int] = mapped_column(ForeignKey("resource_tier.id"))
     kind: Mapped[str]
+    accelerator_model_id: Mapped[Optional[int]] = mapped_column(ForeignKey("accelerator_model.id"))
     node_count: Mapped[int]
 
     tier: Mapped["ResourceTier"] = relationship(back_populates="requirements")
+    accelerator_model: Mapped[Optional["AcceleratorModel"]] = relationship(back_populates="requirements")
 
 
 class User(Base):
