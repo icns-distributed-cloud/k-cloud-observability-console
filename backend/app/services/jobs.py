@@ -1,3 +1,4 @@
+import random
 from datetime import datetime, timedelta
 from decimal import Decimal
 
@@ -9,6 +10,17 @@ from app import clock, models, schemas
 from app.database import get_db
 
 DURATION_SEC = {"train": 40, "infer": 15}
+
+# Demo-only: keeps the scheduler timeline visibly busy at an unattended booth without
+# a human re-seeding between runs. Piggybacks on the sweep that already runs on every
+# job-touching request - no separate worker/cron.
+# tier 2 (train, A100 x1) is reserved for whoever is actually running the live demo -
+# fillers must never touch it or its node pool, so tier 4 (train, A100 x3 - same pool)
+# is excluded too. tier 8 (infer, PIM x2) is excluded because only 1 PIM node exists,
+# so it can never be admitted and would just pile up in the queue forever.
+FILLER_USER_NAME = "csc-demo-filler"
+FILLER_EXCLUDED_TIER_IDS = {2, 4, 8}
+FILLER_TARGET_PER_TYPE = 3
 
 # one metric-card template set per job.type, copied verbatim into job_metric_profile on submission
 METRIC_TEMPLATES: dict[str, list[dict]] = {
@@ -222,6 +234,10 @@ def _pick_free_nodes_for_tier(
         )
         if len(candidates) < req.node_count:
             return None
+        # shuffled so which nodes get picked varies run to run instead of always the
+        # same first-N-by-id - purely cosmetic, doesn't change whether the tier can
+        # be satisfied (still gated by len(candidates) >= req.node_count above)
+        random.shuffle(candidates)
         for node in candidates[: req.node_count]:
             picked.append(node)
             picked_ids.add(node.id)
@@ -327,8 +343,59 @@ def _admit(
         )
 
 
+def _maintain_filler_jobs(db: Session, now: datetime) -> None:
+    filler_user = db.query(models.User).filter(models.User.name == FILLER_USER_NAME).first()
+    if filler_user is None:
+        return  # seed hasn't created the demo-filler user - feature quietly does nothing
+
+    model_ids = [m.id for m in db.query(models.Model.id).all()]
+    if not model_ids:
+        return
+
+    tiers = (
+        db.query(models.ResourceTier)
+        .filter(~models.ResourceTier.id.in_(FILLER_EXCLUDED_TIER_IDS))
+        .all()
+    )
+    tiers_by_type: dict[str, list[models.ResourceTier]] = {}
+    for tier in tiers:
+        tiers_by_type.setdefault(tier.job_type, []).append(tier)
+
+    for job_type, type_tiers in tiers_by_type.items():
+        if not type_tiers:
+            continue
+        active_count = (
+            db.query(models.Job)
+            .filter(
+                models.Job.user_id == filler_user.id,
+                models.Job.type == job_type,
+                models.Job.status.in_(["running", "queued"]),
+            )
+            .count()
+        )
+        # at most one per sweep per type, even if further below target - staggers
+        # starts across polls instead of bursting several nodes on at once
+        if active_count < FILLER_TARGET_PER_TYPE:
+            tier = random.choice(type_tiers)
+            job = models.Job(
+                model_id=random.choice(model_ids),
+                user_id=filler_user.id,
+                type=job_type,
+                status="queued",
+                batch=16,
+                priority_pref="time",
+                submitted_at=now,
+                selected_tier_id=tier.id,
+            )
+            db.add(job)
+            db.flush()
+            _seed_metric_profiles(db, job)
+            _log_event(db, type="ARRIVAL", now=now, job_id=job.id)
+
+
 def sweep_and_backfill(db: Session) -> None:
     now = clock.now()
+    _maintain_filler_jobs(db, now)
 
     running_jobs = (
         db.query(models.Job)
@@ -396,6 +463,13 @@ def list_jobs(db: Session, status: str | None = None, user_id: int | None = None
         query = query.filter(models.Job.status == status)
     if user_id is not None:
         query = query.filter(models.Job.user_id == user_id)
+    else:
+        # no explicit user filter means "show everything" (CSP's job list) - demo
+        # filler jobs are noise there, not something a real viewer asked to see.
+        # An explicit ?user_id=<filler id> still works, this only affects the default.
+        filler_user = db.query(models.User).filter(models.User.name == FILLER_USER_NAME).first()
+        if filler_user is not None:
+            query = query.filter(models.Job.user_id != filler_user.id)
     return [_to_job_summary(job) for job in query.all()]
 
 
