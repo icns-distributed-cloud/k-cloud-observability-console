@@ -13,7 +13,6 @@ import type { AssignmentItem, JobSummary, NodeDetail } from "@/app/types";
 const TYPE_LABELS: Record<string, string> = {
     train: "학습",
     infer: "추론",
-    distributed: "분산학습",
 };
 
 const STATUS_COLORS: Record<string, string> = {

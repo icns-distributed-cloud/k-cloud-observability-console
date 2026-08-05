@@ -4,7 +4,6 @@ import type { AssignmentItem, JobSummary, JobType } from '@/app/types'
 export const JOB_COLORS: Record<JobType, string> = {
   train: 'var(--job-train)',
   infer: 'var(--job-infer)',
-  distributed: 'var(--job-distributed)',
 }
 
 /** 작업 상태 라벨 */

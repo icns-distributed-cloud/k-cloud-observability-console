@@ -12,7 +12,6 @@ import {
     fetchJobDetail,
     fetchKqvBenchmark,
     fetchModelLayers,
-    fetchNegotiations,
     fetchReallocations,
 } from "@/lib/api";
 import { JOB_COLORS, JOB_STATUS_LABELS, PRIORITY_LABELS } from "@/lib/jobs";
@@ -28,7 +27,6 @@ import type {
     HyperparamAdjustmentItem,
     JobDetail,
     JobKqvBenchmarkResponse,
-    JobNegotiationResponse,
     ModelLayersResponse,
     ReallocationItem,
 } from "@/app/types";
@@ -46,7 +44,6 @@ const SECTION_LABEL: React.CSSProperties = {
 const TYPE_LABELS: Record<string, string> = {
     train: "학습",
     infer: "추론",
-    distributed: "분산학습",
 };
 
 interface Segment {
@@ -69,7 +66,6 @@ export default function JobDetailView({ jobId, breadcrumbPrefix }: JobDetailView
     const [kqv, setKqv] = useState<JobKqvBenchmarkResponse | null>(null);
     const [reallocs, setReallocs] = useState<ReallocationItem[]>([]);
     const [adjustments, setAdjustments] = useState<HyperparamAdjustmentItem[]>([]);
-    const [negotiation, setNegotiation] = useState<JobNegotiationResponse | null>(null);
     const [modelLayers, setModelLayers] = useState<ModelLayersResponse | null>(null);
     const [error, setError] = useState<string | null>(null);
 
@@ -79,14 +75,12 @@ export default function JobDetailView({ jobId, breadcrumbPrefix }: JobDetailView
             fetchKqvBenchmark(jobId).catch(() => null),
             fetchReallocations(jobId).catch(() => []),
             fetchHyperparamAdjustments(jobId).catch(() => []),
-            fetchNegotiations(jobId).catch(() => null),
         ])
-            .then(async ([j, k, r, a, n]) => {
+            .then(async ([j, k, r, a]) => {
                 setJob(j);
                 setKqv(k);
                 setReallocs(r);
                 setAdjustments(a);
-                setNegotiation(n);
                 setModelLayers(await fetchModelLayers(j.model_id).catch(() => null));
             })
             .catch((e) => setError(String(e)));
@@ -105,7 +99,6 @@ export default function JobDetailView({ jobId, breadcrumbPrefix }: JobDetailView
     const tabs = [
         { id: "overview", label: "개요" },
         { id: "optimize", label: "최적화" },
-        ...(job.type === "distributed" ? [{ id: "negotiate", label: "협상" }] : []),
     ];
 
     return (
@@ -324,59 +317,6 @@ export default function JobDetailView({ jobId, breadcrumbPrefix }: JobDetailView
                 </div>
             )}
 
-            {tab === "negotiate" && negotiation && (
-                <div>
-                    <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
-                        <StatCard label="협상 라운드" value={negotiation.rounds} />
-                        <StatCard
-                            label="합의도"
-                            value={Number(negotiation.agreement_pct).toFixed(0)}
-                            unit="%"
-                        />
-                    </div>
-
-                    <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-                        <div style={{ flex: 1, minWidth: 260 }}>
-                            <Card>
-                                <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 10 }}>
-                                    CSC 제안 (요구사항)
-                                </div>
-                                {negotiation.proposed.map((t, i) => (
-                                    <div
-                                        key={i}
-                                        style={{
-                                            padding: "8px 0",
-                                            borderTop: i > 0 ? "1px solid var(--line)" : "none",
-                                            fontSize: 12.5,
-                                        }}
-                                    >
-                                        {t}
-                                    </div>
-                                ))}
-                            </Card>
-                        </div>
-                        <div style={{ flex: 1, minWidth: 260 }}>
-                            <Card>
-                                <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 10 }}>
-                                    CSP 합의 결과
-                                </div>
-                                {negotiation.agreed.map((t, i) => (
-                                    <div
-                                        key={i}
-                                        style={{
-                                            padding: "8px 0",
-                                            borderTop: i > 0 ? "1px solid var(--line)" : "none",
-                                            fontSize: 12.5,
-                                        }}
-                                    >
-                                        {t}
-                                    </div>
-                                ))}
-                            </Card>
-                        </div>
-                    </div>
-                </div>
-            )}
         </main>
     );
 }

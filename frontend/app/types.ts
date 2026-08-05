@@ -3,7 +3,7 @@ export type ProviderKind = 'onprem' | 'cloud'
 export type ClusterStatus = 'active' | 'standby'
 export type AcceleratorKind = 'GPU' | 'NPU' | 'PIM'
 export type AlertSeverity = 'physical' | 'sla'
-export type JobType = 'train' | 'infer' | 'distributed'
+export type JobType = 'train' | 'infer'
 export type JobStatus = 'queued' | 'running' | 'done'
 export type NodePurpose = 'train' | 'infer'
 export type PriorityPref = 'time' | 'cost' | 'balanced'
@@ -16,7 +16,14 @@ export interface ModelItem {
     name: string
     type: string
 }
-
+/** 클러스터 간 연결선. 지도에서 곡선으로 그린다 (cluster_link 테이블).
+ *  작업 타입 distributed와는 무관하다 — 인프라 간 링크다 */
+export interface DistributedLinkItem {
+    id: number
+    cluster_a_id: number
+    cluster_b_id: number
+    active: boolean
+}
 /** 테이블마다 허용값이 다름 (cluster: power/utilization/sla, node: util/cpu/mem/temp, accelerator: util/mem/power) */
 export type MetricType =
     | 'power' | 'utilization' | 'sla'
@@ -64,13 +71,6 @@ export interface ClusterDetail extends Cluster {
     done_count: number
     nodes: NodeSummary[]
     accelerators: AcceleratorGroup[]
-}
-
-export interface DistributedLinkItem {
-    id: number
-    cluster_a_id: number
-    cluster_b_id: number
-    active: boolean
 }
 
 export interface NodeSummary {
@@ -231,13 +231,6 @@ export interface ReallocationItem {
     at_t_offset_sec: number
     downtime_sec: string
     resume_delay_sec: string
-}
-
-export interface JobNegotiationResponse {
-    rounds: number
-    agreement_pct: string
-    proposed: string[]
-    agreed: string[]
 }
 
 export interface TrainJobRequest {
