@@ -24,12 +24,15 @@ export interface TimelineData {
   nowPos: number | null
 }
 
-/** 눈금은 구간 시작 기준 경과가 아니라 실제 벽시계 시각으로 표시 */
-function formatTick(ms: number): string {
+/** 눈금은 구간 시작 기준 경과가 아니라 실제 벽시계 시각으로 표시.
+ *  데모용 작업이 15~40초라 표시 구간이 1분 남짓으로 좁아지는데,
+ *  그때 시:분만 찍으면 눈금이 전부 같아 보이므로 초까지 표시한다. */
+function formatTick(ms: number, withSeconds = false): string {
   return new Date(ms).toLocaleTimeString('ko-KR', {
     hour12: false,
     hour: '2-digit',
     minute: '2-digit',
+    ...(withSeconds && { second: '2-digit' }),
   })
 }
 
@@ -128,10 +131,11 @@ export function buildTimeline(
       .sort((x, y) => x.start - y.start),
   }))
 
-  const tickCount = 6
+const tickCount = 6
+  const withSeconds = toMs - fromMs < 5 * 60 * 1000
   const ticks = Array.from({ length: tickCount }, (_, i) => {
     const pos = i / (tickCount - 1)
-    return { pos, label: formatTick(fromMs + (toMs - fromMs) * pos) }
+    return { pos, label: formatTick(fromMs + (toMs - fromMs) * pos, withSeconds) }
   })
 
   const nowPos = nowMs >= fromMs && nowMs <= toMs ? (nowMs - fromMs) / span : null
