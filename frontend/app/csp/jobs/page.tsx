@@ -49,7 +49,7 @@ export default function JobListPage() {
     const [raw, setRaw] = useState<RawResources | null>(null);
 
     useEffect(() => {
-        fetchJobs(filter === "all" ? undefined : filter)
+        fetchJobs(filter === "all" ? undefined : { status: filter })
             .then(setJobs)
             .catch((e) => setError(String(e)));
     }, [filter]);
@@ -107,7 +107,7 @@ export default function JobListPage() {
         <main style={{ padding: "24px 28px" }}>
             <Breadcrumb
                 segments={[
-                    { label: "지도", onClick: () => router.push("/") },
+                    { label: "지도", onClick: () => router.push("/csp") },
                     { label: "작업 목록" },
                 ]}
             />
@@ -121,7 +121,7 @@ export default function JobListPage() {
 
             <div style={{ marginBottom: 16 }}>
                 <button
-                    onClick={() => router.push("/jobs/new")}
+                    onClick={() => router.push("/csp/jobs/new")}
                     style={{
                         border: "none",
                         background: "var(--accent)",
@@ -192,7 +192,7 @@ export default function JobListPage() {
                         return (
                             <div
                                 key={j.id}
-                                onClick={() => router.push(`/jobs/${j.id}`)}
+                                onClick={() => router.push(`/csp/jobs/${j.id}`)}
                                 style={{
                                     display: "flex",
                                     alignItems: "center",
@@ -228,7 +228,8 @@ export default function JobListPage() {
                                         {j.model_name}
                                     </div>
                                     <div style={{ fontSize: 12.5, color: "var(--sub)", marginTop: 2 }}>
-                                        {TYPE_LABELS[j.type] ?? j.type} · 배치 {j.batch} · {j.precision}
+                                        {TYPE_LABELS[j.type] ?? j.type} · 배치 {j.batch}
+                                        {j.dataset_name && ` · ${j.dataset_name}`}
                                     </div>
                                 </div>
 

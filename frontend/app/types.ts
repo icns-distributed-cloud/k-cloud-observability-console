@@ -5,6 +5,7 @@ export type AcceleratorKind = 'GPU' | 'NPU' | 'PIM'
 export type AlertSeverity = 'physical' | 'sla'
 export type JobType = 'train' | 'infer' | 'distributed'
 export type JobStatus = 'queued' | 'running' | 'done'
+export type NodePurpose = 'train' | 'infer'
 export type PriorityPref = 'time' | 'cost' | 'balanced'
 export type CurveShape = 'exp_approach' | 'flat'
 export type LayerCharacteristic = 'compute_bound' | 'memory_bound' | 'balanced'
@@ -21,8 +22,6 @@ export type MetricType =
     | 'power' | 'utilization' | 'sla'
     | 'util' | 'cpu' | 'mem' | 'temp'
 
-
-export type Precision = string
 
 // ========== Infra ==========
 
@@ -78,6 +77,7 @@ export interface NodeSummary {
     id: number
     name: string
     cluster_id: number
+    purpose: NodePurpose
     metric_profiles: MetricProfilePoint[]
     alerts: NodeAlertItem[]
 }
@@ -86,6 +86,7 @@ export interface NodeDetail {
     id: number
     name: string
     cluster_id: number
+    purpose: NodePurpose
     accelerators: AcceleratorGroup[]
     metric_profiles: MetricProfilePoint[]
     alerts: NodeAlertItem[]
@@ -136,19 +137,43 @@ export interface MetricProfilePoint {
 
 // ========== Job ==========
 
+export interface TierRequirementItem {
+    kind: AcceleratorKind
+    node_count: number
+}
+
+/** 작업이 선택한 Tier. 목록 응답에 실려 오므로 별도 조회가 필요 없다 */
+export interface SelectedTierSummary {
+    id: number
+    tier_no: number
+    cost_per_hour: string
+    requirements: TierRequirementItem[]
+}
+
+/** 작업에 배정된 노드. node_id만 주던 assignment와 달리 이름까지 실려 온다 */
+export interface AssignedNodeItem {
+    node_id: number
+    node_name: string
+    cluster_id: number
+    cluster_name: string
+}
+
 export interface JobSummary {
     id: number
     model_id: number
     model_name: string
+    user_id: number
     type: JobType
     status: JobStatus
     batch: number
-    precision: Precision
     priority_pref: PriorityPref
-    sla_target: string | null
     submitted_at: string
     started_at: string | null
     finished_at: string | null
+    dataset_id: number | null
+    dataset_name: string | null
+    selected_tier: SelectedTierSummary | null
+    assigned_nodes: AssignedNodeItem[]
 }
 
 export interface JobDetail extends JobSummary {
@@ -218,16 +243,18 @@ export interface JobNegotiationResponse {
 export interface TrainJobRequest {
     model_id: number
     batch: number
-    precision: Precision
     priority_pref: PriorityPref
+    tier_id: number
+    user_id: number
+    dataset_id?: number
 }
 
 export interface InferJobRequest {
     model_id: number
     batch: number
-    precision: Precision
     priority_pref: PriorityPref
-    sla_target: number | string
+    tier_id: number
+    user_id: number
 }
 
 // ========== Model ==========
@@ -251,6 +278,19 @@ export interface ModelLayerEdgeItem {
 export interface ModelLayersResponse {
     layers: ModelLayerItem[]
     edges: ModelLayerEdgeItem[]
+}
+
+export interface DatasetItem {
+    id: number
+    name: string
+    model_id: number | null
+}
+
+// ========== Resource Tier ==========
+
+export interface ResourceTierItem extends SelectedTierSummary {
+    /** 지금 이 구성을 만족하는 유휴 노드가 있는지. 백엔드가 purpose 필터까지 적용해 계산 */
+    available: boolean
 }
 
 // ========== Event ==========
