@@ -463,6 +463,13 @@ def list_jobs(db: Session, status: str | None = None, user_id: int | None = None
         query = query.filter(models.Job.status == status)
     if user_id is not None:
         query = query.filter(models.Job.user_id == user_id)
+    else:
+        # no explicit user filter means "show everything" (CSP's job list) - demo
+        # filler jobs are noise there, not something a real viewer asked to see.
+        # An explicit ?user_id=<filler id> still works, this only affects the default.
+        filler_user = db.query(models.User).filter(models.User.name == FILLER_USER_NAME).first()
+        if filler_user is not None:
+            query = query.filter(models.Job.user_id != filler_user.id)
     return [_to_job_summary(job) for job in query.all()]
 
 
