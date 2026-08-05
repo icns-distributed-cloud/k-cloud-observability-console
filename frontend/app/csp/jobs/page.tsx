@@ -39,9 +39,16 @@ export default function JobListPage() {
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        fetchJobs(filter === "all" ? undefined : { status: filter })
-            .then(setJobs)
-            .catch((e) => setError(String(e)));
+        const load = () =>
+            fetchJobs(filter === "all" ? undefined : { status: filter })
+                .then(setJobs)
+                .catch((e) => setError(String(e)));
+
+        load();
+        // 백엔드에 push가 없으므로 주기적으로 다시 조회한다.
+        // CSC에서 제출한 작업이 새로고침 없이 이 목록에 나타나야 한다.
+        const timer = setInterval(load, 10_000);
+        return () => clearInterval(timer);
     }, [filter]);
 
     if (error) return <main style={{ padding: 24 }}>불러오기 실패: {error}</main>;
