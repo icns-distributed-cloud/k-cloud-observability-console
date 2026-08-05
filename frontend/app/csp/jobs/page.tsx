@@ -3,12 +3,11 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Breadcrumb from "@/components/Breadcrumb";
 import Tabs from "@/components/Tabs";
-import { fetchJobAssignments, fetchJobs, fetchNodeDetail, fetchProviders } from "@/lib/api";
-import { JOB_COLORS, JOB_STATUS_LABELS, jobResources } from "@/lib/jobs";
+import { fetchJobs } from "@/lib/api";
+import { JOB_COLORS, JOB_STATUS_LABELS, jobCost, tierMix } from "@/lib/jobs";
 import { elapsedLabel, jobProgress } from "@/lib/jobMetrics";
-import { flattenRegions } from "@/lib/mapData";
 import { useTime } from "@/lib/TimeContext";
-import type { AssignmentItem, JobSummary, NodeDetail } from "@/app/types";
+import type { JobSummary } from "@/app/types";
 
 const TYPE_LABELS: Record<string, string> = {
     train: "학습",
@@ -30,13 +29,7 @@ const FILTERS = [
 ];
 
 /** 컬럼 폭. 헤더와 행이 같은 값을 쓴다 (PROGRESS만 남은 폭을 차지) */
-const W = { id: 70, model: 205, resource: 132, nodes: 148, elapsed: 86, cost: 72, status: 70 };
-
-interface RawResources {
-    assignments: AssignmentItem[];
-    nodes: NodeDetail[];
-    costPerHourByCluster: Record<number, number>;
-}
+const W = { id: 70, model: 205, resource: 132, nodes: 148, elapsed: 86, cost: 90, status: 70 };
 
 export default function JobListPage() {
     const router = useRouter();
@@ -44,61 +37,12 @@ export default function JobListPage() {
     const [jobs, setJobs] = useState<JobSummary[]>([]);
     const [filter, setFilter] = useState("all");
     const [error, setError] = useState<string | null>(null);
-    /** null이면 아직 로딩 중 (자원 칸만 비워둔다) */
-    const [raw, setRaw] = useState<RawResources | null>(null);
 
     useEffect(() => {
         fetchJobs(filter === "all" ? undefined : { status: filter })
             .then(setJobs)
             .catch((e) => setError(String(e)));
     }, [filter]);
-
-    // 작업별 할당을 직접 조회한 뒤, 쓰인 노드의 이름·가속기와 클러스터 단가를 받아온다.
-    // 할당은 node_id만 주므로 나머지는 노드 상세에서 (중복 제거해서 노드당 1회),
-    // 시간당 단가는 provider 트리 한 번으로 전 클러스터를 받는다.
-    // 실패한 호출은 건너뛰고 나머지로 진행 (작업 목록 자체는 이미 떠 있다).
-    useEffect(() => {
-        if (jobs.length === 0) {
-            setRaw({ assignments: [], nodes: [], costPerHourByCluster: {} });
-            return;
-        }
-        let cancelled = false;
-
-        Promise.all(jobs.map((j) => fetchJobAssignments(j.id).catch(() => [])))
-            .then(async (lists) => {
-                const assignments = lists.flat();
-                const nodeIds = [...new Set(assignments.map((a) => a.node_id))];
-                const [nodes, providers] = await Promise.all([
-                    Promise.all(nodeIds.map((id) => fetchNodeDetail(id).catch(() => null))),
-                    fetchProviders().catch(() => []),
-                ]);
-                if (cancelled) return;
-
-                const costPerHourByCluster: Record<number, number> = {};
-                for (const r of flattenRegions(providers)) {
-                    for (const c of r.clusters) costPerHourByCluster[c.id] = Number(c.cost_per_hour);
-                }
-
-                setRaw({
-                    assignments,
-                    nodes: nodes.filter((n): n is NodeDetail => n !== null),
-                    costPerHourByCluster,
-                });
-            })
-            .catch(() => {
-                if (!cancelled) setRaw({ assignments: [], nodes: [], costPerHourByCluster: {} });
-            });
-
-        return () => {
-            cancelled = true;
-        };
-    }, [jobs]);
-
-    // 진행 중 작업은 비용도 같이 흐르므로 매 틱 다시 계산한다
-    const resources =
-        raw && nowSec !== null
-            ? jobResources(raw.assignments, raw.nodes, raw.costPerHourByCluster, nowSec * 1000)
-            : null;
 
     if (error) return <main style={{ padding: 24 }}>불러오기 실패: {error}</main>;
 
@@ -177,7 +121,7 @@ export default function JobListPage() {
                         <Head w={W.nodes}>NODES</Head>
                         <Head w={W.elapsed}>ELAPSED</Head>
                         <Head w={W.cost} align="right">
-                            COST
+                            COST (credit)
                         </Head>
                         <Head w={W.status} align="center">
                             STATUS
@@ -187,7 +131,8 @@ export default function JobListPage() {
                     {jobs.map((j) => {
                         const color = JOB_COLORS[j.type];
                         const progress = nowSec ? jobProgress(j, nowSec * 1000) : 0;
-                        const res = resources?.[j.id];
+                        const mix = tierMix(j.selected_tier);
+                        const cost = nowSec ? jobCost(j, nowSec * 1000) : 0;
                         return (
                             <div
                                 key={j.id}
@@ -281,7 +226,7 @@ export default function JobListPage() {
                                         fontFamily: "'IBM Plex Mono', monospace",
                                     }}
                                 >
-                                    {res?.mix || (resources === null ? "" : "—")}
+                                    {mix || "—"}
                                 </span>
 
                                 <div
@@ -293,10 +238,10 @@ export default function JobListPage() {
                                         flexWrap: "wrap",
                                     }}
                                 >
-                                    {res?.nodes.length ? (
-                                        res.nodes.map((n) => (
+                                    {j.assigned_nodes.length ? (
+                                        j.assigned_nodes.map((n) => (
                                             <span
-                                                key={n}
+                                                key={n.node_id}
                                                 style={{
                                                     fontSize: 12,
                                                     fontWeight: 600,
@@ -307,12 +252,12 @@ export default function JobListPage() {
                                                     padding: "3px 7px",
                                                 }}
                                             >
-                                                {n}
+                                                {n.node_name}
                                             </span>
                                         ))
                                     ) : (
                                         <span style={{ fontSize: 12.5, color: "var(--sub)" }}>
-                                            {resources === null ? "" : "미배정"}
+                                            미배정
                                         </span>
                                     )}
                                 </div>
@@ -338,8 +283,9 @@ export default function JobListPage() {
                                         fontFamily: "'IBM Plex Mono', monospace",
                                     }}
                                 >
-                                    {/* 무상 클러스터(단가 0)는 인프라 화면과 같이 "—" 로 */}
-                                    {!res || res.cost === 0 ? "—" : `$${res.cost.toFixed(2)}`}
+                                    {/* 온프레미스(단가 0)나 Tier 미지정 작업은 인프라 화면과 같이 "—".
+                                        단위는 헤더에 있으므로 값은 숫자만 */}
+                                    {cost === 0 ? "—" : cost.toFixed(2)}
                                 </span>
 
                                 <span
