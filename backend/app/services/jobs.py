@@ -127,7 +127,8 @@ def _to_selected_tier(tier: models.ResourceTier | None) -> schemas.SelectedTierS
         tier_no=tier.tier_no,
         cost_per_hour=tier.cost_per_hour,
         requirements=[
-            schemas.TierRequirementItem(kind=r.kind, node_count=r.node_count) for r in tier.requirements
+            schemas.TierRequirementItem(kind=r.kind, model_name=r.model_name, node_count=r.node_count)
+            for r in tier.requirements
         ],
     )
 
@@ -181,38 +182,45 @@ def _occupied_node_ids(live_cluster: models.Cluster, now: datetime) -> set[int]:
     }
 
 
+def _node_matches_requirement(node: models.Node, kind: str, model_name: str | None) -> bool:
+    return any(
+        a.kind == kind and (model_name is None or a.model_name == model_name) for a in node.accelerators
+    )
+
+
+def _free_nodes_for_requirement(
+    live_cluster: models.Cluster,
+    job_type: str,
+    occupied_node_ids: set[int],
+    excluded_node_ids: set[int],
+    kind: str,
+    model_name: str | None,
+) -> list[models.Node]:
+    return [
+        node
+        for node in live_cluster.nodes
+        if node.id not in occupied_node_ids
+        and node.id not in excluded_node_ids
+        and node.purpose == job_type
+        and _node_matches_requirement(node, kind, model_name)
+    ]
+
+
 def _pick_free_nodes_for_tier(
     live_cluster: models.Cluster, tier: models.ResourceTier, occupied_node_ids: set[int]
 ) -> list[models.Node] | None:
-    free_by_kind: dict[str, list[models.Node]] = {}
-    for node in live_cluster.nodes:
-        if node.id in occupied_node_ids or node.purpose != tier.job_type:
-            continue
-        for kind in {a.kind for a in node.accelerators}:
-            free_by_kind.setdefault(kind, []).append(node)
-
     picked: list[models.Node] = []
     picked_ids: set[int] = set()
     for req in tier.requirements:
-        candidates = [n for n in free_by_kind.get(req.kind, []) if n.id not in picked_ids]
+        candidates = _free_nodes_for_requirement(
+            live_cluster, tier.job_type, occupied_node_ids, picked_ids, req.kind, req.model_name
+        )
         if len(candidates) < req.node_count:
             return None
         for node in candidates[: req.node_count]:
             picked.append(node)
             picked_ids.add(node.id)
     return picked
-
-
-def _free_node_counts_by_kind(
-    live_cluster: models.Cluster, job_type: str, occupied_node_ids: set[int]
-) -> dict[str, int]:
-    counts: dict[str, int] = {}
-    for node in live_cluster.nodes:
-        if node.id in occupied_node_ids or node.purpose != job_type:
-            continue
-        for kind in {a.kind for a in node.accelerators}:
-            counts[kind] = counts.get(kind, 0) + 1
-    return counts
 
 
 def _sort_tiers_by_priority(
@@ -238,7 +246,6 @@ def list_resource_tiers(
         return []
 
     occupied = _occupied_node_ids(live_cluster, clock.now())
-    free_counts = _free_node_counts_by_kind(live_cluster, job_type, occupied)
 
     tiers = (
         db.query(models.ResourceTier)
@@ -256,9 +263,16 @@ def list_resource_tiers(
             tier_no=t.tier_no,
             cost_per_hour=t.cost_per_hour,
             requirements=[
-                schemas.TierRequirementItem(kind=r.kind, node_count=r.node_count) for r in t.requirements
+                schemas.TierRequirementItem(kind=r.kind, model_name=r.model_name, node_count=r.node_count)
+                for r in t.requirements
             ],
-            available=all(free_counts.get(r.kind, 0) >= r.node_count for r in t.requirements),
+            available=all(
+                len(
+                    _free_nodes_for_requirement(live_cluster, job_type, occupied, set(), r.kind, r.model_name)
+                )
+                >= r.node_count
+                for r in t.requirements
+            ),
         )
         for t in tiers
     ]

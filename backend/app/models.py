@@ -189,6 +189,7 @@ class ResourceTierRequirement(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     tier_id: Mapped[int] = mapped_column(ForeignKey("resource_tier.id"))
     kind: Mapped[str]
+    model_name: Mapped[Optional[str]]
     node_count: Mapped[int]
 
     tier: Mapped["ResourceTier"] = relationship(back_populates="requirements")
