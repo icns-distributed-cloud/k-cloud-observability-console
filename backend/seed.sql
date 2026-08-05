@@ -14,7 +14,7 @@
 SET timezone = 'Asia/Seoul';
 
 TRUNCATE
-  provider, region, cluster, node, accelerator,
+  provider, region, cluster, node, accelerator_model, accelerator,
   cluster_metric_profile, node_metric_profile, accelerator_metric_profile,
   cluster_distributed_link, node_alert,
   model, model_layer, model_layer_edge, dataset,
@@ -128,9 +128,9 @@ INSERT INTO node (cluster_id, name, purpose) VALUES
   (19, 'cac-node-a', 'train');
 
 -- live cluster (khu-suwon-01) node pool, split by purpose. Model diversity added so
--- resource_tier_requirement.model_name has multiple real options to match against:
--- train = A100 x3 (01/02/04), H100 x2 (07/08), A6000 x1 (09), NPU/RNGD x1 (03) = 7 nodes
--- infer = NPU/RNGD x1 (05), PIM/AiM x1 (06), B200 x2 (10/11) = 4 nodes
+-- resource_tier_requirement.accelerator_model_id has multiple real options to match
+-- against: train = A100 x3 (01/02/04), H100 x2 (07/08), A6000 x1 (09), NPU/RNGD x1 (03)
+-- = 7 nodes; infer = NPU/RNGD x1 (05), PIM/AiM x1 (06), B200 x2 (10/11) = 4 nodes
 INSERT INTO node (cluster_id, name, purpose) VALUES
   (3, 'suwon-srv-03', 'train'),
   (3, 'suwon-srv-04', 'train'),
@@ -142,64 +142,76 @@ INSERT INTO node (cluster_id, name, purpose) VALUES
   (3, 'suwon-srv-10', 'infer'),
   (3, 'suwon-srv-11', 'infer');
 
-INSERT INTO accelerator (node_id, kind, model_name, tflops, memory_gb, memory_type, tdp_w) VALUES
-  (1, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
-  (1, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
-  (2, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
-  (3, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
-  (3, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
-  (4, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
-  (5, 'NPU', 'Furiosa RNGD', 256, 48, 'GDDR6', 180),
-  (6, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
-  (7, 'GPU', 'NVIDIA H100', 989, 80, 'HBM3', 700),
-  (7, 'GPU', 'NVIDIA H100', 989, 80, 'HBM3', 700),
-  (8, 'GPU', 'NVIDIA H100', 989, 80, 'HBM3', 700),
-  (9, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
-  (9, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
-  (9, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
-  (9, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
-  (10, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
-  (10, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
-  (10, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
-  (10, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
-  (11, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
-  (11, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
-  (12, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
-  (12, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
-  (13, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
-  (13, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
-  (14, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
-  (15, 'GPU', 'NVIDIA H100', 989, 80, 'HBM3', 700),
-  (15, 'GPU', 'NVIDIA H100', 989, 80, 'HBM3', 700),
-  (15, 'GPU', 'NVIDIA H100', 989, 80, 'HBM3', 700),
-  (15, 'GPU', 'NVIDIA H100', 989, 80, 'HBM3', 700),
-  (16, 'GPU', 'NVIDIA H100', 989, 80, 'HBM3', 700),
-  (16, 'GPU', 'NVIDIA H100', 989, 80, 'HBM3', 700),
-  (17, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
-  (17, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
-  (18, 'PIM', 'SK hynix AiM', 128, 32, 'HBM-PIM', 150);
+-- id 1=NVIDIA A100, 2=NVIDIA H100, 3=Furiosa RNGD, 4=SK hynix AiM, 5=NVIDIA A6000,
+-- 6=NVIDIA B200. accelerator.accelerator_model_id and resource_tier_requirement.
+-- accelerator_model_id both reference this table by id now, not by string, so there's
+-- no risk of the two sides spelling a model differently.
+INSERT INTO accelerator_model (name) VALUES
+  ('NVIDIA A100'),
+  ('NVIDIA H100'),
+  ('Furiosa RNGD'),
+  ('SK hynix AiM'),
+  ('NVIDIA A6000'),
+  ('NVIDIA B200');
 
-INSERT INTO accelerator (node_id, kind, model_name, tflops, memory_gb, memory_type, tdp_w) VALUES
-  (19, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
-  (20, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
-  (21, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
-  (22, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
-  (23, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
-  (24, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
-  (25, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
-  (26, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
-  (27, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400);
+INSERT INTO accelerator (node_id, kind, accelerator_model_id, tflops, memory_gb, memory_type, tdp_w) VALUES
+  (1, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (1, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (2, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (3, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (3, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (4, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (5, 'NPU', 3, 256, 48, 'GDDR6', 180),
+  (6, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (7, 'GPU', 2, 989, 80, 'HBM3', 700),
+  (7, 'GPU', 2, 989, 80, 'HBM3', 700),
+  (8, 'GPU', 2, 989, 80, 'HBM3', 700),
+  (9, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (9, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (9, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (9, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (10, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (10, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (10, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (10, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (11, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (11, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (12, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (12, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (13, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (13, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (14, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (15, 'GPU', 2, 989, 80, 'HBM3', 700),
+  (15, 'GPU', 2, 989, 80, 'HBM3', 700),
+  (15, 'GPU', 2, 989, 80, 'HBM3', 700),
+  (15, 'GPU', 2, 989, 80, 'HBM3', 700),
+  (16, 'GPU', 2, 989, 80, 'HBM3', 700),
+  (16, 'GPU', 2, 989, 80, 'HBM3', 700),
+  (17, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (17, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (18, 'PIM', 4, 128, 32, 'HBM-PIM', 150);
 
-INSERT INTO accelerator (node_id, kind, model_name, tflops, memory_gb, memory_type, tdp_w) VALUES
-  (28, 'NPU', 'Furiosa RNGD', 256, 48, 'GDDR6', 180),
-  (29, 'GPU', 'NVIDIA A100', 312, 80, 'HBM2e', 400),
-  (30, 'NPU', 'Furiosa RNGD', 256, 48, 'GDDR6', 180),
-  (31, 'PIM', 'SK hynix AiM', 128, 32, 'HBM-PIM', 150),
-  (32, 'GPU', 'NVIDIA H100', 989, 80, 'HBM3', 700),
-  (33, 'GPU', 'NVIDIA H100', 989, 80, 'HBM3', 700),
-  (34, 'GPU', 'NVIDIA A6000', 155, 48, 'GDDR6', 300),
-  (35, 'GPU', 'NVIDIA B200', 2250, 192, 'HBM3e', 1000),
-  (36, 'GPU', 'NVIDIA B200', 2250, 192, 'HBM3e', 1000);
+INSERT INTO accelerator (node_id, kind, accelerator_model_id, tflops, memory_gb, memory_type, tdp_w) VALUES
+  (19, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (20, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (21, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (22, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (23, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (24, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (25, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (26, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (27, 'GPU', 1, 312, 80, 'HBM2e', 400);
+
+INSERT INTO accelerator (node_id, kind, accelerator_model_id, tflops, memory_gb, memory_type, tdp_w) VALUES
+  (28, 'NPU', 3, 256, 48, 'GDDR6', 180),
+  (29, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (30, 'NPU', 3, 256, 48, 'GDDR6', 180),
+  (31, 'PIM', 4, 128, 32, 'HBM-PIM', 150),
+  (32, 'GPU', 2, 989, 80, 'HBM3', 700),
+  (33, 'GPU', 2, 989, 80, 'HBM3', 700),
+  (34, 'GPU', 5, 155, 48, 'GDDR6', 300),
+  (35, 'GPU', 6, 2250, 192, 'HBM3e', 1000),
+  (36, 'GPU', 6, 2250, 192, 'HBM3e', 1000);
 
 -- All metric_profile tables render as: value(t) = baseline + amplitude * sin(2*pi*t / period_sec)
 -- t = current unix epoch seconds (matches app/services/infra.py's _evaluate, which uses
@@ -415,12 +427,12 @@ INSERT INTO "user" (name) VALUES
 --             NPU/Furiosa RNGD x1 (node 28)
 -- infer pool: NPU/Furiosa RNGD x1 (node 30), PIM/SK hynix AiM x1 (node 31),
 --             B200 x2 (nodes 35/36)
--- resource_tier_requirement.model_name must match accelerator.model_name EXACTLY
--- (e.g. 'NVIDIA H100', not 'H100') or the tier can never be satisfied - see the
--- accelerator inserts above for the exact strings used. model_name is nullable;
+-- resource_tier_requirement.accelerator_model_id references accelerator_model.id
+-- directly (see that insert above) - matching is by id now, not by string, so there's
+-- no way for the two sides to drift out of sync. accelerator_model_id is nullable;
 -- left NULL means "any model of this kind" (not used below, but supported).
 -- "available" in GET /resource-tiers is computed live from free node counts
--- (kind + model_name + purpose filtered), not stored.
+-- (kind + accelerator_model_id + purpose filtered), not stored.
 -- train tier 3 and infer tier 3's costs are deliberately NOT the cheapest despite
 -- being lower-performing than tier 2 - breaks the cost/perf anti-correlation so
 -- priority_pref=balanced actually diverges from time/cost sorting.
@@ -434,15 +446,17 @@ INSERT INTO resource_tier (cluster_id, job_type, tier_no, cost_per_hour) VALUES
   (3, 'infer', 3, 6.0),
   (3, 'infer', 4, 2.0);
 
-INSERT INTO resource_tier_requirement (tier_id, kind, model_name, node_count) VALUES
-  (1, 'GPU', 'NVIDIA H100', 2), (1, 'NPU', 'Furiosa RNGD', 1),  -- train tier 1: H100 x2 + NPU x1, 고성능 혼합
-  (2, 'GPU', 'NVIDIA A100', 1),                                 -- train tier 2: A100 1대
-  (3, 'GPU', 'NVIDIA A6000', 1),                                -- train tier 3: A6000 1대 (가성비 나쁨, 항상 되지만 비쌈)
-  (4, 'GPU', 'NVIDIA A100', 3),                                 -- train tier 4: A100 3대 전부 - 가끔만 available
-  (5, 'NPU', 'Furiosa RNGD', 1), (5, 'PIM', 'SK hynix AiM', 1), -- infer tier 1: 저지연 혼합, 두 infer 노드 다 필요
-  (6, 'NPU', 'Furiosa RNGD', 1),                                -- infer tier 2: NPU 1대
-  (7, 'GPU', 'NVIDIA B200', 1),                                 -- infer tier 3: B200 1대 (가성비 나쁨)
-  (8, 'PIM', 'SK hynix AiM', 2);                                -- infer tier 4: PIM 노드가 1대뿐이라 항상 대기 예상
+-- accelerator_model_id: 1=NVIDIA A100, 2=NVIDIA H100, 3=Furiosa RNGD, 4=SK hynix AiM,
+-- 5=NVIDIA A6000, 6=NVIDIA B200 (see accelerator_model insert above)
+INSERT INTO resource_tier_requirement (tier_id, kind, accelerator_model_id, node_count) VALUES
+  (1, 'GPU', 2, 2), (1, 'NPU', 3, 1),  -- train tier 1: H100 x2 + NPU x1, 고성능 혼합
+  (2, 'GPU', 1, 1),                    -- train tier 2: A100 1대
+  (3, 'GPU', 5, 1),                    -- train tier 3: A6000 1대 (가성비 나쁨, 항상 되지만 비쌈)
+  (4, 'GPU', 1, 3),                    -- train tier 4: A100 3대 전부 - 가끔만 available
+  (5, 'NPU', 3, 1), (5, 'PIM', 4, 1),  -- infer tier 1: 저지연 혼합, 두 infer 노드 다 필요
+  (6, 'NPU', 3, 1),                    -- infer tier 2: NPU 1대
+  (7, 'GPU', 6, 1),                    -- infer tier 3: B200 1대 (가성비 나쁨)
+  (8, 'PIM', 4, 2);                    -- infer tier 4: PIM 노드가 1대뿐이라 항상 대기 예상
 
 -- ---------- jobs ----------
 -- precision/sla_target were dropped from job (see migration 5fcc49cbc30e) - CSC wizard

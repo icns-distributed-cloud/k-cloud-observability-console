@@ -127,7 +127,11 @@ def _to_selected_tier(tier: models.ResourceTier | None) -> schemas.SelectedTierS
         tier_no=tier.tier_no,
         cost_per_hour=tier.cost_per_hour,
         requirements=[
-            schemas.TierRequirementItem(kind=r.kind, model_name=r.model_name, node_count=r.node_count)
+            schemas.TierRequirementItem(
+                kind=r.kind,
+                model_name=r.accelerator_model.name if r.accelerator_model is not None else None,
+                node_count=r.node_count,
+            )
             for r in tier.requirements
         ],
     )
@@ -182,9 +186,10 @@ def _occupied_node_ids(live_cluster: models.Cluster, now: datetime) -> set[int]:
     }
 
 
-def _node_matches_requirement(node: models.Node, kind: str, model_name: str | None) -> bool:
+def _node_matches_requirement(node: models.Node, kind: str, accelerator_model_id: int | None) -> bool:
     return any(
-        a.kind == kind and (model_name is None or a.model_name == model_name) for a in node.accelerators
+        a.kind == kind and (accelerator_model_id is None or a.accelerator_model_id == accelerator_model_id)
+        for a in node.accelerators
     )
 
 
@@ -194,7 +199,7 @@ def _free_nodes_for_requirement(
     occupied_node_ids: set[int],
     excluded_node_ids: set[int],
     kind: str,
-    model_name: str | None,
+    accelerator_model_id: int | None,
 ) -> list[models.Node]:
     return [
         node
@@ -202,7 +207,7 @@ def _free_nodes_for_requirement(
         if node.id not in occupied_node_ids
         and node.id not in excluded_node_ids
         and node.purpose == job_type
-        and _node_matches_requirement(node, kind, model_name)
+        and _node_matches_requirement(node, kind, accelerator_model_id)
     ]
 
 
@@ -213,7 +218,7 @@ def _pick_free_nodes_for_tier(
     picked_ids: set[int] = set()
     for req in tier.requirements:
         candidates = _free_nodes_for_requirement(
-            live_cluster, tier.job_type, occupied_node_ids, picked_ids, req.kind, req.model_name
+            live_cluster, tier.job_type, occupied_node_ids, picked_ids, req.kind, req.accelerator_model_id
         )
         if len(candidates) < req.node_count:
             return None
@@ -249,7 +254,7 @@ def list_resource_tiers(
 
     tiers = (
         db.query(models.ResourceTier)
-        .options(selectinload(models.ResourceTier.requirements))
+        .options(selectinload(models.ResourceTier.requirements).selectinload(models.ResourceTierRequirement.accelerator_model))
         .filter(
             models.ResourceTier.cluster_id == live_cluster.id,
             models.ResourceTier.job_type == job_type,
@@ -263,12 +268,18 @@ def list_resource_tiers(
             tier_no=t.tier_no,
             cost_per_hour=t.cost_per_hour,
             requirements=[
-                schemas.TierRequirementItem(kind=r.kind, model_name=r.model_name, node_count=r.node_count)
+                schemas.TierRequirementItem(
+                    kind=r.kind,
+                    model_name=r.accelerator_model.name if r.accelerator_model is not None else None,
+                    node_count=r.node_count,
+                )
                 for r in t.requirements
             ],
             available=all(
                 len(
-                    _free_nodes_for_requirement(live_cluster, job_type, occupied, set(), r.kind, r.model_name)
+                    _free_nodes_for_requirement(
+                        live_cluster, job_type, occupied, set(), r.kind, r.accelerator_model_id
+                    )
                 )
                 >= r.node_count
                 for r in t.requirements
@@ -352,7 +363,7 @@ def sweep_and_backfill(db: Session) -> None:
         queued_jobs = (
             db.query(models.Job)
             .filter(models.Job.status == "queued")
-            .options(selectinload(models.Job.selected_tier).selectinload(models.ResourceTier.requirements))
+            .options(selectinload(models.Job.selected_tier).selectinload(models.ResourceTier.requirements).selectinload(models.ResourceTierRequirement.accelerator_model))
             .order_by(models.Job.submitted_at)
             .all()
         )
@@ -378,7 +389,7 @@ def list_jobs(db: Session, status: str | None = None, user_id: int | None = None
     query = db.query(models.Job).options(
         selectinload(models.Job.model),
         selectinload(models.Job.dataset),
-        selectinload(models.Job.selected_tier).selectinload(models.ResourceTier.requirements),
+        selectinload(models.Job.selected_tier).selectinload(models.ResourceTier.requirements).selectinload(models.ResourceTierRequirement.accelerator_model),
         selectinload(models.Job.assignments).selectinload(models.Assignment.node).selectinload(models.Node.cluster),
     )
     if status is not None:
@@ -397,7 +408,7 @@ def get_job_detail(db: Session, job_id: int) -> schemas.JobDetail | None:
             selectinload(models.Job.metric_profiles),
             selectinload(models.Job.cache_profile),
             selectinload(models.Job.cache_tiers),
-            selectinload(models.Job.selected_tier).selectinload(models.ResourceTier.requirements),
+            selectinload(models.Job.selected_tier).selectinload(models.ResourceTier.requirements).selectinload(models.ResourceTierRequirement.accelerator_model),
             selectinload(models.Job.assignments)
             .selectinload(models.Assignment.node)
             .selectinload(models.Node.cluster),
@@ -572,7 +583,7 @@ def submit_job(
 ) -> schemas.JobSummary:
     tier = (
         db.query(models.ResourceTier)
-        .options(selectinload(models.ResourceTier.requirements))
+        .options(selectinload(models.ResourceTier.requirements).selectinload(models.ResourceTierRequirement.accelerator_model))
         .filter(models.ResourceTier.id == tier_id)
         .first()
     )
