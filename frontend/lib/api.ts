@@ -60,8 +60,10 @@ export function fetchJobs(params?: { status?: string; userId?: number }) {
   return get<JobSummary[]>(`/jobs${query ? `?${query}` : ''}`)
 }
 
-export function fetchResourceTiers(jobType: 'train' | 'infer') {
-  return get<ResourceTierItem[]>(`/resource-tiers?job_type=${jobType}`)
+export function fetchResourceTiers(jobType: 'train' | 'infer', priorityPref?: PriorityPref) {
+  const q = new URLSearchParams({ job_type: jobType })
+  if (priorityPref) q.set('priority_pref', priorityPref)
+  return get<ResourceTierItem[]>(`/resource-tiers?${q}`)
 }
 
 /** 모델을 고르면 그 모델용 데이터셋 목록을 받아 드롭다운을 채운다 */
