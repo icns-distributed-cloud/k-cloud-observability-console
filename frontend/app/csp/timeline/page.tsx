@@ -18,18 +18,21 @@ import {
 } from "@/lib/timeline";
 import { flattenRegions, isDomestic } from "@/lib/mapData";
 import { useTime } from "@/lib/TimeContext";
-import type { AssignmentItem, JobSummary } from "@/app/types";
+import type { AssignmentItem, JobSummary, NodePurpose } from "@/app/types";
 
 const HIGHLIGHT_KEY = "kcloud:lastSubmittedJobId";
 const HIGHLIGHT_AT_KEY = "kcloud:lastSubmittedAt";
 /** 시연용: 방금 제출한 작업 막대는 20초만 보여주고 지운다 */
-const HIGHLIGHT_TTL_MS = 20_000;
+const HIGHLIGHT_TTL_MS = 10_000;
 /** 백엔드에 push가 없으므로 주기적으로 다시 조회한다 (sweep 결과·새 작업 반영) */
 const POLL_MS = 10_000;
 
 interface NodeRef {
   id: number;
   name: string;
+  purpose: NodePurpose;
+  /** 소속 클러스터가 라이브인지. 스케줄러 행 정렬 우선순위에 쓴다 */
+  isLive: boolean;
 }
 
 interface SchedulerData {
@@ -73,12 +76,21 @@ export default function SchedulerPage() {
         ]);
         if (cancelled) return;
 
+        // is_live는 ClusterDetail이 Cluster를 확장하며 그대로 들고 오므로 d에서 바로 읽는다.
+        // targets와 인덱스를 맞춰 꺼내면 조회 실패(null)가 섞였을 때 어긋날 여지가 생긴다.
         const allNodes: NodeRef[] = details.flatMap((d) =>
-          d ? d.nodes.map((n) => ({ id: n.id, name: n.name })) : []
+          d
+            ? d.nodes.map((n) => ({
+                id: n.id,
+                name: n.name,
+                purpose: n.purpose,
+                isLive: d.is_live,
+              }))
+            : []
         );
         const allAssignments = assignmentLists.flat();
-        const { train, infer } = selectSchedulerNodes(allNodes, allAssignments, jobs);
-
+        const { train, infer } = selectSchedulerNodes(allNodes, allAssignments);
+        
         setData({ train, infer, jobs });
         setError(null);
       } catch (e) {
@@ -119,7 +131,7 @@ export default function SchedulerPage() {
     <main style={{ padding: "24px 28px" }}>
       <Breadcrumb
         segments={[
-          { label: "지도", onClick: () => router.push("/") },
+          { label: "지도", onClick: () => router.push("/csp") },
           { label: "스케줄러" },
         ]}
       />
@@ -142,13 +154,13 @@ export default function SchedulerPage() {
           <Section
             title="학습 스케줄러"
             data={trainTimeline}
-            onSelectJob={(id) => router.push(`/jobs/${id}`)}
+            onSelectJob={(id) => router.push(`/csp/jobs/${id}`)}
           />
           <div style={{ height: 28 }} />
           <Section
             title="추론 스케줄러"
             data={inferTimeline}
-            onSelectJob={(id) => router.push(`/jobs/${id}`)}
+            onSelectJob={(id) => router.push(`/csp/jobs/${id}`)}
           />
         </>
       )}

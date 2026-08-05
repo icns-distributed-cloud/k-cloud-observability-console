@@ -5,6 +5,9 @@ export default function TopBar() {
   const router = useRouter();
   const pathname = usePathname();
 
+  // 랜딩(역할 선택) 화면에서는 상단 바를 숨긴다
+  if (pathname === "/") return null;
+
   return (
     <header
       style={{
@@ -17,7 +20,7 @@ export default function TopBar() {
       }}
     >
       <div
-        onClick={() => router.push("/")}
+        onClick={() => router.push("/csp")}
         style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}
       >
         <span
@@ -47,23 +50,23 @@ export default function TopBar() {
       </div>
 
       <nav style={{ display: "flex", gap: 4, marginLeft: 8 }}>
-        <NavLink label="지도" href="/" active={pathname === "/"} onClick={router.push} />
+        <NavLink label="지도" href="/csp" active={pathname === "/csp"} onClick={router.push} />
         <NavLink
           label="클러스터 현황"
-          href="/infra"
-          active={pathname.startsWith("/infra")}
+          href="/csp/infra"
+          active={pathname.startsWith("/csp/infra")}
           onClick={router.push}
         />
         <NavLink
           label="작업 목록"
-          href="/jobs"
-          active={pathname.startsWith("/jobs")}
+          href="/csp/jobs"
+          active={pathname.startsWith("/csp/jobs")}
           onClick={router.push}
         />
         <NavLink
           label="스케줄러"
-          href="/timeline"
-          active={pathname.startsWith("/timeline")}
+          href="/csp/timeline"
+          active={pathname.startsWith("/csp/timeline")}
           onClick={router.push}
         />
       </nav>

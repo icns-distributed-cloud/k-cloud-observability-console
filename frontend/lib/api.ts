@@ -15,6 +15,8 @@ import type {
   InferJobRequest,
   TrainJobRequest,
   ModelItem,
+  DatasetItem,
+  ResourceTierItem,
 } from '@/app/types'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
@@ -51,9 +53,22 @@ export function fetchClusterAssignments(clusterId: number) {
   return get<AssignmentItem[]>(`/clusters/${clusterId}/assignments`)
 }
 
-export function fetchJobs(status?: string) {
-  const query = status ? `?status=${status}` : ''
-  return get<JobSummary[]>(`/jobs${query}`)
+export function fetchJobs(params?: { status?: string; userId?: number }) {
+  const q = new URLSearchParams()
+  if (params?.status) q.set('status', params.status)
+  if (params?.userId !== undefined) q.set('user_id', String(params.userId))
+  const query = q.toString()
+  return get<JobSummary[]>(`/jobs${query ? `?${query}` : ''}`)
+}
+
+export function fetchResourceTiers(jobType: 'train' | 'infer') {
+  return get<ResourceTierItem[]>(`/resource-tiers?job_type=${jobType}`)
+}
+
+/** 모델을 고르면 그 모델용 데이터셋 목록을 받아 드롭다운을 채운다 */
+export function fetchDatasets(modelId?: number) {
+  const query = modelId === undefined ? '' : `?model_id=${modelId}`
+  return get<DatasetItem[]>(`/datasets${query}`)
 }
 
 export function fetchJobDetail(jobId: number) {

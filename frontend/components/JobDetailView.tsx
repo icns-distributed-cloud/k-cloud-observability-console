@@ -134,7 +134,9 @@ export default function JobDetailView({ jobId, breadcrumbPrefix }: JobDetailView
                                 );
                             })}
                         <StatCard label="배치 크기" value={job.batch} />
-                        <StatCard label="정밀도" value={job.precision} />
+                        {job.dataset_name && (
+                            <StatCard label="데이터셋" value={job.dataset_name} />
+                        )}
                         <StatCard
                             label="우선순위"
                             value={PRIORITY_LABELS[job.priority_pref] ?? job.priority_pref}
