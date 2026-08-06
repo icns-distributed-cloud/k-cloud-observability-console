@@ -26,6 +26,7 @@ export default function JobListPage() {
 
             {/* CSP는 전체 사용자의 작업을 본다 (userId 미지정) */}
             <JobTable
+                showUser
                 onSelect={(id) => router.push(`/csp/jobs/${id}`)}
                 onCountChange={setCount}
             />

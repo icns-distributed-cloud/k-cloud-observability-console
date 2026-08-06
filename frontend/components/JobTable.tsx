@@ -27,18 +27,20 @@ const FILTERS = [
 ];
 
 /** 컬럼 폭. 헤더와 행이 같은 값을 쓴다 (PROGRESS만 남은 폭을 차지) */
-const W = { id: 70, model: 205, resource: 132, nodes: 148, elapsed: 86, cost: 90, status: 70 };
+const W = { id: 70, user: 76, model: 205, resource: 132, nodes: 148, elapsed: 86, cost: 90, status: 70 };
 
 interface JobTableProps {
     /** 주면 그 사용자 작업만 조회한다 (CSC). 없으면 전체 (CSP) */
     userId?: number;
+    /** 제출자 컬럼 표시 여부. CSC는 전부 자기 작업이라 의미가 없다 */
+    showUser?: boolean;
     /** 행 클릭 시 이동할 경로. 화면마다 prefix가 달라서 밖에서 받는다 */
     onSelect: (jobId: number) => void;
     /** 총 건수를 바깥 헤더에 표시하려는 경우 */
     onCountChange?: (count: number) => void;
 }
 
-export default function JobTable({ userId, onSelect, onCountChange }: JobTableProps) {
+export default function JobTable({ userId, showUser, onSelect, onCountChange }: JobTableProps) {
     const { nowSec } = useTime();
     const [jobs, setJobs] = useState<JobSummary[]>([]);
     const [filter, setFilter] = useState("all");
@@ -103,11 +105,12 @@ export default function JobTable({ userId, onSelect, onCountChange }: JobTablePr
                         }}
                     >
                         <Head w={W.id}>JOB ID</Head>
+                        {showUser && <Head w={W.user}>USER</Head>}
                         <Head w={W.model}>MODEL</Head>
                         <Head>PROGRESS</Head>
+                        <Head w={W.elapsed}>ELAPSED</Head>
                         <Head w={W.resource}>RESOURCE</Head>
                         <Head w={W.nodes}>NODES</Head>
-                        <Head w={W.elapsed}>ELAPSED</Head>
                         <Head w={W.cost} align="right">
                             COST
                         </Head>
@@ -146,6 +149,20 @@ export default function JobTable({ userId, onSelect, onCountChange }: JobTablePr
                                 >
                                     J-{j.id}
                                 </span>
+
+                                {showUser && (
+                                    <span
+                                        style={{
+                                            width: W.user,
+                                            flexShrink: 0,
+                                            fontSize: 12.5,
+                                            color: "var(--sub)",
+                                            fontFamily: "'IBM Plex Mono', monospace",
+                                        }}
+                                    >
+                                        U-{j.user_id}
+                                    </span>
+                                )}
 
                                 <div
                                     style={{
@@ -207,6 +224,18 @@ export default function JobTable({ userId, onSelect, onCountChange }: JobTablePr
 
                                 <span
                                     style={{
+                                        width: W.elapsed,
+                                        flexShrink: 0,
+                                        fontSize: 12.5,
+                                        color: "var(--sub)",
+                                        fontFamily: "'IBM Plex Mono', monospace",
+                                    }}
+                                >
+                                    {nowSec === null ? "" : elapsedLabel(j, nowSec * 1000)}
+                                </span>
+
+                                <span
+                                    style={{
                                         width: W.resource,
                                         flexShrink: 0,
                                         fontSize: 12.5,
@@ -249,18 +278,6 @@ export default function JobTable({ userId, onSelect, onCountChange }: JobTablePr
                                         </span>
                                     )}
                                 </div>
-
-                                <span
-                                    style={{
-                                        width: W.elapsed,
-                                        flexShrink: 0,
-                                        fontSize: 12.5,
-                                        color: "var(--sub)",
-                                        fontFamily: "'IBM Plex Mono', monospace",
-                                    }}
-                                >
-                                    {nowSec === null ? "" : elapsedLabel(j, nowSec * 1000)}
-                                </span>
 
                                 <span
                                     style={{
