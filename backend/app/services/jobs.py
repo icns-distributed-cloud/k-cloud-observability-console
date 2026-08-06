@@ -331,6 +331,60 @@ def _seed_metric_profiles(db: Session, job: models.Job) -> None:
         db.add(models.JobMetricProfile(job_id=job.id, **template))
 
 
+def _seed_optimization_data(db: Session, job: models.Job) -> None:
+    # Only called from submit_job, not from the filler-job path - fillers are hidden
+    # from the default job list anyway, so nobody ever opens their 최적화 tab.
+    if job.type == "train":
+        duration = DURATION_SEC["train"]
+        db.add(
+            models.HyperparamAdjustment(
+                job_id=job.id,
+                seq=1,
+                t_offset_sec=int(duration * 0.3),
+                param_name="배치 크기",
+                from_value="512",
+                to_value="640",
+                reward="+0.021",
+            )
+        )
+        db.add(
+            models.HyperparamAdjustment(
+                job_id=job.id,
+                seq=2,
+                t_offset_sec=int(duration * 0.7),
+                param_name="데이터 shard",
+                from_value="4-way",
+                to_value="6-way",
+                reward="+0.014",
+            )
+        )
+        db.add(
+            models.JobKqvBenchmark(
+                job_id=job.id,
+                kqv_gain_pct=Decimal("21.5"),
+                kqv_even_makespan_sec=Decimal("77040"),
+                kqv_opt_makespan_sec=Decimal("60480"),
+            )
+        )
+    elif job.type == "infer":
+        db.add(models.JobCacheProfile(job_id=job.id, latency_reduction_pct=Decimal("33.0")))
+        db.add(
+            models.JobCacheTier(
+                job_id=job.id, tier_name="VRAM", fill_pct=Decimal("82.0"), latency_ms=Decimal("0.4")
+            )
+        )
+        db.add(
+            models.JobCacheTier(
+                job_id=job.id, tier_name="DRAM", fill_pct=Decimal("55.0"), latency_ms=Decimal("2.1")
+            )
+        )
+        db.add(
+            models.JobCacheTier(
+                job_id=job.id, tier_name="SSD", fill_pct=Decimal("20.0"), latency_ms=Decimal("18.0")
+            )
+        )
+
+
 def _admit(
     db: Session, job: models.Job, nodes: list[models.Node], start_time: datetime, event_type: str
 ) -> None:
@@ -681,6 +735,7 @@ def submit_job(
     db.add(job)
     db.flush()
     _seed_metric_profiles(db, job)
+    _seed_optimization_data(db, job)
     _log_event(db, type="ARRIVAL", now=now, job_id=job.id)
 
     live_cluster = _load_live_cluster(db)
