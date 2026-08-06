@@ -8,6 +8,8 @@ export default function TopBar() {
   // 랜딩(역할 선택) 화면에서는 상단 바를 숨긴다
   if (pathname === "/") return null;
 
+  const isCsc = pathname.startsWith("/csc");
+
   return (
     <header
       style={{
@@ -20,7 +22,7 @@ export default function TopBar() {
       }}
     >
       <div
-        onClick={() => router.push("/csp")}
+        onClick={() => router.push(isCsc ? "/csc/jobs" : "/csp")}
         style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}
       >
         <span
@@ -50,25 +52,36 @@ export default function TopBar() {
       </div>
 
       <nav style={{ display: "flex", gap: 4, marginLeft: 8 }}>
-        <NavLink label="지도" href="/csp" active={pathname === "/csp"} onClick={router.push} />
-        <NavLink
-          label="클러스터 현황"
-          href="/csp/infra"
-          active={pathname.startsWith("/csp/infra")}
-          onClick={router.push}
-        />
-        <NavLink
-          label="작업 목록"
-          href="/csp/jobs"
-          active={pathname.startsWith("/csp/jobs")}
-          onClick={router.push}
-        />
-        <NavLink
-          label="스케줄러"
-          href="/csp/timeline"
-          active={pathname.startsWith("/csp/timeline")}
-          onClick={router.push}
-        />
+        {isCsc ? (
+          <NavLink
+            label="내 작업"
+            href="/csc/jobs"
+            active={pathname.startsWith("/csc/jobs")}
+            onClick={router.push}
+          />
+        ) : (
+          <>
+            <NavLink label="지도" href="/csp" active={pathname === "/csp"} onClick={router.push} />
+            <NavLink
+              label="클러스터 현황"
+              href="/csp/infra"
+              active={pathname.startsWith("/csp/infra")}
+              onClick={router.push}
+            />
+            <NavLink
+              label="작업 목록"
+              href="/csp/jobs"
+              active={pathname.startsWith("/csp/jobs")}
+              onClick={router.push}
+            />
+            <NavLink
+              label="스케줄러"
+              href="/csp/timeline"
+              active={pathname.startsWith("/csp/timeline")}
+              onClick={router.push}
+            />
+          </>
+        )}
       </nav>
     </header>
   );
