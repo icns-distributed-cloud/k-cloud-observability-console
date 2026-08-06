@@ -213,6 +213,17 @@ INSERT INTO accelerator (node_id, kind, accelerator_model_id, tflops, memory_gb,
   (35, 'GPU', 6, 2250, 192, 'HBM3e', 1000),
   (36, 'GPU', 6, 2250, 192, 'HBM3e', 1000);
 
+-- srv-01 (node 1) also gets an NPU and a PIM accelerator, on top of its 2x A100 -
+-- nothing in the schema or admission logic requires a node to be single-kind
+-- (_node_matches_requirement/_group_accelerators both iterate per-accelerator, not
+-- per-node), this combination just never came up before. Appended here (not inlined
+-- next to node 1's other accelerators above) so it doesn't renumber every accelerator
+-- id that follows. Node 1 isn't on the live cluster, so this has no effect on tier
+-- admission - purely to see how the frontend renders a mixed-kind node.
+INSERT INTO accelerator (node_id, kind, accelerator_model_id, tflops, memory_gb, memory_type, tdp_w) VALUES
+  (1, 'NPU', 3, 256, 48, 'GDDR6', 180),
+  (1, 'PIM', 4, 128, 32, 'HBM-PIM', 150);
+
 -- All metric_profile tables render as: value(t) = baseline + amplitude * sin(2*pi*t / period_sec)
 -- t = current unix epoch seconds (matches app/services/infra.py's _evaluate, which uses
 -- time.time() - not job-relative, not wall-clock-of-day; just raw epoch seconds).
@@ -382,7 +393,8 @@ INSERT INTO accelerator_metric_profile (accelerator_id, metric_type, baseline, a
   (48, 'util', 33, 10, 34, 'pct'),
   (49, 'util', 60, 18, 24, 'pct'), (50, 'util', 58, 17, 25, 'pct'),
   (51, 'util', 48, 14, 30, 'pct'),
-  (52, 'util', 64, 20, 20, 'pct'), (53, 'util', 61, 19, 21, 'pct');
+  (52, 'util', 64, 20, 20, 'pct'), (53, 'util', 61, 19, 21, 'pct'),
+  (54, 'util', 55, 16, 28, 'pct'), (55, 'util', 38, 10, 42, 'pct');
 
 -- distributed links: domestic-domestic ones only ever draw in Korea-mode view.
 -- (1, 6, true) is domestic(서울, cluster 1) <-> overseas(aws-use1-a, cluster 6) so it
