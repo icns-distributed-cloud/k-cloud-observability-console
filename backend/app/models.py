@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import ForeignKey, JSON
+from sqlalchemy import ForeignKey, Index, JSON, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -258,6 +258,18 @@ class Assignment(Base):
 
     job: Mapped["Job"] = relationship(back_populates="assignments")
     node: Mapped["Node"] = relationship(back_populates="assignments")
+
+    # a node can only have one active (to_t IS NULL) assignment at a time - defense in
+    # depth alongside the admission advisory lock, in case some future code path admits
+    # without going through it
+    __table_args__ = (
+        Index(
+            "ix_assignment_active_node",
+            "node_id",
+            unique=True,
+            postgresql_where=text("to_t IS NULL"),
+        ),
+    )
 
 
 class Event(Base):
