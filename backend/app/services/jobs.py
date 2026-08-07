@@ -3,13 +3,28 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 
 from fastapi import Depends, HTTPException
-from sqlalchemy import or_
+from sqlalchemy import or_, text
 from sqlalchemy.orm import Session, selectinload
 
 from app import clock, models, schemas
 from app.database import get_db
 
 DURATION_SEC = {"train": 40, "infer": 15}
+
+# Arbitrary constant key for a Postgres advisory lock guarding every
+# read-then-write admission decision (submit_job's immediate admit,
+# sweep_and_backfill's backfill/finish loops, filler creation). Without it,
+# concurrent requests (polling from multiple tabs, or two submits at once)
+# can each read the same "queued job / free node" snapshot before either
+# commits and double-admit the same job or double-book the same node. Held
+# for the rest of the transaction (pg_advisory_xact_lock), released on
+# commit/rollback - callers should acquire it before reading any state the
+# decision depends on.
+_ADMISSION_LOCK_KEY = 851203
+
+
+def _lock_admission(db: Session) -> None:
+    db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": _ADMISSION_LOCK_KEY})
 
 # Demo-only: keeps the scheduler timeline visibly busy at an unattended booth without
 # a human re-seeding between runs. Piggybacks on the sweep that already runs on every
@@ -448,6 +463,7 @@ def _maintain_filler_jobs(db: Session, now: datetime) -> None:
 
 
 def sweep_and_backfill(db: Session) -> None:
+    _lock_admission(db)
     now = clock.now()
     _maintain_filler_jobs(db, now)
 
@@ -745,6 +761,7 @@ def submit_job(
     _seed_optimization_data(db, job)
     _log_event(db, type="ARRIVAL", now=now, job_id=job.id)
 
+    _lock_admission(db)
     live_cluster = _load_live_cluster(db)
     nodes = None
     if live_cluster is not None:
