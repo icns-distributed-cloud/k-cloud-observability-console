@@ -139,6 +139,7 @@ export interface MetricProfilePoint {
 
 export interface TierRequirementItem {
     kind: AcceleratorKind
+    model_name: string | null
     node_count: number
 }
 
