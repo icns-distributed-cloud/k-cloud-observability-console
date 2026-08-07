@@ -68,24 +68,6 @@ export default function ClusterPage({ params }: { params: Promise<{ id: string }
     return acc?.kind ?? "GPU";
   };
 
-  // 클러스터의 주력 가속기 종류 (가장 많은 kind)
-  const dominantKind = (): AcceleratorKind | null => {
-    if (!cluster || cluster.accelerators.length === 0) return null;
-    const counts = new Map<AcceleratorKind, number>();
-    for (const a of cluster.accelerators) {
-      counts.set(a.kind, (counts.get(a.kind) ?? 0) + a.count);
-    }
-    let best: AcceleratorKind | null = null;
-    let max = 0;
-    for (const [kind, n] of counts) {
-      if (n > max) {
-        max = n;
-        best = kind;
-      }
-    }
-    return best;
-  };
-
   const KIND_ORDER: Record<AcceleratorKind, number> = { GPU: 0, NPU: 1, PIM: 2 };
 
   if (error) return <main style={{ padding: 24 }}>불러오기 실패: {error}</main>;
@@ -111,7 +93,6 @@ export default function ClusterPage({ params }: { params: Promise<{ id: string }
           {cluster.name}
         </div>
         <div style={{ fontSize: 12.5, color: "var(--sub)", marginTop: 4 }}>
-          {dominantKind() ? `${dominantKind()} 클러스터 · ` : ""}
           {cluster.status === "active" ? "가동중" : "대기"}
         </div>
       </div>
@@ -150,7 +131,6 @@ export default function ClusterPage({ params }: { params: Promise<{ id: string }
             <NodeCard
               key={node.id}
               name={node.name}
-              kind={nodeKind(node.id)}
               util={nodeUtil(node.id)}
               jobName={job?.model_name}
               jobColor={job ? JOB_COLORS[job.type] : undefined}

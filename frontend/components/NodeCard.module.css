@@ -47,14 +47,6 @@
   font-size: 19px;
 }
 
-.kind {
-  margin-left: auto;
-  font-size: 14px;
-  color: var(--sub);
-  font-family: 'IBM Plex Mono', monospace;
-  font-weight: 700;
-}
-
 .jobName {
   font-size: 17px;
   font-weight: 700;

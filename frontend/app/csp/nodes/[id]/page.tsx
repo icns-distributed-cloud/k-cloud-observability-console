@@ -59,7 +59,6 @@ export default function NodePage({ params }: { params: Promise<{ id: string }> }
   if (error) return <main style={{ padding: 24 }}>불러오기 실패: {error}</main>;
   if (!node) return <main style={{ padding: 24 }}>불러오는 중…</main>;
 
-  const kind = node.accelerators[0]?.kind ?? "GPU";
   const isIdle = !job;
 
   return (
@@ -77,16 +76,14 @@ export default function NodePage({ params }: { params: Promise<{ id: string }> }
 
       <div style={{ margin: "16px 0 20px" }}>
         <div style={{ fontSize: 27, fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
-          <KindGlyph kind={kind} size={16} />
           {node.name}
         </div>
         <div style={{ fontSize: 17, color: "var(--sub)", marginTop: 4 }}>
-          {clusterName || `클러스터 ${node.cluster_id}`} · {kind}
+          {clusterName || `클러스터 ${node.cluster_id}`}
         </div>
       </div>
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
-        <StatCard label="종류" value={kind} />
         <StatCard label="상태" value={isIdle ? "유휴" : "가동중"} />
         <StatCard label="가속기" value={node.accelerators.reduce((n, a) => n + a.count, 0)} unit="개" />
       </div>

@@ -93,7 +93,7 @@ export function buildTimeline(
   const ends = relevant.map((a) => (a.to_t === null ? nowMs : new Date(a.to_t).getTime()))
 
   // 최근 구간만 표시 (오래된 이력은 잘라냄)
-  const WINDOW_MS = 15 * 60 * 1000
+  const WINDOW_MS = 2 * 60 * 1000
   const earliest = starts.length > 0 ? Math.min(...starts) : nowMs - WINDOW_MS
   const rawFrom = Math.max(earliest, nowMs - WINDOW_MS)
   const rawTo = ends.length > 0 ? Math.max(...ends, nowMs) : nowMs
