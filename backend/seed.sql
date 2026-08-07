@@ -411,79 +411,79 @@ INSERT INTO resource_tier_requirement (tier_id, kind, accelerator_model_id, node
 -- ============================================================
 -- job 1: train, BERT-base + SST-2, tier 2 (A100 x1) on suwon-srv-01 (node 4)
 INSERT INTO job (model_id, user_id, type, status, batch, priority_pref, dataset_id, selected_tier_id, submitted_at, started_at, finished_at) VALUES
-  (1, 1, 'train', 'done', 128, 'time', 1, 2, now() - interval '6 hours', now() - interval '6 hours', now() - interval '6 hours' + interval '40 seconds');
+  (1, 1, 'train', 'done', 128, 'time', 1, 2, now() - interval '6 hours', now() - interval '6 hours', now() - interval '6 hours' + interval '16 minutes');
 
 -- job 2: infer, BERT-base, tier 6 (NPU x1) on suwon-srv-05 (node 8)
 INSERT INTO job (model_id, user_id, type, status, batch, priority_pref, selected_tier_id, submitted_at, started_at, finished_at) VALUES
-  (1, 1, 'infer', 'done', 32, 'cost', 6, now() - interval '5 hours 30 minutes', now() - interval '5 hours 30 minutes', now() - interval '5 hours 30 minutes' + interval '15 seconds');
+  (1, 1, 'infer', 'done', 32, 'cost', 6, now() - interval '5 hours 30 minutes', now() - interval '5 hours 30 minutes', now() - interval '5 hours 30 minutes' + interval '34 seconds');
 
 -- job 3: train, ResNet-50 + ImageNet-1k, tier 4 (A100 x3) on suwon-srv-01/02/04 (4/5/7)
 -- - donor in the reallocation below (donated node 4 back to job 1's story)
 INSERT INTO job (model_id, user_id, type, status, batch, priority_pref, dataset_id, selected_tier_id, submitted_at, started_at, finished_at) VALUES
-  (6, 2, 'train', 'done', 64, 'balanced', 7, 4, now() - interval '5 hours', now() - interval '5 hours', now() - interval '5 hours' + interval '40 seconds');
+  (6, 2, 'train', 'done', 64, 'balanced', 7, 4, now() - interval '5 hours', now() - interval '5 hours', now() - interval '5 hours' + interval '28 minutes');
 
 -- job 4: train, GPT-2 + WikiText-103, tier 1 (H100 x2 + NPU x1) on suwon-srv-07/08/03 (10/11/6)
 INSERT INTO job (model_id, user_id, type, status, batch, priority_pref, dataset_id, selected_tier_id, submitted_at, started_at, finished_at) VALUES
-  (2, 1, 'train', 'done', 32, 'time', 3, 1, now() - interval '4 hours', now() - interval '4 hours', now() - interval '4 hours' + interval '40 seconds');
+  (2, 1, 'train', 'done', 32, 'time', 3, 1, now() - interval '4 hours', now() - interval '4 hours', now() - interval '4 hours' + interval '42 minutes');
 
 -- job 5: infer, YOLOv8, tier 5 (NPU + PIM) on suwon-srv-05/06 (8/9)
 INSERT INTO job (model_id, user_id, type, status, batch, priority_pref, selected_tier_id, submitted_at, started_at, finished_at) VALUES
-  (8, 3, 'infer', 'done', 16, 'balanced', 5, now() - interval '3 hours', now() - interval '3 hours', now() - interval '3 hours' + interval '15 seconds');
+  (8, 3, 'infer', 'done', 16, 'balanced', 5, now() - interval '3 hours', now() - interval '3 hours', now() - interval '3 hours' + interval '19 seconds');
 
 -- job 6: train, LLaMA-7B + Alpaca-52k, tier 3 (A6000 x1) on suwon-srv-09 (12)
 INSERT INTO job (model_id, user_id, type, status, batch, priority_pref, dataset_id, selected_tier_id, submitted_at, started_at, finished_at) VALUES
-  (5, 2, 'train', 'done', 16, 'cost', 6, 3, now() - interval '2 hours', now() - interval '2 hours', now() - interval '2 hours' + interval '40 seconds');
+  (5, 2, 'train', 'done', 16, 'cost', 6, 3, now() - interval '2 hours', now() - interval '2 hours', now() - interval '2 hours' + interval '1 hour 5 minutes');
 
 -- job 7: infer, CLIP-ViT, tier 7 (B200 x1) on suwon-srv-10 (13)
 INSERT INTO job (model_id, user_id, type, status, batch, priority_pref, selected_tier_id, submitted_at, started_at, finished_at) VALUES
-  (12, 1, 'infer', 'done', 8, 'time', 7, now() - interval '1 hour', now() - interval '1 hour', now() - interval '1 hour' + interval '15 seconds');
+  (12, 1, 'infer', 'done', 8, 'time', 7, now() - interval '1 hour', now() - interval '1 hour', now() - interval '1 hour' + interval '9 seconds');
 
 INSERT INTO assignment (job_id, node_id, from_t, to_t) VALUES
-  (1, 4, now() - interval '6 hours', now() - interval '6 hours' + interval '40 seconds'),
-  (2, 8, now() - interval '5 hours 30 minutes', now() - interval '5 hours 30 minutes' + interval '15 seconds'),
-  (3, 4, now() - interval '5 hours', now() - interval '5 hours' + interval '40 seconds'),
-  (3, 5, now() - interval '5 hours', now() - interval '5 hours' + interval '40 seconds'),
-  (3, 7, now() - interval '5 hours', now() - interval '5 hours' + interval '40 seconds'),
-  (4, 10, now() - interval '4 hours', now() - interval '4 hours' + interval '40 seconds'),
-  (4, 11, now() - interval '4 hours', now() - interval '4 hours' + interval '40 seconds'),
-  (4, 6, now() - interval '4 hours', now() - interval '4 hours' + interval '40 seconds'),
-  (5, 8, now() - interval '3 hours', now() - interval '3 hours' + interval '15 seconds'),
-  (5, 9, now() - interval '3 hours', now() - interval '3 hours' + interval '15 seconds'),
-  (6, 12, now() - interval '2 hours', now() - interval '2 hours' + interval '40 seconds'),
-  (7, 13, now() - interval '1 hour', now() - interval '1 hour' + interval '15 seconds');
+  (1, 4, now() - interval '6 hours', now() - interval '6 hours' + interval '16 minutes'),
+  (2, 8, now() - interval '5 hours 30 minutes', now() - interval '5 hours 30 minutes' + interval '34 seconds'),
+  (3, 4, now() - interval '5 hours', now() - interval '5 hours' + interval '28 minutes'),
+  (3, 5, now() - interval '5 hours', now() - interval '5 hours' + interval '28 minutes'),
+  (3, 7, now() - interval '5 hours', now() - interval '5 hours' + interval '28 minutes'),
+  (4, 10, now() - interval '4 hours', now() - interval '4 hours' + interval '42 minutes'),
+  (4, 11, now() - interval '4 hours', now() - interval '4 hours' + interval '42 minutes'),
+  (4, 6, now() - interval '4 hours', now() - interval '4 hours' + interval '42 minutes'),
+  (5, 8, now() - interval '3 hours', now() - interval '3 hours' + interval '19 seconds'),
+  (5, 9, now() - interval '3 hours', now() - interval '3 hours' + interval '19 seconds'),
+  (6, 12, now() - interval '2 hours', now() - interval '2 hours' + interval '1 hour 5 minutes'),
+  (7, 13, now() - interval '1 hour', now() - interval '1 hour' + interval '9 seconds');
 
 INSERT INTO event (type, job_id, node_id, cluster_id, occurred_at) VALUES
   ('ARRIVAL', 1, NULL, NULL, now() - interval '6 hours'),
   ('START', 1, 4, 2, now() - interval '6 hours'),
-  ('FINISH', 1, 4, 2, now() - interval '6 hours' + interval '40 seconds'),
+  ('FINISH', 1, 4, 2, now() - interval '6 hours' + interval '16 minutes'),
   ('ARRIVAL', 2, NULL, NULL, now() - interval '5 hours 30 minutes'),
   ('START', 2, 8, 2, now() - interval '5 hours 30 minutes'),
-  ('FINISH', 2, 8, 2, now() - interval '5 hours 30 minutes' + interval '15 seconds'),
+  ('FINISH', 2, 8, 2, now() - interval '5 hours 30 minutes' + interval '34 seconds'),
   ('ARRIVAL', 3, NULL, NULL, now() - interval '5 hours'),
   ('START', 3, 4, 2, now() - interval '5 hours'),
   ('START', 3, 5, 2, now() - interval '5 hours'),
   ('START', 3, 7, 2, now() - interval '5 hours'),
-  ('FINISH', 3, 4, 2, now() - interval '5 hours' + interval '40 seconds'),
-  ('FINISH', 3, 5, 2, now() - interval '5 hours' + interval '40 seconds'),
-  ('FINISH', 3, 7, 2, now() - interval '5 hours' + interval '40 seconds'),
+  ('FINISH', 3, 4, 2, now() - interval '5 hours' + interval '28 minutes'),
+  ('FINISH', 3, 5, 2, now() - interval '5 hours' + interval '28 minutes'),
+  ('FINISH', 3, 7, 2, now() - interval '5 hours' + interval '28 minutes'),
   ('ARRIVAL', 4, NULL, NULL, now() - interval '4 hours'),
   ('START', 4, 10, 2, now() - interval '4 hours'),
   ('START', 4, 11, 2, now() - interval '4 hours'),
   ('START', 4, 6, 2, now() - interval '4 hours'),
-  ('FINISH', 4, 10, 2, now() - interval '4 hours' + interval '40 seconds'),
-  ('FINISH', 4, 11, 2, now() - interval '4 hours' + interval '40 seconds'),
-  ('FINISH', 4, 6, 2, now() - interval '4 hours' + interval '40 seconds'),
+  ('FINISH', 4, 10, 2, now() - interval '4 hours' + interval '42 minutes'),
+  ('FINISH', 4, 11, 2, now() - interval '4 hours' + interval '42 minutes'),
+  ('FINISH', 4, 6, 2, now() - interval '4 hours' + interval '42 minutes'),
   ('ARRIVAL', 5, NULL, NULL, now() - interval '3 hours'),
   ('START', 5, 8, 2, now() - interval '3 hours'),
   ('START', 5, 9, 2, now() - interval '3 hours'),
-  ('FINISH', 5, 8, 2, now() - interval '3 hours' + interval '15 seconds'),
-  ('FINISH', 5, 9, 2, now() - interval '3 hours' + interval '15 seconds'),
+  ('FINISH', 5, 8, 2, now() - interval '3 hours' + interval '19 seconds'),
+  ('FINISH', 5, 9, 2, now() - interval '3 hours' + interval '19 seconds'),
   ('ARRIVAL', 6, NULL, NULL, now() - interval '2 hours'),
   ('START', 6, 12, 2, now() - interval '2 hours'),
-  ('FINISH', 6, 12, 2, now() - interval '2 hours' + interval '40 seconds'),
+  ('FINISH', 6, 12, 2, now() - interval '2 hours' + interval '1 hour 5 minutes'),
   ('ARRIVAL', 7, NULL, NULL, now() - interval '1 hour'),
   ('START', 7, 13, 2, now() - interval '1 hour'),
-  ('FINISH', 7, 13, 2, now() - interval '1 hour' + interval '15 seconds');
+  ('FINISH', 7, 13, 2, now() - interval '1 hour' + interval '9 seconds');
 
 -- job overview cards - matches services/jobs.py METRIC_TEMPLATES exactly, same
 -- template auto-seeded on every real submission.
@@ -530,12 +530,12 @@ INSERT INTO job_cache_tier (job_id, tier_name, fill_pct, latency_ms) VALUES
 
 -- DART history: train jobs 1, 3, 4, 6
 INSERT INTO hyperparam_adjustment (job_id, seq, t_offset_sec, param_name, from_value, to_value, reward) VALUES
-  (1, 1, 12, '배치 크기', '512', '640', '+0.021'),
-  (1, 2, 28, '데이터 shard', '4-way', '6-way', '+0.014'),
-  (3, 1, 15, '학습률', '1e-3', '5e-4', '+0.018'),
-  (4, 1, 10, '배치 크기', '256', '384', '+0.016'),
-  (4, 2, 25, '워커 수', '4', '8', '+0.009'),
-  (6, 1, 14, '학습률', '2e-4', '1e-4', '+0.011');
+  (1, 1, 300, '배치 크기', '512', '640', '+0.021'),
+  (1, 2, 660, '데이터 shard', '4-way', '6-way', '+0.014'),
+  (3, 1, 600, '학습률', '1e-3', '5e-4', '+0.018'),
+  (4, 1, 600, '배치 크기', '256', '384', '+0.016'),
+  (4, 2, 1560, '워커 수', '4', '8', '+0.009'),
+  (6, 1, 1380, '학습률', '2e-4', '1e-4', '+0.011');
 
 -- KQV benchmark: train jobs 1, 4, 6
 INSERT INTO job_kqv_benchmark (job_id, kqv_gain_pct, kqv_even_makespan_sec, kqv_opt_makespan_sec) VALUES
@@ -545,7 +545,7 @@ INSERT INTO job_kqv_benchmark (job_id, kqv_gain_pct, kqv_even_makespan_sec, kqv_
 
 -- reallocation: job 3 (done) donated node 4 to job 1 (done) mid-run
 INSERT INTO reallocation (donor_job_id, receiver_job_id, node_id, at_t_offset_sec, downtime_sec, resume_delay_sec) VALUES
-  (3, 1, 4, 20, 0, 5);
+  (3, 1, 4, 840, 0, 5);
 
 -- negotiation: job 1
 INSERT INTO job_negotiation (job_id, rounds, agreement_pct) VALUES
