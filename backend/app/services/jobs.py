@@ -506,7 +506,12 @@ def sweep_dependency(db: Session = Depends(get_db)) -> None:
     sweep_and_backfill(db)
 
 
-def list_jobs(db: Session, status: str | None = None, user_id: int | None = None) -> list[schemas.JobSummary]:
+def list_jobs(
+    db: Session,
+    status: str | None = None,
+    user_id: int | None = None,
+    include_fillers: bool = False,
+) -> list[schemas.JobSummary]:
     query = db.query(models.Job).options(
         selectinload(models.Job.model),
         selectinload(models.Job.dataset),
@@ -517,10 +522,12 @@ def list_jobs(db: Session, status: str | None = None, user_id: int | None = None
         query = query.filter(models.Job.status == status)
     if user_id is not None:
         query = query.filter(models.Job.user_id == user_id)
-    else:
+    elif not include_fillers:
         # no explicit user filter means "show everything" (CSP's job list) - demo
         # filler jobs are noise there, not something a real viewer asked to see.
         # An explicit ?user_id=<filler id> still works, this only affects the default.
+        # include_fillers=true opts back in (e.g. cluster detail's node-occupancy card,
+        # which needs the real job behind every active assignment, filler or not).
         filler_user = db.query(models.User).filter(models.User.name == FILLER_USER_NAME).first()
         if filler_user is not None:
             query = query.filter(models.Job.user_id != filler_user.id)

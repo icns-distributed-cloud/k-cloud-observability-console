@@ -12,10 +12,11 @@ router = APIRouter(tags=["jobs"])
 def list_jobs(
     status: str | None = None,
     user_id: int | None = None,
+    include_fillers: bool = False,
     db: Session = Depends(get_db),
     _: None = Depends(jobs_service.sweep_dependency),
 ) -> list[schemas.JobSummary]:
-    return jobs_service.list_jobs(db, status=status, user_id=user_id)
+    return jobs_service.list_jobs(db, status=status, user_id=user_id, include_fillers=include_fillers)
 
 
 @router.get("/jobs/{job_id}", response_model=schemas.JobDetail)
