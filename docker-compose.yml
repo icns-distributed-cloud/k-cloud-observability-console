@@ -40,6 +40,15 @@ services:
       - /app/.next
     depends_on:
       - backend
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "10000:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - frontend
+      - backend
 
 volumes:
   db_data:
