@@ -3,13 +3,28 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 
 from fastapi import Depends, HTTPException
-from sqlalchemy import or_
+from sqlalchemy import or_, text
 from sqlalchemy.orm import Session, selectinload
 
 from app import clock, models, schemas
 from app.database import get_db
 
 DURATION_SEC = {"train": 40, "infer": 15}
+
+# Arbitrary constant key for a Postgres advisory lock guarding every
+# read-then-write job/assignment state change (submit_job's immediate admit,
+# sweep_and_backfill's backfill/finish loops, filler creation, stop_job).
+# Without it, concurrent requests (polling from multiple tabs, two submits at
+# once, a double-clicked stop) can each read the same pre-commit snapshot and
+# double-admit the same job, double-book the same node, or double-log a
+# FINISH. Held for the rest of the transaction (pg_advisory_xact_lock),
+# released on commit/rollback - callers should acquire it before reading any
+# state the decision depends on.
+_ADMISSION_LOCK_KEY = 851203
+
+
+def _lock_admission(db: Session) -> None:
+    db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": _ADMISSION_LOCK_KEY})
 
 # Demo-only: keeps the scheduler timeline visibly busy at an unattended booth without
 # a human re-seeding between runs. Piggybacks on the sweep that already runs on every
@@ -21,6 +36,9 @@ DURATION_SEC = {"train": 40, "infer": 15}
 FILLER_USER_NAME = "csc-demo-filler"
 FILLER_EXCLUDED_TIER_IDS = {2, 4, 8}
 FILLER_TARGET_PER_TYPE = 3
+# randomized per filler job (via job.duration_sec) instead of the fixed DURATION_SEC,
+# so the scheduler timeline doesn't show every bar at an identical length
+FILLER_DURATION_RANGE_SEC = {"train": (25, 70), "infer": (8, 30)}
 
 # one metric-card template set per job.type, copied verbatim into job_metric_profile on submission
 METRIC_TEMPLATES: dict[str, list[dict]] = {
@@ -440,6 +458,7 @@ def _maintain_filler_jobs(db: Session, now: datetime) -> None:
                 priority_pref="time",
                 submitted_at=now,
                 selected_tier_id=tier.id,
+                duration_sec=random.randint(*FILLER_DURATION_RANGE_SEC[job_type]),
             )
             db.add(job)
             db.flush()
@@ -448,6 +467,7 @@ def _maintain_filler_jobs(db: Session, now: datetime) -> None:
 
 
 def sweep_and_backfill(db: Session) -> None:
+    _lock_admission(db)
     now = clock.now()
     _maintain_filler_jobs(db, now)
 
@@ -461,7 +481,14 @@ def sweep_and_backfill(db: Session) -> None:
     # not whenever this sweep happened to notice
     freed_at: dict[int, datetime] = {}
     for job in running_jobs:
-        deadline = job.started_at + timedelta(seconds=DURATION_SEC[job.type])
+        if job.type == "infer" and job.duration_sec is None:
+            # a real (non-filler) infer job - runs indefinitely, like a persistent
+            # serving workload, until stopped through a future explicit stop
+            # endpoint. Fillers always carry an explicit duration_sec, so they're
+            # unaffected and keep cycling normally.
+            continue
+        duration = job.duration_sec if job.duration_sec is not None else DURATION_SEC[job.type]
+        deadline = job.started_at + timedelta(seconds=duration)
         if deadline <= now:
             job.status = "done"
             job.finished_at = deadline
@@ -506,7 +533,12 @@ def sweep_dependency(db: Session = Depends(get_db)) -> None:
     sweep_and_backfill(db)
 
 
-def list_jobs(db: Session, status: str | None = None, user_id: int | None = None) -> list[schemas.JobSummary]:
+def list_jobs(
+    db: Session,
+    status: str | None = None,
+    user_id: int | None = None,
+    include_fillers: bool = False,
+) -> list[schemas.JobSummary]:
     query = db.query(models.Job).options(
         selectinload(models.Job.model),
         selectinload(models.Job.dataset),
@@ -517,10 +549,12 @@ def list_jobs(db: Session, status: str | None = None, user_id: int | None = None
         query = query.filter(models.Job.status == status)
     if user_id is not None:
         query = query.filter(models.Job.user_id == user_id)
-    else:
+    elif not include_fillers:
         # no explicit user filter means "show everything" (CSP's job list) - demo
         # filler jobs are noise there, not something a real viewer asked to see.
         # An explicit ?user_id=<filler id> still works, this only affects the default.
+        # include_fillers=true opts back in (e.g. cluster detail's node-occupancy card,
+        # which needs the real job behind every active assignment, filler or not).
         filler_user = db.query(models.User).filter(models.User.name == FILLER_USER_NAME).first()
         if filler_user is not None:
             query = query.filter(models.Job.user_id != filler_user.id)
@@ -738,6 +772,7 @@ def submit_job(
     _seed_optimization_data(db, job)
     _log_event(db, type="ARRIVAL", now=now, job_id=job.id)
 
+    _lock_admission(db)
     live_cluster = _load_live_cluster(db)
     nodes = None
     if live_cluster is not None:
@@ -748,6 +783,41 @@ def submit_job(
 
     if nodes is None:
         _log_event(db, type="QUEUE", now=now, job_id=job.id)
+
+    db.commit()
+    db.refresh(job)
+    return _to_job_summary(job)
+
+
+def stop_job(db: Session, job_id: int) -> schemas.JobSummary | None:
+    _lock_admission(db)
+    job = (
+        db.query(models.Job)
+        .options(selectinload(models.Job.assignments).selectinload(models.Assignment.node))
+        .filter(models.Job.id == job_id)
+        .first()
+    )
+    if job is None:
+        return None
+    if job.type != "infer":
+        raise HTTPException(status_code=400, detail="only infer jobs can be stopped")
+    if job.status != "running":
+        raise HTTPException(status_code=400, detail="job is not running")
+
+    now = clock.now()
+    job.status = "done"
+    job.finished_at = now
+    for assignment in job.assignments:
+        if assignment.to_t is None:
+            assignment.to_t = now
+            _log_event(
+                db,
+                type="FINISH",
+                now=now,
+                job_id=job.id,
+                node_id=assignment.node_id,
+                cluster_id=assignment.node.cluster_id,
+            )
 
     db.commit()
     db.refresh(job)

@@ -12,10 +12,11 @@ router = APIRouter(tags=["jobs"])
 def list_jobs(
     status: str | None = None,
     user_id: int | None = None,
+    include_fillers: bool = False,
     db: Session = Depends(get_db),
     _: None = Depends(jobs_service.sweep_dependency),
 ) -> list[schemas.JobSummary]:
-    return jobs_service.list_jobs(db, status=status, user_id=user_id)
+    return jobs_service.list_jobs(db, status=status, user_id=user_id, include_fillers=include_fillers)
 
 
 @router.get("/jobs/{job_id}", response_model=schemas.JobDetail)
@@ -106,3 +107,13 @@ def submit_infer_job(
         tier_id=req.tier_id,
         user_id=req.user_id,
     )
+
+
+@router.post("/jobs/{job_id}/stop", response_model=schemas.JobSummary)
+def stop_job(
+    job_id: int, db: Session = Depends(get_db), _: None = Depends(jobs_service.sweep_dependency)
+) -> schemas.JobSummary:
+    result = jobs_service.stop_job(db, job_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="job not found")
+    return result

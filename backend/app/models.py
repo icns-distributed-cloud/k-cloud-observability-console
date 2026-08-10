@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import ForeignKey, JSON
+from sqlalchemy import ForeignKey, Index, JSON, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -231,6 +231,14 @@ class Job(Base):
     finished_at: Mapped[Optional[datetime]]
     dataset_id: Mapped[Optional[int]] = mapped_column(ForeignKey("dataset.id"))
     selected_tier_id: Mapped[Optional[int]] = mapped_column(ForeignKey("resource_tier.id"))
+    # overrides DURATION_SEC[type] for this job's run length. Only demo-filler jobs
+    # set this (so filler bars vary in length instead of every one looking
+    # identical) - NULL means "real submission". For type='train' that still falls
+    # back to the fixed DURATION_SEC['train'] (frontend's 40s timeline contract).
+    # For type='infer' it instead means "runs indefinitely" - sweep_and_backfill
+    # never auto-finishes a real infer job, matching how inference serving doesn't
+    # naturally end; only a future explicit stop endpoint will.
+    duration_sec: Mapped[Optional[int]]
 
     model: Mapped["Model"] = relationship(back_populates="jobs")
     user: Mapped["User"] = relationship(back_populates="jobs")
@@ -258,6 +266,18 @@ class Assignment(Base):
 
     job: Mapped["Job"] = relationship(back_populates="assignments")
     node: Mapped["Node"] = relationship(back_populates="assignments")
+
+    # a node can only have one active (to_t IS NULL) assignment at a time - defense in
+    # depth alongside the admission advisory lock, in case some future code path admits
+    # without going through it
+    __table_args__ = (
+        Index(
+            "ix_assignment_active_node",
+            "node_id",
+            unique=True,
+            postgresql_where=text("to_t IS NULL"),
+        ),
+    )
 
 
 class Event(Base):
