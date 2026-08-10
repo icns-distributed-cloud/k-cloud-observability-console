@@ -103,12 +103,13 @@ export default function JobDetailView({ jobId, breadcrumbPrefix }: JobDetailView
 
     return (
         <main style={{ padding: "24px 28px" }}>
-            <Breadcrumb segments={[...breadcrumbPrefix, { label: job.model_name }]} />
-
+            <Breadcrumb segments={[...breadcrumbPrefix, { label: `J-${job.id}` }]} />
+            
             <div style={{ margin: "16px 0 20px" }}>
-                <div style={{ fontSize: 20, fontWeight: 700 }}>{job.model_name}</div>
+                <div style={{ fontSize: 20, fontWeight: 700 }}>J-{job.id}</div>
                 <div style={{ fontSize: 12.5, color: "var(--sub)", marginTop: 4 }}>
-                    {TYPE_LABELS[job.type] ?? job.type} · {JOB_STATUS_LABELS[job.status] ?? job.status}
+                    {job.model_name} · {TYPE_LABELS[job.type] ?? job.type} ·{" "}
+                    {JOB_STATUS_LABELS[job.status] ?? job.status}
                 </div>
             </div>
 

@@ -1,4 +1,4 @@
-import type { JobMetricProfileItem, JobSummary, JobType } from '@/app/types'
+import type { JobMetricProfileItem, JobSummary, JobType, JobStatus } from '@/app/types'
 
 /**
  * 작업 타입별 가정 소요 시간(초).
@@ -7,6 +7,13 @@ import type { JobMetricProfileItem, JobSummary, JobType } from '@/app/types'
 export const DURATION_SEC: Record<JobType, number> = {
     train: 40,
     infer: 15,
+}
+
+/** 실제 추론 작업은 서빙처럼 계속 돈다 (백엔드가 자동 종료하지 않음).
+ *  진행률 개념이 없으므로 화면에서 막대 대신 "지속 실행"으로 표시한다.
+ *  데모 필러는 duration_sec을 갖고 순환하지만 목록에 안 나오므로 여기선 무관. */
+export function isContinuous(job: { type: JobType; status: JobStatus }): boolean {
+    return job.type === 'infer' && job.status === 'running'
 }
 
 /**
