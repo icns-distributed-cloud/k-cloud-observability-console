@@ -19,6 +19,28 @@ def _metric_value(profiles: list, metric_type: str) -> float:
     return 0.0
 
 
+# 실제 점유 노드 비율만큼 decorative sine 값을 끌어올린다 (풀 점유 시 +25%p).
+# 상시 배정이 없는 클러스터는 ratio가 항상 0이라 기존 idle 동작 그대로 유지된다.
+_OCCUPANCY_UTIL_BOOST = 25.0
+
+
+def _occupancy_ratio(nodes: list, now) -> float:
+    if not nodes:
+        return 0.0
+    occupied = sum(
+        1
+        for node in nodes
+        if any(a.from_t <= now and (a.to_t is None or a.to_t > now) for a in node.assignments)
+    )
+    return occupied / len(nodes)
+
+
+def _cluster_util(cluster_profiles: list, nodes: list, now) -> float:
+    decorative = _metric_value(cluster_profiles, "utilization")
+    ratio = _occupancy_ratio(nodes, now)
+    return min(100.0, decorative + ratio * _OCCUPANCY_UTIL_BOOST)
+
+
 def _group_accelerators(accelerators: list) -> list[schemas.AcceleratorGroup]:
     groups: dict[tuple[int, str, int], list] = {}
     for accel in accelerators:
@@ -49,9 +71,14 @@ def list_providers(db: Session) -> list[schemas.ProviderTree]:
             .selectinload(models.Region.clusters)
             .selectinload(models.Cluster.nodes)
             .selectinload(models.Node.alerts),
+            selectinload(models.Provider.regions)
+            .selectinload(models.Region.clusters)
+            .selectinload(models.Cluster.nodes)
+            .selectinload(models.Node.assignments),
         )
         .all()
     )
+    now = clock.now()
     return [
         schemas.ProviderTree(
             id=provider.id,
@@ -71,7 +98,7 @@ def list_providers(db: Session) -> list[schemas.ProviderTree]:
                             status=cluster.status,
                             is_live=cluster.is_live,
                             cost_per_hour=cluster.cost_per_hour,
-                            avg_util=_metric_value(cluster.metric_profiles, "utilization"),
+                            avg_util=_cluster_util(cluster.metric_profiles, cluster.nodes, now),
                             node_count=len(cluster.nodes),
                             has_alert=any(node.alerts for node in cluster.nodes),
                         )
@@ -165,7 +192,7 @@ def get_cluster_detail(db: Session, cluster_id: int) -> schemas.ClusterDetail | 
         status=cluster.status,
         is_live=cluster.is_live,
         cost_per_hour=cluster.cost_per_hour,
-        avg_util=_metric_value(cluster.metric_profiles, "utilization"),
+        avg_util=_cluster_util(cluster.metric_profiles, cluster.nodes, now),
         queued_count=queued_count,
         running_count=len(running_job_ids),
         done_count=len(done_job_ids),

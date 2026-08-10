@@ -1,16 +1,16 @@
--- Local test seed data. Small, hand-picked rows covering every table
--- so backend/frontend can each test against a known dataset locally.
+-- Full seed data for the current schema (see backend/app/models.py). Rebuilt from
+-- scratch to reflect every table as of this point (accelerator_model, node.purpose,
+-- user, dataset, resource_tier/resource_tier_requirement, job without
+-- precision/sla_target). Meant for real deployment, not just local smoke testing.
 --
 -- Usage (from repo root, containers must be running and migrated):
 --   docker compose exec -T db psql -U kcloud -d kcloud < backend/seed.sql
 --
 -- Safe to re-run any time - it wipes and reloads all seed tables first.
 --
--- The app computes "now" in KST (see backend/app/clock.py), but this
--- session defaults to the container's UTC timezone. Switch it so every
--- now() below lands on the same wall-clock time the app would use -
--- otherwise seeded "running" jobs look 9 hours stale to the sweep logic
--- and get marked done immediately.
+-- The app computes "now" in KST (see backend/app/clock.py), but this session
+-- defaults to the container's UTC timezone. Switch it so every now() below lands on
+-- the same wall-clock time the app would use - otherwise timestamps look off by 9h.
 SET timezone = 'Asia/Seoul';
 
 TRUNCATE
@@ -25,27 +25,18 @@ TRUNCATE
   resource_tier, resource_tier_requirement
 RESTART IDENTITY CASCADE;
 
--- ---------- infra ----------
--- provider 1 / region 1 / cluster 1,2 / node 1,2 / accelerator 1,2,3 are kept exactly as
--- they were originally seeded (job/assignment/event data below references these IDs
--- directly), everything else here is new demo breadth added on top (map now shows
--- 3 providers spread over 9 regions - 4 domestic, 5 overseas - and 10 clusters total).
+-- ============================================================
+-- infra: provider > region > cluster > node > accelerator
+-- ============================================================
 INSERT INTO provider (name, kind) VALUES
   ('온프레미스', 'onprem'),
   ('AWS', 'cloud'),
-  ('GCP', 'cloud');
-
--- id 4: purely for extra decorative world-map dots below (see world-map-only regions
--- block further down) - not clicked into during the demo, so kept minimal.
-INSERT INTO provider (name, kind) VALUES
+  ('GCP', 'cloud'),
   ('Azure', 'cloud');
 
--- latitude/longitude: this is what places the pin on the map (see ClusterMap.tsx /
--- mapData.ts). lat 33-39 & lon 124-132 -> rendered as a domestic pin on the Korea-mode
--- map at its real coordinates; anything outside that box -> rendered as its own dot on
--- the world map at its real coordinates (all domestic regions get bundled into a single
--- "대한민국" hub marker in world view). So: real KR coords for onprem sites, real
--- datacenter-region coords for cloud regions.
+-- latitude/longitude place the pin on the CSP map: lat 33-39 & lon 124-132 -> domestic
+-- pin at its real coordinates on the Korea-mode map; anything outside that box -> its
+-- own dot on the world map (domestic regions bundle into one "대한민국" hub there).
 INSERT INTO region (provider_id, name, location, latitude, longitude) VALUES
   (1, '서울 본원 DC', '서울 동대문구', 37.594, 127.052),
   (1, '수원 국제캠 DC', '경기 수원시 영통구', 37.2436, 127.0807),
@@ -55,25 +46,14 @@ INSERT INTO region (provider_id, name, location, latitude, longitude) VALUES
   (2, 'ap-northeast-1', 'Tokyo, JP', 35.68, 139.65),
   (2, 'eu-west-1', 'Dublin, IE', 53.41, -8.24),
   (3, 'us-central1', 'Iowa, US', 41.26, -95.86),
-  (3, 'asia-southeast1', 'Singapore, SG', 1.35, 103.82);
+  (3, 'asia-southeast1', 'Singapore, SG', 1.35, 103.82),
+  (4, 'eastasia', 'Hong Kong, HK', 22.32, 114.17);
 
--- world-map-only regions: dots on the world map, never drilled into during the demo,
--- so each gets just enough (1 cluster / 1 node / 1 accelerator) to render cleanly in
--- both the map and the "자원 계층" side panel without looking empty.
-INSERT INTO region (provider_id, name, location, latitude, longitude) VALUES
-  (2, 'eu-central-1', 'Frankfurt, DE', 50.11, 8.68),
-  (2, 'ap-south-1', 'Mumbai, IN', 19.08, 72.88),
-  (2, 'sa-east-1', 'Sao Paulo, BR', -23.55, -46.63),
-  (2, 'af-south-1', 'Cape Town, ZA', -33.92, 18.42),
-  (3, 'europe-west4', 'Eemshaven, NL', 53.44, 6.84),
-  (3, 'australia-southeast1', 'Sydney, AU', -33.87, 151.21),
-  (4, 'eastasia', 'Hong Kong, HK', 22.32, 114.17),
-  (4, 'uksouth', 'London, UK', 51.51, -0.13),
-  (4, 'canadacentral', 'Toronto, CA', 43.65, -79.38);
-
+-- cluster 2 (khu-suwon-01) is the only is_live=true cluster - the sole target of real
+-- job admission (services/jobs.py _load_live_cluster). Everything else is CSP-map
+-- decoration with no effect on scheduling.
 INSERT INTO cluster (region_id, name, status, is_live, cost_per_hour) VALUES
   (1, 'khu-cluster-01', 'active', false, 0),
-  (1, 'khu-cluster-02', 'standby', false, 0),
   (2, 'khu-suwon-01', 'active', true, 0),
   (3, 'khu-daejeon-01', 'standby', false, 0),
   (4, 'khu-busan-01', 'active', false, 0),
@@ -81,340 +61,251 @@ INSERT INTO cluster (region_id, name, status, is_live, cost_per_hour) VALUES
   (6, 'aws-apne1-a', 'active', false, 98.50),
   (7, 'aws-euw1-a', 'standby', false, 0),
   (8, 'gcp-usc1-a', 'active', false, 110.00),
-  (9, 'gcp-sea1-a', 'active', false, 105.00);
+  (9, 'gcp-sea1-a', 'active', false, 105.00),
+  (10, 'azure-eas-a', 'active', false, 99.00);
 
-INSERT INTO cluster (region_id, name, status, is_live, cost_per_hour) VALUES
-  (10, 'aws-euc1-a', 'active', false, 115.00),
-  (11, 'aws-aps1-a', 'active', false, 92.00),
-  (12, 'aws-sae1-a', 'standby', false, 0),
-  (13, 'aws-afs1-a', 'active', false, 88.00),
-  (14, 'gcp-euw4-a', 'active', false, 108.00),
-  (15, 'gcp-ause1-a', 'active', false, 120.00),
-  (16, 'azure-eas-a', 'active', false, 99.00),
-  (17, 'azure-uks-a', 'standby', false, 0),
-  (18, 'azure-cac-a', 'active', false, 101.00);
-
--- purpose only matters for admission on the live cluster (khu-suwon-01, id 3) - every
--- other node just gets 'train' as an arbitrary default since nothing reads it there.
+-- node.purpose (train/infer) only matters functionally on the live cluster (id 2) -
+-- it's what admission filters candidate nodes by. Everywhere else it's just realistic
+-- variety for the CSP infra pages. Live cluster pool: node ids 4-14, split so every
+-- resource_tier below has real matching inventory:
+--   train: A100 x3 (4/5/7), H100 x2 (10/11), A6000 x1 (12), NPU/RNGD x1 (6)
+--   infer: NPU/RNGD x1 (8), PIM/AiM x1 (9), B200 x2 (13/14)
 INSERT INTO node (cluster_id, name, purpose) VALUES
   (1, 'srv-01', 'train'),
-  (2, 'srv-02', 'train'),
-  (3, 'suwon-srv-01', 'train'),
-  (3, 'suwon-srv-02', 'train'),
-  (4, 'daejeon-srv-01', 'train'),
-  (4, 'daejeon-srv-02', 'train'),
-  (5, 'busan-srv-01', 'train'),
-  (5, 'busan-srv-02', 'train'),
-  (6, 'use1-node-a', 'train'),
-  (6, 'use1-node-b', 'train'),
-  (7, 'apne1-node-a', 'train'),
-  (7, 'apne1-node-b', 'train'),
-  (8, 'euw1-node-a', 'train'),
-  (8, 'euw1-node-b', 'train'),
-  (9, 'usc1-node-a', 'train'),
-  (9, 'usc1-node-b', 'train'),
-  (10, 'sea1-node-a', 'train'),
-  (10, 'sea1-node-b', 'train');
-
-INSERT INTO node (cluster_id, name, purpose) VALUES
-  (11, 'euc1-node-a', 'train'),
-  (12, 'aps1-node-a', 'train'),
-  (13, 'sae1-node-a', 'train'),
-  (14, 'afs1-node-a', 'train'),
-  (15, 'euw4-node-a', 'train'),
-  (16, 'ause1-node-a', 'train'),
-  (17, 'eas-node-a', 'train'),
-  (18, 'uks-node-a', 'train'),
-  (19, 'cac-node-a', 'train');
-
--- live cluster (khu-suwon-01) node pool, split by purpose. Model diversity added so
--- resource_tier_requirement.accelerator_model_id has multiple real options to match
--- against: train = A100 x3 (01/02/04), H100 x2 (07/08), A6000 x1 (09), NPU/RNGD x1 (03)
--- = 7 nodes; infer = NPU/RNGD x1 (05), PIM/AiM x1 (06), B200 x2 (10/11) = 4 nodes
-INSERT INTO node (cluster_id, name, purpose) VALUES
-  (3, 'suwon-srv-03', 'train'),
-  (3, 'suwon-srv-04', 'train'),
-  (3, 'suwon-srv-05', 'infer'),
-  (3, 'suwon-srv-06', 'infer'),
-  (3, 'suwon-srv-07', 'train'),
-  (3, 'suwon-srv-08', 'train'),
-  (3, 'suwon-srv-09', 'train'),
-  (3, 'suwon-srv-10', 'infer'),
-  (3, 'suwon-srv-11', 'infer');
+  (1, 'srv-02', 'infer'),
+  (1, 'srv-03', 'train'),
+  (2, 'suwon-srv-01', 'train'),
+  (2, 'suwon-srv-02', 'train'),
+  (2, 'suwon-srv-03', 'train'),
+  (2, 'suwon-srv-04', 'train'),
+  (2, 'suwon-srv-05', 'infer'),
+  (2, 'suwon-srv-06', 'infer'),
+  (2, 'suwon-srv-07', 'train'),
+  (2, 'suwon-srv-08', 'train'),
+  (2, 'suwon-srv-09', 'train'),
+  (2, 'suwon-srv-10', 'infer'),
+  (2, 'suwon-srv-11', 'infer'),
+  (3, 'daejeon-srv-01', 'train'),
+  (3, 'daejeon-srv-02', 'infer'),
+  (3, 'daejeon-srv-03', 'train'),
+  (4, 'busan-srv-01', 'train'),
+  (4, 'busan-srv-02', 'infer'),
+  (4, 'busan-srv-03', 'train'),
+  (5, 'use1-node-a', 'train'),
+  (5, 'use1-node-b', 'infer'),
+  (5, 'use1-node-c', 'train'),
+  (6, 'apne1-node-a', 'train'),
+  (6, 'apne1-node-b', 'infer'),
+  (6, 'apne1-node-c', 'train'),
+  (7, 'euw1-node-a', 'train'),
+  (7, 'euw1-node-b', 'infer'),
+  (7, 'euw1-node-c', 'train'),
+  (8, 'usc1-node-a', 'train'),
+  (8, 'usc1-node-b', 'infer'),
+  (8, 'usc1-node-c', 'train'),
+  (9, 'sea1-node-a', 'train'),
+  (9, 'sea1-node-b', 'infer'),
+  (9, 'sea1-node-c', 'train'),
+  (10, 'eas-node-a', 'train'),
+  (10, 'eas-node-b', 'infer'),
+  (10, 'eas-node-c', 'train');
 
 -- id 1=NVIDIA A100, 2=NVIDIA H100, 3=Furiosa RNGD, 4=SK hynix AiM, 5=NVIDIA A6000,
--- 6=NVIDIA B200. accelerator.accelerator_model_id and resource_tier_requirement.
--- accelerator_model_id both reference this table by id now, not by string, so there's
--- no risk of the two sides spelling a model differently.
+-- 6=NVIDIA B200, 7=NVIDIA L40S. accelerator.accelerator_model_id and
+-- resource_tier_requirement.accelerator_model_id both reference this table by id, so
+-- there's no risk of the two sides spelling a model name differently.
 INSERT INTO accelerator_model (name) VALUES
   ('NVIDIA A100'),
   ('NVIDIA H100'),
   ('Furiosa RNGD'),
   ('SK hynix AiM'),
   ('NVIDIA A6000'),
-  ('NVIDIA B200');
+  ('NVIDIA B200'),
+  ('NVIDIA L40S');
 
+-- live cluster (node ids 4-14) - exact composition resource_tier_requirement depends on.
 INSERT INTO accelerator (node_id, kind, accelerator_model_id, tflops, memory_gb, memory_type, tdp_w) VALUES
-  (1, 'GPU', 1, 312, 80, 'HBM2e', 400),
-  (1, 'GPU', 1, 312, 80, 'HBM2e', 400),
-  (2, 'GPU', 1, 312, 80, 'HBM2e', 400),
-  (3, 'GPU', 1, 312, 80, 'HBM2e', 400),
-  (3, 'GPU', 1, 312, 80, 'HBM2e', 400),
   (4, 'GPU', 1, 312, 80, 'HBM2e', 400),
-  (5, 'NPU', 3, 256, 48, 'GDDR6', 180),
-  (6, 'GPU', 1, 312, 80, 'HBM2e', 400),
-  (7, 'GPU', 2, 989, 80, 'HBM3', 700),
-  (7, 'GPU', 2, 989, 80, 'HBM3', 700),
-  (8, 'GPU', 2, 989, 80, 'HBM3', 700),
-  (9, 'GPU', 1, 312, 80, 'HBM2e', 400),
-  (9, 'GPU', 1, 312, 80, 'HBM2e', 400),
-  (9, 'GPU', 1, 312, 80, 'HBM2e', 400),
-  (9, 'GPU', 1, 312, 80, 'HBM2e', 400),
-  (10, 'GPU', 1, 312, 80, 'HBM2e', 400),
-  (10, 'GPU', 1, 312, 80, 'HBM2e', 400),
-  (10, 'GPU', 1, 312, 80, 'HBM2e', 400),
-  (10, 'GPU', 1, 312, 80, 'HBM2e', 400),
-  (11, 'GPU', 1, 312, 80, 'HBM2e', 400),
-  (11, 'GPU', 1, 312, 80, 'HBM2e', 400),
-  (12, 'GPU', 1, 312, 80, 'HBM2e', 400),
-  (12, 'GPU', 1, 312, 80, 'HBM2e', 400),
-  (13, 'GPU', 1, 312, 80, 'HBM2e', 400),
-  (13, 'GPU', 1, 312, 80, 'HBM2e', 400),
-  (14, 'GPU', 1, 312, 80, 'HBM2e', 400),
-  (15, 'GPU', 2, 989, 80, 'HBM3', 700),
-  (15, 'GPU', 2, 989, 80, 'HBM3', 700),
-  (15, 'GPU', 2, 989, 80, 'HBM3', 700),
-  (15, 'GPU', 2, 989, 80, 'HBM3', 700),
-  (16, 'GPU', 2, 989, 80, 'HBM3', 700),
-  (16, 'GPU', 2, 989, 80, 'HBM3', 700),
-  (17, 'GPU', 1, 312, 80, 'HBM2e', 400),
-  (17, 'GPU', 1, 312, 80, 'HBM2e', 400),
-  (18, 'PIM', 4, 128, 32, 'HBM-PIM', 150);
+  (4, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (5, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (6, 'NPU', 3, 256, 48, 'GDDR6', 180),
+  (7, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (8, 'NPU', 3, 256, 48, 'GDDR6', 180),
+  (9, 'PIM', 4, 128, 32, 'HBM-PIM', 150),
+  (10, 'GPU', 2, 989, 80, 'HBM3', 700),
+  (11, 'GPU', 2, 989, 80, 'HBM3', 700),
+  (12, 'GPU', 5, 155, 48, 'GDDR6', 300),
+  (13, 'GPU', 6, 2250, 192, 'HBM3e', 1000),
+  (14, 'GPU', 6, 2250, 192, 'HBM3e', 1000);
 
+-- everywhere else: decorative, one accelerator per node, cycled across models for
+-- visual variety on the CSP infra pages. train-purpose nodes get GPU-family models,
+-- infer-purpose nodes get NPU/PIM/B200 for a bit of kind diversity.
 INSERT INTO accelerator (node_id, kind, accelerator_model_id, tflops, memory_gb, memory_type, tdp_w) VALUES
-  (19, 'GPU', 1, 312, 80, 'HBM2e', 400),
-  (20, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (1, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (3, 'GPU', 2, 989, 80, 'HBM3', 700),
+  (15, 'GPU', 7, 733, 48, 'GDDR6', 350),
+  (17, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (18, 'GPU', 2, 989, 80, 'HBM3', 700),
+  (20, 'GPU', 7, 733, 48, 'GDDR6', 350),
   (21, 'GPU', 1, 312, 80, 'HBM2e', 400),
-  (22, 'GPU', 1, 312, 80, 'HBM2e', 400),
-  (23, 'GPU', 1, 312, 80, 'HBM2e', 400),
-  (24, 'GPU', 1, 312, 80, 'HBM2e', 400),
-  (25, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (23, 'GPU', 2, 989, 80, 'HBM3', 700),
+  (24, 'GPU', 7, 733, 48, 'GDDR6', 350),
   (26, 'GPU', 1, 312, 80, 'HBM2e', 400),
-  (27, 'GPU', 1, 312, 80, 'HBM2e', 400);
-
-INSERT INTO accelerator (node_id, kind, accelerator_model_id, tflops, memory_gb, memory_type, tdp_w) VALUES
-  (28, 'NPU', 3, 256, 48, 'GDDR6', 180),
-  (29, 'GPU', 1, 312, 80, 'HBM2e', 400),
-  (30, 'NPU', 3, 256, 48, 'GDDR6', 180),
-  (31, 'PIM', 4, 128, 32, 'HBM-PIM', 150),
+  (27, 'GPU', 2, 989, 80, 'HBM3', 700),
+  (29, 'GPU', 7, 733, 48, 'GDDR6', 350),
+  (30, 'GPU', 1, 312, 80, 'HBM2e', 400),
   (32, 'GPU', 2, 989, 80, 'HBM3', 700),
-  (33, 'GPU', 2, 989, 80, 'HBM3', 700),
-  (34, 'GPU', 5, 155, 48, 'GDDR6', 300),
-  (35, 'GPU', 6, 2250, 192, 'HBM3e', 1000),
-  (36, 'GPU', 6, 2250, 192, 'HBM3e', 1000);
+  (33, 'GPU', 7, 733, 48, 'GDDR6', 350),
+  (35, 'GPU', 1, 312, 80, 'HBM2e', 400),
+  (36, 'GPU', 2, 989, 80, 'HBM3', 700),
+  (38, 'GPU', 7, 733, 48, 'GDDR6', 350),
+  (2, 'NPU', 3, 256, 48, 'GDDR6', 180),
+  (16, 'PIM', 4, 128, 32, 'HBM-PIM', 150),
+  (19, 'GPU', 6, 2250, 192, 'HBM3e', 1000),
+  (22, 'NPU', 3, 256, 48, 'GDDR6', 180),
+  (25, 'PIM', 4, 128, 32, 'HBM-PIM', 150),
+  (28, 'GPU', 6, 2250, 192, 'HBM3e', 1000),
+  (31, 'NPU', 3, 256, 48, 'GDDR6', 180),
+  (34, 'PIM', 4, 128, 32, 'HBM-PIM', 150),
+  (37, 'GPU', 6, 2250, 192, 'HBM3e', 1000);
 
--- srv-01 (node 1) also gets an NPU and a PIM accelerator, on top of its 2x A100 -
--- nothing in the schema or admission logic requires a node to be single-kind
--- (_node_matches_requirement/_group_accelerators both iterate per-accelerator, not
--- per-node), this combination just never came up before. Appended here (not inlined
--- next to node 1's other accelerators above) so it doesn't renumber every accelerator
--- id that follows. Node 1 isn't on the live cluster, so this has no effect on tier
--- admission - purely to see how the frontend renders a mixed-kind node.
-INSERT INTO accelerator (node_id, kind, accelerator_model_id, tflops, memory_gb, memory_type, tdp_w) VALUES
-  (1, 'NPU', 3, 256, 48, 'GDDR6', 180),
-  (1, 'PIM', 4, 128, 32, 'HBM-PIM', 150);
-
--- All metric_profile tables render as: value(t) = baseline + amplitude * sin(2*pi*t / period_sec)
--- t = current unix epoch seconds (matches app/services/infra.py's _evaluate, which uses
--- time.time() - not job-relative, not wall-clock-of-day; just raw epoch seconds).
---
--- Scale convention: whenever unit='pct', baseline/amplitude are on a 0-100 scale
--- (same convention as 'sla' below), never 0-1. This applies to every utilization-style
--- metric_type (utilization, util, cpu, mem) so the frontend never has to guess whether
--- to multiply by 100 - only unit tells you the scale, and pct always means 0-100.
--- Non-pct units (kW, W, C) are already on their natural absolute scale, no ambiguity there.
-
--- cluster_metric_profile: all 3 documented metric_type values (power, utilization, sla), all 10 clusters
+-- ------------------------------------------------------------
+-- metric profiles: value(t) = baseline + amplitude * sin(2*pi*t / period_sec)
+-- t = current unix epoch seconds (app/services/infra.py _evaluate uses time.time() -
+-- not job-relative, not wall-clock-of-day). Scale convention: unit='pct' always means
+-- 0-100 (utilization/util/cpu/mem/sla alike), never 0-1. Non-pct units (kW, W, C) are
+-- already on their natural absolute scale.
+-- ------------------------------------------------------------
+-- cluster 2 (khu-suwon-01) is the only is_live cluster - same "real occasional load"
+-- vs "永idle" reasoning as the node-level comment below applies here too.
 INSERT INTO cluster_metric_profile (cluster_id, metric_type, baseline, amplitude, period_sec, unit) VALUES
-  (1, 'utilization', 60, 10, 60, 'pct'),
-  (1, 'power', 65, 8, 90, 'kW'),
-  (1, 'sla', 99.0, 0.5, 120, 'pct'),
-  (2, 'utilization', 45, 12, 55, 'pct'),
-  (2, 'power', 50, 6, 80, 'kW'),
-  (2, 'sla', 98.5, 0.4, 110, 'pct'),
-  (3, 'utilization', 58, 9, 60, 'pct'),
-  (3, 'power', 60, 7, 90, 'kW'),
-  (3, 'sla', 99.2, 0.3, 120, 'pct'),
-  (4, 'utilization', 50, 11, 55, 'pct'),
-  (4, 'power', 55, 8, 85, 'kW'),
-  (4, 'sla', 98.8, 0.5, 115, 'pct'),
-  (5, 'utilization', 65, 10, 60, 'pct'),
-  (5, 'power', 70, 9, 90, 'kW'),
-  (5, 'sla', 99.0, 0.4, 120, 'pct'),
-  (6, 'utilization', 72, 8, 50, 'pct'),
-  (6, 'power', 110, 15, 70, 'kW'),
-  (6, 'sla', 99.5, 0.2, 130, 'pct'),
-  (7, 'utilization', 68, 10, 55, 'pct'),
-  (7, 'power', 95, 12, 75, 'kW'),
-  (7, 'sla', 99.1, 0.3, 125, 'pct'),
-  (8, 'utilization', 40, 10, 60, 'pct'),
-  (8, 'power', 60, 8, 90, 'kW'),
-  (8, 'sla', 98.0, 0.6, 110, 'pct'),
-  (9, 'utilization', 75, 9, 50, 'pct'),
-  (9, 'power', 120, 14, 65, 'kW'),
-  (9, 'sla', 99.4, 0.25, 130, 'pct'),
-  (10, 'utilization', 63, 11, 55, 'pct'),
-  (10, 'power', 88, 10, 80, 'kW'),
-  (10, 'sla', 99.0, 0.35, 120, 'pct');
+  (1, 'utilization', 10, 3, 60, 'pct'), (1, 'power', 12, 3, 90, 'kW'), (1, 'sla', 99.0, 0.5, 120, 'pct'),
+  (2, 'utilization', 65, 10, 60, 'pct'), (2, 'power', 70, 9, 90, 'kW'), (2, 'sla', 99.0, 0.4, 120, 'pct'),
+  (3, 'utilization', 9, 3, 60, 'pct'), (3, 'power', 10, 3, 90, 'kW'), (3, 'sla', 99.2, 0.3, 120, 'pct'),
+  (4, 'utilization', 8, 3, 55, 'pct'), (4, 'power', 9, 2, 85, 'kW'), (4, 'sla', 98.8, 0.5, 115, 'pct'),
+  (5, 'utilization', 12, 3, 50, 'pct'), (5, 'power', 18, 4, 70, 'kW'), (5, 'sla', 99.5, 0.2, 130, 'pct'),
+  (6, 'utilization', 11, 3, 55, 'pct'), (6, 'power', 15, 3, 75, 'kW'), (6, 'sla', 99.1, 0.3, 125, 'pct'),
+  (7, 'utilization', 7, 2, 60, 'pct'), (7, 'power', 9, 2, 90, 'kW'), (7, 'sla', 98.0, 0.6, 110, 'pct'),
+  (8, 'utilization', 13, 3, 50, 'pct'), (8, 'power', 19, 4, 65, 'kW'), (8, 'sla', 99.4, 0.25, 130, 'pct'),
+  (9, 'utilization', 10, 3, 55, 'pct'), (9, 'power', 14, 3, 80, 'kW'), (9, 'sla', 99.0, 0.35, 120, 'pct'),
+  (10, 'utilization', 9, 3, 55, 'pct'), (10, 'power', 11, 2, 85, 'kW'), (10, 'sla', 98.9, 0.4, 118, 'pct');
 
--- world-map-only clusters (11-19): utilization only, no power/sla - not shown anywhere
--- except the avg_util% in the side tree panel
-INSERT INTO cluster_metric_profile (cluster_id, metric_type, baseline, amplitude, period_sec, unit) VALUES
-  (11, 'utilization', 54, 10, 60, 'pct'),
-  (12, 'utilization', 61, 9, 55, 'pct'),
-  (13, 'utilization', 33, 8, 65, 'pct'),
-  (14, 'utilization', 57, 11, 55, 'pct'),
-  (15, 'utilization', 49, 10, 60, 'pct'),
-  (16, 'utilization', 66, 12, 50, 'pct'),
-  (17, 'utilization', 70, 9, 45, 'pct'),
-  (18, 'utilization', 28, 7, 65, 'pct'),
-  (19, 'utilization', 52, 10, 55, 'pct');
-
--- node_metric_profile: node 1,2 keep their original full coverage; every new node gets util+temp
+-- nodes 4-14 (live cluster) see real occasional load (demo submissions + the
+-- auto-filler mechanism), so a moderate 30-60% util baseline is plausible. Every
+-- other node here NEVER receives a real job (admission only ever targets the live
+-- cluster) - they'd sit idle forever, so their util/power baselines are deliberately
+-- low (idle draw, not load) instead of matching the same 30-60% range.
 INSERT INTO node_metric_profile (node_id, metric_type, baseline, amplitude, period_sec, unit) VALUES
-  (1, 'util', 55, 15, 45, 'pct'),
-  (1, 'cpu', 48, 12, 40, 'pct'),
-  (1, 'mem', 62, 8, 55, 'pct'),
-  (1, 'temp', 62, 4, 50, 'C'),
-  (2, 'util', 30, 10, 45, 'pct'),
-  (2, 'temp', 45, 3, 50, 'C'),
-  (3, 'util', 50, 14, 45, 'pct'), (3, 'temp', 50, 3, 50, 'C'),
-  (4, 'util', 42, 10, 45, 'pct'), (4, 'temp', 47, 3, 50, 'C'),
-  (5, 'util', 55, 12, 40, 'pct'), (5, 'temp', 52, 4, 50, 'C'),
-  (6, 'util', 38, 9, 45, 'pct'), (6, 'temp', 46, 3, 50, 'C'),
-  (7, 'util', 60, 15, 40, 'pct'), (7, 'temp', 58, 4, 45, 'C'),
-  (8, 'util', 48, 11, 45, 'pct'), (8, 'temp', 51, 3, 50, 'C'),
-  (9, 'util', 70, 10, 35, 'pct'), (9, 'temp', 65, 5, 40, 'C'),
-  (10, 'util', 66, 12, 35, 'pct'), (10, 'temp', 63, 4, 40, 'C'),
-  (11, 'util', 58, 10, 40, 'pct'), (11, 'temp', 55, 4, 45, 'C'),
-  (12, 'util', 62, 9, 40, 'pct'), (12, 'temp', 57, 3, 45, 'C'),
-  (13, 'util', 35, 8, 50, 'pct'), (13, 'temp', 42, 3, 55, 'C'),
-  (14, 'util', 30, 7, 50, 'pct'), (14, 'temp', 40, 3, 55, 'C'),
-  (15, 'util', 75, 13, 30, 'pct'), (15, 'temp', 68, 5, 35, 'C'),
-  (16, 'util', 71, 11, 32, 'pct'), (16, 'temp', 66, 4, 35, 'C'),
-  (17, 'util', 55, 10, 45, 'pct'), (17, 'temp', 53, 4, 50, 'C'),
-  (18, 'util', 40, 9, 45, 'pct'), (18, 'temp', 48, 3, 50, 'C'),
-  (19, 'util', 50, 12, 45, 'pct'), (20, 'util', 60, 14, 40, 'pct'),
-  (21, 'util', 45, 10, 55, 'pct'), (22, 'util', 55, 11, 50, 'pct'),
-  (23, 'util', 48, 10, 55, 'pct'), (24, 'util', 62, 13, 45, 'pct'),
-  (25, 'util', 68, 12, 40, 'pct'), (26, 'util', 30, 8, 60, 'pct'),
-  (27, 'util', 52, 10, 50, 'pct'),
-  (28, 'util', 40, 12, 40, 'pct'), (28, 'temp', 48, 3, 45, 'C'),
-  (29, 'util', 45, 13, 42, 'pct'), (29, 'temp', 50, 3, 46, 'C'),
-  (30, 'util', 38, 11, 41, 'pct'), (30, 'temp', 47, 3, 44, 'C'),
-  (31, 'util', 32, 9, 43, 'pct'), (31, 'temp', 44, 3, 47, 'C'),
-  (32, 'util', 58, 14, 38, 'pct'), (32, 'temp', 60, 4, 40, 'C'),
-  (33, 'util', 54, 13, 39, 'pct'), (33, 'temp', 58, 4, 41, 'C'),
-  (34, 'util', 46, 12, 44, 'pct'), (34, 'temp', 52, 3, 47, 'C'),
-  (35, 'util', 62, 15, 30, 'pct'), (35, 'temp', 65, 5, 32, 'C'),
-  (36, 'util', 57, 14, 31, 'pct'), (36, 'temp', 63, 5, 33, 'C');
+  (1, 'util', 8, 3, 45, 'pct'), (1, 'cpu', 6, 2, 40, 'pct'), (1, 'mem', 12, 3, 55, 'pct'), (1, 'temp', 34, 2, 50, 'C'), (1, 'power', 75, 15, 42, 'W'),
+  (2, 'util', 6, 2, 45, 'pct'), (2, 'temp', 32, 2, 50, 'C'), (2, 'power', 30, 8, 45, 'W'),
+  (3, 'util', 10, 3, 45, 'pct'), (3, 'temp', 36, 2, 50, 'C'), (3, 'power', 120, 25, 40, 'W'),
+  (4, 'util', 55, 12, 40, 'pct'), (4, 'temp', 52, 4, 50, 'C'), (4, 'power', 560, 130, 42, 'W'),
+  (5, 'util', 42, 10, 45, 'pct'), (5, 'temp', 47, 3, 50, 'C'), (5, 'power', 300, 55, 46, 'W'),
+  (6, 'util', 38, 9, 45, 'pct'), (6, 'temp', 46, 3, 50, 'C'), (6, 'power', 160, 30, 35, 'W'),
+  (7, 'util', 45, 13, 42, 'pct'), (7, 'temp', 50, 3, 46, 'C'), (7, 'power', 310, 58, 44, 'W'),
+  (8, 'util', 38, 11, 41, 'pct'), (8, 'temp', 47, 3, 44, 'C'), (8, 'power', 155, 28, 36, 'W'),
+  (9, 'util', 32, 9, 43, 'pct'), (9, 'temp', 44, 3, 47, 'C'), (9, 'power', 120, 22, 38, 'W'),
+  (10, 'util', 58, 14, 38, 'pct'), (10, 'temp', 60, 4, 40, 'C'), (10, 'power', 960, 185, 34, 'W'),
+  (11, 'util', 54, 13, 39, 'pct'), (11, 'temp', 58, 4, 41, 'C'), (11, 'power', 940, 180, 35, 'W'),
+  (12, 'util', 46, 12, 44, 'pct'), (12, 'temp', 52, 3, 47, 'C'), (12, 'power', 290, 50, 42, 'W'),
+  (13, 'util', 62, 15, 30, 'pct'), (13, 'temp', 65, 5, 32, 'C'), (13, 'power', 1450, 260, 24, 'W'),
+  (14, 'util', 57, 14, 31, 'pct'), (14, 'temp', 63, 5, 33, 'C'), (14, 'power', 1420, 255, 25, 'W'),
+  (15, 'util', 9, 3, 45, 'pct'), (15, 'temp', 35, 2, 48, 'C'), (15, 'power', 65, 15, 38, 'W'),
+  (16, 'util', 5, 2, 47, 'pct'), (16, 'temp', 30, 2, 49, 'C'), (16, 'power', 22, 6, 39, 'W'),
+  (17, 'util', 8, 3, 46, 'pct'), (17, 'temp', 34, 2, 48, 'C'), (17, 'power', 78, 16, 37, 'W'),
+  (18, 'util', 11, 3, 41, 'pct'), (18, 'temp', 37, 2, 43, 'C'), (18, 'power', 130, 26, 33, 'W'),
+  (19, 'util', 7, 2, 44, 'pct'), (19, 'temp', 33, 2, 46, 'C'), (19, 'power', 180, 35, 27, 'W'),
+  (20, 'util', 9, 3, 46, 'pct'), (20, 'temp', 35, 2, 47, 'C'), (20, 'power', 68, 14, 40, 'W'),
+  (21, 'util', 10, 3, 36, 'pct'), (21, 'temp', 36, 2, 38, 'C'), (21, 'power', 82, 17, 36, 'W'),
+  (22, 'util', 6, 2, 40, 'pct'), (22, 'temp', 31, 2, 44, 'C'), (22, 'power', 28, 7, 37, 'W'),
+  (23, 'util', 12, 3, 38, 'pct'), (23, 'temp', 38, 2, 39, 'C'), (23, 'power', 135, 27, 31, 'W'),
+  (24, 'util', 8, 3, 43, 'pct'), (24, 'temp', 34, 2, 46, 'C'), (24, 'power', 70, 15, 38, 'W'),
+  (25, 'util', 5, 2, 45, 'pct'), (25, 'temp', 30, 2, 48, 'C'), (25, 'power', 24, 6, 40, 'W'),
+  (26, 'util', 9, 3, 41, 'pct'), (26, 'temp', 35, 2, 45, 'C'), (26, 'power', 80, 16, 35, 'W'),
+  (27, 'util', 11, 3, 44, 'pct'), (27, 'temp', 37, 2, 47, 'C'), (27, 'power', 128, 25, 30, 'W'),
+  (28, 'util', 7, 2, 45, 'pct'), (28, 'temp', 33, 2, 48, 'C'), (28, 'power', 175, 34, 28, 'W'),
+  (29, 'util', 9, 3, 43, 'pct'), (29, 'temp', 34, 2, 46, 'C'), (29, 'power', 66, 14, 39, 'W'),
+  (30, 'util', 10, 3, 37, 'pct'), (30, 'temp', 36, 2, 40, 'C'), (30, 'power', 84, 17, 36, 'W'),
+  (31, 'util', 6, 2, 42, 'pct'), (31, 'temp', 31, 2, 45, 'C'), (31, 'power', 27, 7, 38, 'W'),
+  (32, 'util', 11, 3, 40, 'pct'), (32, 'temp', 37, 2, 40, 'C'), (32, 'power', 132, 26, 31, 'W'),
+  (33, 'util', 8, 3, 44, 'pct'), (33, 'temp', 34, 2, 47, 'C'), (33, 'power', 67, 14, 38, 'W'),
+  (34, 'util', 5, 2, 46, 'pct'), (34, 'temp', 30, 2, 49, 'C'), (34, 'power', 23, 6, 41, 'W'),
+  (35, 'util', 9, 3, 41, 'pct'), (35, 'temp', 35, 2, 45, 'C'), (35, 'power', 79, 16, 36, 'W'),
+  (36, 'util', 10, 3, 43, 'pct'), (36, 'temp', 36, 2, 47, 'C'), (36, 'power', 126, 25, 31, 'W'),
+  (37, 'util', 7, 2, 45, 'pct'), (37, 'temp', 32, 2, 48, 'C'), (37, 'power', 172, 33, 28, 'W'),
+  (38, 'util', 8, 3, 42, 'pct'), (38, 'temp', 34, 2, 46, 'C'), (38, 'power', 65, 14, 39, 'W');
 
--- node power draw (W), scaled roughly to what each node's accelerators pull
--- (A100 nodes ~300-560W, H100 nodes ~950-2100W, NPU/PIM nodes ~130-150W)
-INSERT INTO node_metric_profile (node_id, metric_type, baseline, amplitude, period_sec, unit) VALUES
-  (1, 'power', 560, 130, 42, 'W'),
-  (2, 'power', 320, 60, 45, 'W'),
-  (3, 'power', 540, 110, 40, 'W'),
-  (4, 'power', 300, 55, 46, 'W'),
-  (5, 'power', 150, 30, 35, 'W'),
-  (6, 'power', 310, 58, 44, 'W'),
-  (7, 'power', 950, 180, 36, 'W'),
-  (8, 'power', 520, 100, 40, 'W'),
-  (9, 'power', 1050, 200, 30, 'W'),
-  (10, 'power', 1000, 190, 32, 'W'),
-  (11, 'power', 540, 105, 38, 'W'),
-  (12, 'power', 520, 100, 39, 'W'),
-  (13, 'power', 500, 95, 42, 'W'),
-  (14, 'power', 300, 55, 45, 'W'),
-  (15, 'power', 2100, 350, 26, 'W'),
-  (16, 'power', 1150, 210, 29, 'W'),
-  (17, 'power', 530, 100, 40, 'W'),
-  (18, 'power', 130, 25, 50, 'W'),
-  (19, 'power', 320, 60, 45, 'W'),
-  (20, 'power', 330, 62, 44, 'W'),
-  (21, 'power', 310, 58, 46, 'W'),
-  (22, 'power', 325, 60, 43, 'W'),
-  (23, 'power', 315, 57, 47, 'W'),
-  (24, 'power', 335, 63, 42, 'W'),
-  (25, 'power', 340, 65, 40, 'W'),
-  (26, 'power', 300, 55, 48, 'W'),
-  (27, 'power', 320, 60, 45, 'W'),
-  (28, 'power', 160, 30, 35, 'W'),
-  (29, 'power', 310, 58, 44, 'W'),
-  (30, 'power', 155, 28, 36, 'W'),
-  (31, 'power', 120, 22, 38, 'W'),
-  (32, 'power', 960, 185, 34, 'W'),
-  (33, 'power', 940, 180, 35, 'W'),
-  (34, 'power', 290, 50, 42, 'W'),
-  (35, 'power', 1450, 260, 24, 'W'),
-  (36, 'power', 1420, 255, 25, 'W');
-
--- accelerator_metric_profile: accelerator 1,2 keep original full coverage; every new
--- accelerator gets a single 'util' row (kept light since there are 32 new ones)
+-- accelerator_metric_profile: 'util' on every accelerator (kept light - 39 accelerators
+-- would be a lot of rows for full coverage), plus mem/power on accelerator 1 as a
+-- fuller example (matches what GET /accelerators/{id} can show).
 INSERT INTO accelerator_metric_profile (accelerator_id, metric_type, baseline, amplitude, period_sec, unit) VALUES
-  (1, 'util', 50, 20, 30, 'pct'),
-  (1, 'mem', 70, 10, 35, 'pct'),
-  (1, 'power', 280, 40, 25, 'W'),
-  (2, 'util', 35, 15, 30, 'pct'),
-  (4, 'util', 45, 15, 30, 'pct'), (5, 'util', 50, 12, 32, 'pct'),
-  (6, 'util', 40, 10, 35, 'pct'), (7, 'util', 55, 18, 25, 'pct'),
-  (8, 'util', 42, 11, 33, 'pct'), (9, 'util', 60, 20, 22, 'pct'),
-  (10, 'util', 58, 19, 24, 'pct'), (11, 'util', 52, 15, 28, 'pct'),
-  (12, 'util', 48, 14, 30, 'pct'), (13, 'util', 46, 13, 31, 'pct'),
-  (14, 'util', 44, 12, 32, 'pct'), (15, 'util', 50, 15, 30, 'pct'),
-  (16, 'util', 47, 13, 31, 'pct'), (17, 'util', 49, 14, 30, 'pct'),
-  (18, 'util', 45, 12, 33, 'pct'), (19, 'util', 43, 11, 34, 'pct'),
-  (20, 'util', 56, 16, 27, 'pct'), (21, 'util', 54, 15, 28, 'pct'),
-  (22, 'util', 52, 14, 29, 'pct'), (23, 'util', 50, 13, 30, 'pct'),
-  (24, 'util', 38, 10, 36, 'pct'), (25, 'util', 36, 9, 37, 'pct'),
-  (26, 'util', 34, 8, 38, 'pct'),
-  (27, 'util', 62, 20, 20, 'pct'), (28, 'util', 60, 19, 21, 'pct'),
-  (29, 'util', 58, 18, 22, 'pct'), (30, 'util', 56, 17, 23, 'pct'),
-  (31, 'util', 64, 21, 19, 'pct'), (32, 'util', 62, 20, 20, 'pct'),
-  (33, 'util', 48, 14, 30, 'pct'), (34, 'util', 46, 13, 31, 'pct'),
-  (35, 'util', 30, 8, 40, 'pct'),
-  (36, 'util', 50, 12, 30, 'pct'), (37, 'util', 60, 14, 28, 'pct'),
-  (38, 'util', 45, 10, 35, 'pct'), (39, 'util', 55, 11, 32, 'pct'),
-  (40, 'util', 48, 10, 33, 'pct'), (41, 'util', 62, 13, 27, 'pct'),
-  (42, 'util', 68, 12, 25, 'pct'), (43, 'util', 30, 8, 38, 'pct'),
-  (44, 'util', 52, 10, 30, 'pct'),
-  (45, 'util', 42, 14, 30, 'pct'),
-  (46, 'util', 44, 13, 31, 'pct'), (47, 'util', 40, 12, 32, 'pct'),
-  (48, 'util', 33, 10, 34, 'pct'),
-  (49, 'util', 60, 18, 24, 'pct'), (50, 'util', 58, 17, 25, 'pct'),
-  (51, 'util', 48, 14, 30, 'pct'),
-  (52, 'util', 64, 20, 20, 'pct'), (53, 'util', 61, 19, 21, 'pct'),
-  (54, 'util', 55, 16, 28, 'pct'), (55, 'util', 38, 10, 42, 'pct');
+  (1, 'util', 50, 20, 30, 'pct'), (1, 'mem', 70, 10, 35, 'pct'), (1, 'power', 280, 40, 25, 'W'),
+  (2, 'util', 48, 18, 31, 'pct'),
+  (3, 'util', 45, 15, 30, 'pct'),
+  (4, 'util', 55, 18, 25, 'pct'),
+  (5, 'util', 42, 11, 33, 'pct'),
+  (6, 'util', 50, 12, 32, 'pct'),
+  (7, 'util', 38, 10, 42, 'pct'),
+  (8, 'util', 60, 20, 22, 'pct'),
+  (9, 'util', 58, 19, 24, 'pct'),
+  (10, 'util', 48, 14, 30, 'pct'),
+  (11, 'util', 62, 20, 20, 'pct'),
+  (12, 'util', 55, 16, 28, 'pct'),
+  -- accelerators 13-39 sit on non-live nodes (never get a real job - see the node
+  -- comment above), so idle-range util instead of the live cluster's 38-62%.
+  (13, 'util', 9, 3, 35, 'pct'),
+  (14, 'util', 7, 2, 31, 'pct'),
+  (15, 'util', 8, 3, 32, 'pct'),
+  (16, 'util', 6, 2, 34, 'pct'),
+  (17, 'util', 9, 3, 31, 'pct'),
+  (18, 'util', 7, 2, 36, 'pct'),
+  (19, 'util', 5, 2, 28, 'pct'),
+  (20, 'util', 8, 3, 33, 'pct'),
+  (21, 'util', 9, 3, 30, 'pct'),
+  (22, 'util', 6, 2, 32, 'pct'),
+  (23, 'util', 10, 3, 29, 'pct'),
+  (24, 'util', 8, 3, 31, 'pct'),
+  (25, 'util', 6, 2, 30, 'pct'),
+  (26, 'util', 8, 3, 34, 'pct'),
+  (27, 'util', 10, 3, 27, 'pct'),
+  (28, 'util', 6, 2, 34, 'pct'),
+  (29, 'util', 9, 3, 30, 'pct'),
+  (30, 'util', 8, 3, 31, 'pct'),
+  (31, 'util', 5, 2, 36, 'pct'),
+  (32, 'util', 4, 2, 37, 'pct'),
+  (33, 'util', 11, 3, 19, 'pct'),
+  (34, 'util', 4, 2, 38, 'pct'),
+  (35, 'util', 4, 2, 39, 'pct'),
+  (36, 'util', 10, 3, 20, 'pct'),
+  (37, 'util', 5, 2, 38, 'pct'),
+  (38, 'util', 4, 2, 39, 'pct'),
+  (39, 'util', 9, 3, 21, 'pct');
 
--- distributed links: domestic-domestic ones only ever draw in Korea-mode view.
--- (1, 6, true) is domestic(서울, cluster 1) <-> overseas(aws-use1-a, cluster 6) so it
--- also shows on the world map (first screen) as a line from the KR hub to that region.
+-- distributed links: domestic pairs draw in Korea-mode view. (1, 5, true) is
+-- domestic(서울, cluster 1) <-> overseas(aws-use1-a, cluster 5) so it also shows on
+-- the world map (first screen) as a line from the KR hub to that region.
 INSERT INTO cluster_distributed_link (cluster_a_id, cluster_b_id, active) VALUES
   (1, 2, true),
-  (3, 5, true),
+  (2, 3, true),
   (1, 4, false),
-  (1, 6, true);
+  (1, 5, true);
 
+-- kept off the live cluster (node ids 4-14) on purpose - those nodes are actually
+-- admission-eligible, so a red alert badge on one mid-demo would look like something's
+-- broken right where a job could otherwise land.
 INSERT INTO node_alert (node_id, severity, message) VALUES
-  (1, 'sla', 'p99 지연 42ms (목표 40ms 초과)'),
-  (7, 'physical', '온도 78°C (임계치 초과)'),
-  (15, 'sla', 'p99 지연 55ms (목표 50ms 초과)');
+  (17, 'sla', 'p99 지연 42ms (목표 40ms 초과)'),
+  (21, 'physical', '온도 78°C (임계치 초과)'),
+  (31, 'sla', 'p99 지연 55ms (목표 50ms 초과)'),
+  (2, 'physical', '팬 속도 이상 감지');
 
--- ---------- model ----------
--- Everything past BERT-base only exists so demo filler jobs (services/jobs.py
--- _maintain_filler_jobs) pick a random model_id and don't all render as identical
--- "BERT-base" bars in the scheduler timeline - they have no model_layer rows since
--- nothing in the demo drills into their layer analysis.
+-- ============================================================
+-- model / model_layer / model_layer_edge / dataset
+-- ============================================================
+-- 3 of the 12 (BERT-base, ResNet-50, Whisper-base) get real layer graphs, one per
+-- category (nlp/cv/audio), so "모델 분석" has something to show across categories -
+-- the rest exist for variety in job/dataset pairing and have no layer data.
 INSERT INTO model (name, type) VALUES
   ('BERT-base', 'nlp'),
   ('GPT-2', 'nlp'),
@@ -431,160 +322,177 @@ INSERT INTO model (name, type) VALUES
 
 INSERT INTO model_layer (model_id, op_name, shape, gflops, mem_mb, characteristic) VALUES
   (1, 'Token Embedding', '512x768', 2.1, 3.1, 'memory_bound'),
-  (1, 'Transformer Block x12', '512x768', 38.4, 24.0, 'balanced');
+  (1, 'Transformer Block x12', '512x768', 38.4, 24.0, 'balanced'),
+  (6, 'Stem Conv 7x7', '224x224x64', 5.4, 2.1, 'compute_bound'),
+  (6, 'Residual Stage 1-4', '56x56x256', 41.7, 14.2, 'balanced'),
+  (6, 'Global Avg Pool + FC', '1x1x2048', 2.1, 0.3, 'memory_bound'),
+  (11, 'Mel Spectrogram', '80x3000', 1.2, 1.8, 'memory_bound'),
+  (11, 'Conv Encoder x2', '1500x512', 12.6, 8.4, 'compute_bound'),
+  (11, 'Transformer Encoder x6', '1500x512', 45.2, 28.6, 'balanced'),
+  (11, 'Transformer Decoder x6', '448x512', 22.8, 16.4, 'balanced');
 
 INSERT INTO model_layer_edge (from_layer_id, to_layer_id) VALUES
-  (1, 2);
+  (1, 2),
+  (3, 4), (4, 5),
+  (6, 7), (7, 8), (8, 9);
 
+-- datasets paired to whichever model would plausibly train/eval on them.
+-- Common-Crawl is left unlinked (model_id NULL) since dataset.model_id is nullable.
 INSERT INTO dataset (name, model_id) VALUES
   ('SST-2', 1),
   ('GLUE-MNLI', 1),
-  ('CIFAR-100', NULL);
+  ('WikiText-103', 2),
+  ('SQuAD-v2', 3),
+  ('CNN-DailyMail', 4),
+  ('Alpaca-52k', 5),
+  ('ImageNet-1k', 6),
+  ('CIFAR-100', 7),
+  ('COCO-2017', 8),
+  ('ImageNet-1k', 9),
+  ('LAION-Aesthetics', 10),
+  ('LibriSpeech', 11),
+  ('LAION-400M', 12),
+  ('Common-Crawl', NULL);
 
--- csc-user-01 is the "logged in" user the CSC portal fixes on (no real auth); the
--- others exist so /jobs?user_id= filtering has something to actually filter out.
--- csc-demo-filler is looked up by name (services/jobs.py FILLER_USER_NAME) - it owns
--- the auto-generated jobs that keep the scheduler timeline visibly busy without
--- anyone needing to re-seed between demo runs. See _maintain_filler_jobs.
+-- ============================================================
+-- users (no real auth - CSC just fixes on csc-user-01; csc-demo-filler owns the
+-- auto-generated jobs that keep the scheduler timeline busy, see
+-- services/jobs.py _maintain_filler_jobs)
+-- ============================================================
 INSERT INTO "user" (name) VALUES
   ('csc-user-01'),
   ('csc-user-02'),
   ('csc-user-03'),
   ('csc-demo-filler');
 
--- ---------- resource tiers ----------
--- attached to cluster 3 (khu-suwon-01), the only is_live=true cluster.
--- train pool: A100 x3 (nodes 3/4/29), H100 x2 (nodes 32/33), A6000 x1 (node 34),
---             NPU/Furiosa RNGD x1 (node 28)
--- infer pool: NPU/Furiosa RNGD x1 (node 30), PIM/SK hynix AiM x1 (node 31),
---             B200 x2 (nodes 35/36)
--- resource_tier_requirement.accelerator_model_id references accelerator_model.id
--- directly (see that insert above) - matching is by id now, not by string, so there's
--- no way for the two sides to drift out of sync. accelerator_model_id is nullable;
--- left NULL means "any model of this kind" (not used below, but supported).
--- "available" in GET /resource-tiers is computed live from free node counts
--- (kind + accelerator_model_id + purpose filtered), not stored.
--- train tier 3 and infer tier 3's costs are deliberately NOT the cheapest despite
--- being lower-performing than tier 2 - breaks the cost/perf anti-correlation so
--- priority_pref=balanced actually diverges from time/cost sorting.
+-- ============================================================
+-- resource tiers - attached to cluster 2 (khu-suwon-01), the only is_live cluster.
+-- accelerator_model_id references accelerator_model.id directly (matching is by id,
+-- not by string - see services/jobs.py _node_matches_requirement). "available" in
+-- GET /resource-tiers is computed live from free node counts (kind + model + purpose
+-- filtered), never stored.
+--
+-- tier 2 (train, A100 x1) is reserved for live demo submissions - _maintain_filler_jobs
+-- excludes it and tier 4 (same A100 pool) so a demo submission against tier 2 is
+-- always admitted immediately regardless of filler churn. tier 8 (infer, PIM x2) can
+-- never be admitted at all (only 1 PIM node exists) - kept to demo permanent queuing.
+-- tier 3 and tier 7's costs are deliberately not the cheapest despite being
+-- lower-performing than tier 2/6, so priority_pref=balanced sorting actually diverges
+-- from time/cost ordering instead of tying out to tier_no order.
+-- ============================================================
 INSERT INTO resource_tier (cluster_id, job_type, tier_no, cost_per_hour) VALUES
-  (3, 'train', 1, 12.0),
-  (3, 'train', 2, 5.0),
-  (3, 'train', 3, 6.0),
-  (3, 'train', 4, 2.0),
-  (3, 'infer', 1, 8.0),
-  (3, 'infer', 2, 4.0),
-  (3, 'infer', 3, 6.0),
-  (3, 'infer', 4, 2.0);
+  (2, 'train', 1, 12.0),
+  (2, 'train', 2, 5.0),
+  (2, 'train', 3, 6.0),
+  (2, 'train', 4, 2.0),
+  (2, 'infer', 1, 8.0),
+  (2, 'infer', 2, 4.0),
+  (2, 'infer', 3, 6.0),
+  (2, 'infer', 4, 2.0);
 
--- accelerator_model_id: 1=NVIDIA A100, 2=NVIDIA H100, 3=Furiosa RNGD, 4=SK hynix AiM,
--- 5=NVIDIA A6000, 6=NVIDIA B200 (see accelerator_model insert above)
 INSERT INTO resource_tier_requirement (tier_id, kind, accelerator_model_id, node_count) VALUES
   (1, 'GPU', 2, 2), (1, 'NPU', 3, 1),  -- train tier 1: H100 x2 + NPU x1, 고성능 혼합
-  (2, 'GPU', 1, 1),                    -- train tier 2: A100 1대
-  (3, 'GPU', 5, 1),                    -- train tier 3: A6000 1대 (가성비 나쁨, 항상 되지만 비쌈)
+  (2, 'GPU', 1, 1),                    -- train tier 2: A100 1대 (데모 예약)
+  (3, 'GPU', 5, 1),                    -- train tier 3: A6000 1대 (가성비 나쁨)
   (4, 'GPU', 1, 3),                    -- train tier 4: A100 3대 전부 - 가끔만 available
-  (5, 'NPU', 3, 1), (5, 'PIM', 4, 1),  -- infer tier 1: 저지연 혼합, 두 infer 노드 다 필요
+  (5, 'NPU', 3, 1), (5, 'PIM', 4, 1),  -- infer tier 1: 저지연 혼합
   (6, 'NPU', 3, 1),                    -- infer tier 2: NPU 1대
   (7, 'GPU', 6, 1),                    -- infer tier 3: B200 1대 (가성비 나쁨)
-  (8, 'PIM', 4, 2);                    -- infer tier 4: PIM 노드가 1대뿐이라 항상 대기 예상
+  (8, 'PIM', 4, 2);                    -- infer tier 4: PIM 노드 1대뿐이라 항상 대기
 
--- ---------- jobs ----------
--- precision/sla_target were dropped from job (see migration 5fcc49cbc30e) - CSC wizard
--- never collected them. Duration is config, not stored on the job - see
--- services/jobs.py DURATION_SEC (train=40s, infer=15s, agreed with frontend).
--- user_id 1 (csc-user-01) is the CSC portal's fixed "logged in" user - jobs 1/2/4 are
--- theirs so /jobs?user_id=1 has something to show; jobs 3/7 belong to other users so
--- CSC filtering actually excludes something (CSP's unfiltered list shows everything).
---
--- Jobs 1-4 predate node.purpose / resource_tier and run on cluster 1/2's nodes
--- (srv-01/02, node_id 1/2) - left exactly as they were, dataset_id/selected_tier_id
--- unset. Jobs 5-7 are new: they live on the actual live cluster (khu-suwon-01, id 3)
--- and use its purpose-tagged nodes + seeded resource_tier rows correctly, so the
--- scheduler timeline has real train/infer assignment history to show instead of an
--- empty pool with no bars.
--- job 1: train, currently running (started now)
-INSERT INTO job (model_id, user_id, type, status, batch, priority_pref, submitted_at, started_at, finished_at) VALUES
-  (1, 1, 'train', 'running', 128, 'time', now(), now(), NULL);
-
--- job 2: infer, already finished
-INSERT INTO job (model_id, user_id, type, status, batch, priority_pref, submitted_at, started_at, finished_at) VALUES
-  (1, 1, 'infer', 'done', 32, 'cost', now() - interval '15 minutes', now() - interval '10 minutes', now() - interval '5 minutes');
-
--- job 3: infer, still queued (no free node) - belongs to a different user
-INSERT INTO job (model_id, user_id, type, status, batch, priority_pref, submitted_at, started_at, finished_at) VALUES
-  (1, 2, 'infer', 'queued', 16, 'balanced', now() - interval '1 minute', NULL, NULL);
-
--- job 4: train, already finished - donated node1 to job1 (see reallocation below).
--- Reallocation is a train-only concept, so the donor here has to be a train job,
--- not job2 (infer) - that was the bug that made the "재할당" tab show up on an
--- infer job's detail page.
-INSERT INTO job (model_id, user_id, type, status, batch, priority_pref, submitted_at, started_at, finished_at) VALUES
-  (1, 1, 'train', 'done', 64, 'time', now() - interval '12 minutes', now() - interval '11 minutes', now() - interval '1 minute');
-
--- job 5: train, running on the live cluster's GPU pool (node 3 = suwon-srv-01), tier 2
--- (GPU x1) - user 2, so /jobs?user_id=1 correctly excludes this one too.
+-- ============================================================
+-- jobs - only 7, all already 'done'. There's little point pre-seeding
+-- running/queued jobs on a real server: with DURATION_SEC this short
+-- (train=40s/infer=15s), anything seeded as running/queued will already have been
+-- swept to done by the time anyone looks. Live running/queued state comes from real
+-- submissions plus the demo-filler mechanism once the server is actually up.
+-- Each "done" job still gets full assignment/event/optimization history so job
+-- detail pages, the scheduler timeline, and node histories all have real data.
+-- ============================================================
+-- job 1: train, BERT-base + SST-2, tier 2 (A100 x1) on suwon-srv-01 (node 4)
 INSERT INTO job (model_id, user_id, type, status, batch, priority_pref, dataset_id, selected_tier_id, submitted_at, started_at, finished_at) VALUES
-  (1, 2, 'train', 'running', 32, 'time', 1, 2, now() - interval '15 seconds', now() - interval '15 seconds', NULL);
+  (1, 1, 'train', 'done', 128, 'time', 1, 2, now() - interval '6 hours', now() - interval '6 hours', now() - interval '6 hours' + interval '16 minutes');
 
--- job 6: infer, already finished on the live cluster's NPU pool (node 30 =
--- suwon-srv-05), tier 6 (NPU x1) - user 3.
+-- job 2: infer, BERT-base, tier 6 (NPU x1) on suwon-srv-05 (node 8)
 INSERT INTO job (model_id, user_id, type, status, batch, priority_pref, selected_tier_id, submitted_at, started_at, finished_at) VALUES
-  (1, 3, 'infer', 'done', 16, 'balanced', 6, now() - interval '35 seconds', now() - interval '30 seconds', now() - interval '15 seconds');
+  (1, 1, 'infer', 'done', 32, 'cost', 6, now() - interval '5 hours 30 minutes', now() - interval '5 hours 30 minutes', now() - interval '5 hours 30 minutes' + interval '34 seconds');
 
--- job 7: infer, queued - asks for tier 8 (PIM x2), which this cluster can never satisfy
--- (only 1 PIM node exists), so it demonstrates a permanently-queued job on this pool.
+-- job 3: train, ResNet-50 + ImageNet-1k, tier 4 (A100 x3) on suwon-srv-01/02/04 (4/5/7)
+-- - donor in the reallocation below (donated node 4 back to job 1's story)
+INSERT INTO job (model_id, user_id, type, status, batch, priority_pref, dataset_id, selected_tier_id, submitted_at, started_at, finished_at) VALUES
+  (6, 2, 'train', 'done', 64, 'balanced', 7, 4, now() - interval '5 hours', now() - interval '5 hours', now() - interval '5 hours' + interval '28 minutes');
+
+-- job 4: train, GPT-2 + WikiText-103, tier 1 (H100 x2 + NPU x1) on suwon-srv-07/08/03 (10/11/6)
+INSERT INTO job (model_id, user_id, type, status, batch, priority_pref, dataset_id, selected_tier_id, submitted_at, started_at, finished_at) VALUES
+  (2, 1, 'train', 'done', 32, 'time', 3, 1, now() - interval '4 hours', now() - interval '4 hours', now() - interval '4 hours' + interval '42 minutes');
+
+-- job 5: infer, YOLOv8, tier 5 (NPU + PIM) on suwon-srv-05/06 (8/9)
 INSERT INTO job (model_id, user_id, type, status, batch, priority_pref, selected_tier_id, submitted_at, started_at, finished_at) VALUES
-  (1, 1, 'infer', 'queued', 8, 'cost', 8, now() - interval '5 seconds', NULL, NULL);
+  (8, 3, 'infer', 'done', 16, 'balanced', 5, now() - interval '3 hours', now() - interval '3 hours', now() - interval '3 hours' + interval '19 seconds');
+
+-- job 6: train, LLaMA-7B + Alpaca-52k, tier 3 (A6000 x1) on suwon-srv-09 (12)
+INSERT INTO job (model_id, user_id, type, status, batch, priority_pref, dataset_id, selected_tier_id, submitted_at, started_at, finished_at) VALUES
+  (5, 2, 'train', 'done', 16, 'cost', 6, 3, now() - interval '2 hours', now() - interval '2 hours', now() - interval '2 hours' + interval '1 hour 5 minutes');
+
+-- job 7: infer, CLIP-ViT, tier 7 (B200 x1) on suwon-srv-10 (13)
+INSERT INTO job (model_id, user_id, type, status, batch, priority_pref, selected_tier_id, submitted_at, started_at, finished_at) VALUES
+  (12, 1, 'infer', 'done', 8, 'time', 7, now() - interval '1 hour', now() - interval '1 hour', now() - interval '1 hour' + interval '9 seconds');
 
 INSERT INTO assignment (job_id, node_id, from_t, to_t) VALUES
-  (1, 1, now(), NULL),
-  (2, 2, now() - interval '10 minutes', now() - interval '5 minutes'),
-  (4, 1, now() - interval '11 minutes', now() - interval '1 minute'),
-  (5, 3, now() - interval '15 seconds', NULL),
-  (6, 30, now() - interval '30 seconds', now() - interval '15 seconds');
+  (1, 4, now() - interval '6 hours', now() - interval '6 hours' + interval '16 minutes'),
+  (2, 8, now() - interval '5 hours 30 minutes', now() - interval '5 hours 30 minutes' + interval '34 seconds'),
+  (3, 4, now() - interval '5 hours', now() - interval '5 hours' + interval '28 minutes'),
+  (3, 5, now() - interval '5 hours', now() - interval '5 hours' + interval '28 minutes'),
+  (3, 7, now() - interval '5 hours', now() - interval '5 hours' + interval '28 minutes'),
+  (4, 10, now() - interval '4 hours', now() - interval '4 hours' + interval '42 minutes'),
+  (4, 11, now() - interval '4 hours', now() - interval '4 hours' + interval '42 minutes'),
+  (4, 6, now() - interval '4 hours', now() - interval '4 hours' + interval '42 minutes'),
+  (5, 8, now() - interval '3 hours', now() - interval '3 hours' + interval '19 seconds'),
+  (5, 9, now() - interval '3 hours', now() - interval '3 hours' + interval '19 seconds'),
+  (6, 12, now() - interval '2 hours', now() - interval '2 hours' + interval '1 hour 5 minutes'),
+  (7, 13, now() - interval '1 hour', now() - interval '1 hour' + interval '9 seconds');
 
 INSERT INTO event (type, job_id, node_id, cluster_id, occurred_at) VALUES
-  ('ARRIVAL', 1, NULL, NULL, now()),
-  ('START', 1, 1, 1, now()),
-  ('ARRIVAL', 2, NULL, NULL, now() - interval '15 minutes'),
-  ('START', 2, 2, 2, now() - interval '10 minutes'),
-  ('FINISH', 2, 2, 2, now() - interval '5 minutes'),
-  ('ARRIVAL', 3, NULL, NULL, now() - interval '1 minute'),
-  ('QUEUE', 3, NULL, NULL, now() - interval '1 minute'),
-  ('ARRIVAL', 4, NULL, NULL, now() - interval '12 minutes'),
-  ('START', 4, 1, 1, now() - interval '11 minutes'),
-  ('FINISH', 4, 1, 1, now() - interval '1 minute'),
-  ('ARRIVAL', 5, NULL, NULL, now() - interval '15 seconds'),
-  ('START', 5, 3, 3, now() - interval '15 seconds'),
-  ('ARRIVAL', 6, NULL, NULL, now() - interval '30 seconds'),
-  ('START', 6, 30, 3, now() - interval '30 seconds'),
-  ('FINISH', 6, 30, 3, now() - interval '15 seconds'),
-  ('ARRIVAL', 7, NULL, NULL, now() - interval '5 seconds'),
-  ('QUEUE', 7, NULL, NULL, now() - interval '5 seconds');
+  ('ARRIVAL', 1, NULL, NULL, now() - interval '6 hours'),
+  ('START', 1, 4, 2, now() - interval '6 hours'),
+  ('FINISH', 1, 4, 2, now() - interval '6 hours' + interval '16 minutes'),
+  ('ARRIVAL', 2, NULL, NULL, now() - interval '5 hours 30 minutes'),
+  ('START', 2, 8, 2, now() - interval '5 hours 30 minutes'),
+  ('FINISH', 2, 8, 2, now() - interval '5 hours 30 minutes' + interval '34 seconds'),
+  ('ARRIVAL', 3, NULL, NULL, now() - interval '5 hours'),
+  ('START', 3, 4, 2, now() - interval '5 hours'),
+  ('START', 3, 5, 2, now() - interval '5 hours'),
+  ('START', 3, 7, 2, now() - interval '5 hours'),
+  ('FINISH', 3, 4, 2, now() - interval '5 hours' + interval '28 minutes'),
+  ('FINISH', 3, 5, 2, now() - interval '5 hours' + interval '28 minutes'),
+  ('FINISH', 3, 7, 2, now() - interval '5 hours' + interval '28 minutes'),
+  ('ARRIVAL', 4, NULL, NULL, now() - interval '4 hours'),
+  ('START', 4, 10, 2, now() - interval '4 hours'),
+  ('START', 4, 11, 2, now() - interval '4 hours'),
+  ('START', 4, 6, 2, now() - interval '4 hours'),
+  ('FINISH', 4, 10, 2, now() - interval '4 hours' + interval '42 minutes'),
+  ('FINISH', 4, 11, 2, now() - interval '4 hours' + interval '42 minutes'),
+  ('FINISH', 4, 6, 2, now() - interval '4 hours' + interval '42 minutes'),
+  ('ARRIVAL', 5, NULL, NULL, now() - interval '3 hours'),
+  ('START', 5, 8, 2, now() - interval '3 hours'),
+  ('START', 5, 9, 2, now() - interval '3 hours'),
+  ('FINISH', 5, 8, 2, now() - interval '3 hours' + interval '19 seconds'),
+  ('FINISH', 5, 9, 2, now() - interval '3 hours' + interval '19 seconds'),
+  ('ARRIVAL', 6, NULL, NULL, now() - interval '2 hours'),
+  ('START', 6, 12, 2, now() - interval '2 hours'),
+  ('FINISH', 6, 12, 2, now() - interval '2 hours' + interval '1 hour 5 minutes'),
+  ('ARRIVAL', 7, NULL, NULL, now() - interval '1 hour'),
+  ('START', 7, 13, 2, now() - interval '1 hour'),
+  ('FINISH', 7, 13, 2, now() - interval '1 hour' + interval '9 seconds');
 
--- job 5 (train) overview cards - matches METRIC_TEMPLATES["train"]
+-- job overview cards - matches services/jobs.py METRIC_TEMPLATES exactly, same
+-- template auto-seeded on every real submission.
 INSERT INTO job_metric_profile (job_id, seq, label, unit, start_value, target_value, curve_shape, total_count, featured) VALUES
-  (5, 1, '정확도', '%', 40, 92, 'exp_approach', NULL, true),
-  (5, 2, '에포크', NULL, NULL, NULL, NULL, 100, false);
+  (1, 1, '정확도', '%', 40, 92, 'exp_approach', NULL, true), (1, 2, '에포크', NULL, NULL, NULL, NULL, 100, false),
+  (3, 1, '정확도', '%', 40, 92, 'exp_approach', NULL, true), (3, 2, '에포크', NULL, NULL, NULL, NULL, 100, false),
+  (4, 1, '정확도', '%', 40, 92, 'exp_approach', NULL, true), (4, 2, '에포크', NULL, NULL, NULL, NULL, 100, false),
+  (6, 1, '정확도', '%', 40, 92, 'exp_approach', NULL, true), (6, 2, '에포크', NULL, NULL, NULL, NULL, 100, false);
 
--- job 6 (infer) overview cards - matches METRIC_TEMPLATES["infer"]
-INSERT INTO job_metric_profile (job_id, seq, label, unit, start_value, target_value, curve_shape, total_count, featured) VALUES
-  (6, 1, '처리량', 'req/s', 350, 420, 'exp_approach', NULL, true),
-  (6, 2, '응답지연 p50', 'ms', NULL, 12, NULL, NULL, false),
-  (6, 3, '응답지연 p99', 'ms', NULL, 38, NULL, NULL, false),
-  (6, 4, '누적 요청 수', NULL, NULL, NULL, NULL, 12000, false),
-  (6, 5, 'KV 캐시 적중률', '%', 45, 88, 'exp_approach', NULL, false),
-  (6, 6, '요청당 전력', 'J', NULL, 0.42, NULL, NULL, false),
-  (6, 7, 'Prefill 비율', '%', NULL, 35, NULL, NULL, false),
-  (6, 8, 'Decode 비율', '%', NULL, 65, NULL, NULL, false);
-
--- job 1 (train) overview cards
-INSERT INTO job_metric_profile (job_id, seq, label, unit, start_value, target_value, curve_shape, total_count, featured) VALUES
-  (1, 1, '정확도', '%', 40, 92, 'exp_approach', NULL, true),
-  (1, 2, '에포크', NULL, NULL, NULL, NULL, 100, false);
-
--- job 2 (infer) overview cards - matches METRIC_TEMPLATES["infer"] in services/jobs.py
 INSERT INTO job_metric_profile (job_id, seq, label, unit, start_value, target_value, curve_shape, total_count, featured) VALUES
   (2, 1, '처리량', 'req/s', 350, 420, 'exp_approach', NULL, true),
   (2, 2, '응답지연 p50', 'ms', NULL, 12, NULL, NULL, false),
@@ -593,31 +501,53 @@ INSERT INTO job_metric_profile (job_id, seq, label, unit, start_value, target_va
   (2, 5, 'KV 캐시 적중률', '%', 45, 88, 'exp_approach', NULL, false),
   (2, 6, '요청당 전력', 'J', NULL, 0.42, NULL, NULL, false),
   (2, 7, 'Prefill 비율', '%', NULL, 35, NULL, NULL, false),
-  (2, 8, 'Decode 비율', '%', NULL, 65, NULL, NULL, false);
+  (2, 8, 'Decode 비율', '%', NULL, 65, NULL, NULL, false),
+  (5, 1, '처리량', 'req/s', 350, 420, 'exp_approach', NULL, true),
+  (5, 2, '응답지연 p50', 'ms', NULL, 12, NULL, NULL, false),
+  (5, 3, '응답지연 p99', 'ms', NULL, 38, NULL, NULL, false),
+  (5, 4, '누적 요청 수', NULL, NULL, NULL, NULL, 12000, false),
+  (5, 5, 'KV 캐시 적중률', '%', 45, 88, 'exp_approach', NULL, false),
+  (5, 6, '요청당 전력', 'J', NULL, 0.42, NULL, NULL, false),
+  (5, 7, 'Prefill 비율', '%', NULL, 35, NULL, NULL, false),
+  (5, 8, 'Decode 비율', '%', NULL, 65, NULL, NULL, false),
+  (7, 1, '처리량', 'req/s', 350, 420, 'exp_approach', NULL, true),
+  (7, 2, '응답지연 p50', 'ms', NULL, 12, NULL, NULL, false),
+  (7, 3, '응답지연 p99', 'ms', NULL, 38, NULL, NULL, false),
+  (7, 4, '누적 요청 수', NULL, NULL, NULL, NULL, 12000, false),
+  (7, 5, 'KV 캐시 적중률', '%', 45, 88, 'exp_approach', NULL, false),
+  (7, 6, '요청당 전력', 'J', NULL, 0.42, NULL, NULL, false),
+  (7, 7, 'Prefill 비율', '%', NULL, 35, NULL, NULL, false),
+  (7, 8, 'Decode 비율', '%', NULL, 65, NULL, NULL, false);
 
--- job 2 (infer) caching
+-- caching: infer jobs 2, 5, 7
 INSERT INTO job_cache_profile (job_id, latency_reduction_pct) VALUES
-  (2, 33.0);
+  (2, 33.0), (5, 28.5), (7, 41.0);
 
 INSERT INTO job_cache_tier (job_id, tier_name, fill_pct, latency_ms) VALUES
-  (2, 'VRAM', 82.0, 0.4),
-  (2, 'DRAM', 55.0, 2.1),
-  (2, 'SSD', 20.0, 18.0);
+  (2, 'VRAM', 82.0, 0.4), (2, 'DRAM', 55.0, 2.1), (2, 'SSD', 20.0, 18.0),
+  (5, 'VRAM', 74.0, 0.5), (5, 'DRAM', 48.0, 2.4), (5, 'SSD', 15.0, 19.5),
+  (7, 'VRAM', 90.0, 0.3), (7, 'DRAM', 62.0, 1.8), (7, 'SSD', 25.0, 16.0);
 
--- job 1 (train) DART history
+-- DART history: train jobs 1, 3, 4, 6
 INSERT INTO hyperparam_adjustment (job_id, seq, t_offset_sec, param_name, from_value, to_value, reward) VALUES
-  (1, 1, 242, '배치 크기', '512', '640', '+0.021'),
-  (1, 2, 700, '데이터 shard', '4-way', '6-way', '+0.014');
+  (1, 1, 300, '배치 크기', '512', '640', '+0.021'),
+  (1, 2, 660, '데이터 shard', '4-way', '6-way', '+0.014'),
+  (3, 1, 600, '학습률', '1e-3', '5e-4', '+0.018'),
+  (4, 1, 600, '배치 크기', '256', '384', '+0.016'),
+  (4, 2, 1560, '워커 수', '4', '8', '+0.009'),
+  (6, 1, 1380, '학습률', '2e-4', '1e-4', '+0.011');
 
--- job 1 (train) KQV benchmark
+-- KQV benchmark: train jobs 1, 4, 6
 INSERT INTO job_kqv_benchmark (job_id, kqv_gain_pct, kqv_even_makespan_sec, kqv_opt_makespan_sec) VALUES
-  (1, 21.5, 77040, 60480);
+  (1, 21.5, 77040, 60480),
+  (4, 18.2, 54000, 44172),
+  (6, 25.7, 96000, 71328);
 
--- reallocation: job4 (train, done) donated node1 to job1 (train, running)
+-- reallocation: job 3 (done) donated node 4 to job 1 (done) mid-run
 INSERT INTO reallocation (donor_job_id, receiver_job_id, node_id, at_t_offset_sec, downtime_sec, resume_delay_sec) VALUES
-  (4, 1, 1, 52, 0, 8);
+  (3, 1, 4, 840, 0, 5);
 
--- job 1 negotiation
+-- negotiation: job 1
 INSERT INTO job_negotiation (job_id, rounds, agreement_pct) VALUES
   (1, 5, 96.0);
 
