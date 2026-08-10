@@ -41,6 +41,7 @@ export default function MyJobsPage() {
 
             <JobTable
                 userId={CURRENT_USER_ID}
+                showStop
                 onSelect={(id) => router.push(`/csc/jobs/${id}`)}
                 onCountChange={setCount}
             />

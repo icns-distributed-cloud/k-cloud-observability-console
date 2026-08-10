@@ -119,6 +119,12 @@ export function submitInferJob(body: InferJobRequest) {
   return post<JobSummary>('/jobs/infer', body)
 }
 
+/** 추론 작업 중단. 응답으로 done 상태가 된 작업이 돌아온다.
+ *  infer가 아니거나 running이 아니면 400 */
+export function stopJob(jobId: number) {
+  return post<JobSummary>(`/jobs/${jobId}/stop`, {})
+}
+
 export function fetchModels() {
   return get<ModelItem[]>('/models')
 }
