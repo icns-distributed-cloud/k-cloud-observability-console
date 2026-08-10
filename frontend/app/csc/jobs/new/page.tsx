@@ -140,7 +140,7 @@ export default function JobWizardPage() {
     };
 
     return (
-        <main style={{ padding: "24px 28px" }}>
+        <main style={{ padding: "24px 28px",  maxWidth: 700, margin: "0 auto" }}>
             <div style={{ marginBottom: 20 }}>
                 <div style={{ fontSize: 20, fontWeight: 700 }}>작업 제출</div>
                 <div style={{ fontSize: 12.5, color: "var(--sub)", marginTop: 4 }}>

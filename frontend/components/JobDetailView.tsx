@@ -164,7 +164,14 @@ export default function JobDetailView({ jobId, breadcrumbPrefix }: JobDetailView
                     {modelLayers && modelLayers.layers.length > 0 && (
                         <>
                             <div style={{ marginTop: 24 }}>
-                                <SectionHead title="모델 분석" desc="레이어 → 노드 연산 그래프" />
+                                <SectionHead
+                                    title="모델 분석"
+                                    desc={
+                                        job.dataset_name
+                                            ? `${job.model_name} · ${job.dataset_name}`
+                                            : job.model_name
+                                    }
+                                />
                             </div>
                             <Card>
                                 <ModelGraph layers={modelLayers.layers} edges={modelLayers.edges} />
