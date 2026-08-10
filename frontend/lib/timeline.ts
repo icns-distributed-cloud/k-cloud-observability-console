@@ -57,7 +57,7 @@ export function selectSchedulerNodes<
   nodes: T[],
   assignments: AssignmentItem[],
   // 시드 기준 라이브 클러스터의 train 풀만 4개라, 4칸이면 다른 클러스터가 아예 안 낀다
-  perSection = 6
+  perSection = 7
 ): { train: SchedulerSection<T>; infer: SchedulerSection<T> } {
   const section = (purpose: NodePurpose): SchedulerSection<T> => {
     const pool = nodes.filter((n) => n.purpose === purpose)

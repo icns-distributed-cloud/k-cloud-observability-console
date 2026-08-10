@@ -12,6 +12,11 @@ import Sparkline from "@/components/Sparkline";
 import { generateMetricSeries } from "@/lib/metrics";
 import { useTime } from "@/lib/TimeContext";
 
+const TYPE_LABELS: Record<string, string> = {
+  train: "학습",
+  infer: "추론",
+};
+
 const SECTION_LABEL: React.CSSProperties = {
   fontSize: 15,
   fontWeight: 700,
@@ -47,8 +52,8 @@ export default function NodePage({ params }: { params: Promise<{ id: string }> }
         setNode(n);
         const [assignments, jobs] = await Promise.all([
           fetchClusterAssignments(n.cluster_id),
-          fetchJobs(),
-        ]);
+          // 필러 작업도 노드를 실제로 점유하므로 포함해야 "유휴" 판정이 맞는다
+          fetchJobs({ includeFilters: true }),]);
         setJob(mapNodeJobs(assignments, jobs)[n.id]);
         const c = await fetchClusterDetail(n.cluster_id).catch(() => null);
         setClusterName(c?.name ?? `클러스터 ${n.cluster_id}`);
@@ -140,8 +145,7 @@ export default function NodePage({ params }: { params: Promise<{ id: string }> }
               {job.model_name}
             </div>
             <div style={{ fontSize: 15, color: "var(--sub)", marginTop: 2 }}>
-              {job.type} · {JOB_STATUS_LABELS[job.status] ?? job.status}
-            </div>
+              {TYPE_LABELS[job.type] ?? job.type} · {JOB_STATUS_LABELS[job.status] ?? job.status}            </div>
           </div>
           <span style={{ marginLeft: "auto", fontSize: 15, color: "var(--sub)" }}>
             상세 보기 ›
