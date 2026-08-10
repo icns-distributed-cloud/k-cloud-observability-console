@@ -57,7 +57,7 @@ export function selectSchedulerNodes<
   nodes: T[],
   assignments: AssignmentItem[],
   // 시드 기준 라이브 클러스터의 train 풀만 4개라, 4칸이면 다른 클러스터가 아예 안 낀다
-  perSection = 6
+  perSection = 7
 ): { train: SchedulerSection<T>; infer: SchedulerSection<T> } {
   const section = (purpose: NodePurpose): SchedulerSection<T> => {
     const pool = nodes.filter((n) => n.purpose === purpose)
@@ -93,7 +93,7 @@ export function buildTimeline(
   const ends = relevant.map((a) => (a.to_t === null ? nowMs : new Date(a.to_t).getTime()))
 
   // 최근 구간만 표시 (오래된 이력은 잘라냄)
-  const WINDOW_MS = 15 * 60 * 1000
+  const WINDOW_MS = 2 * 60 * 1000
   const earliest = starts.length > 0 ? Math.min(...starts) : nowMs - WINDOW_MS
   const rawFrom = Math.max(earliest, nowMs - WINDOW_MS)
   const rawTo = ends.length > 0 ? Math.max(...ends, nowMs) : nowMs

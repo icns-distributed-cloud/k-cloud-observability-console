@@ -39,15 +39,12 @@ const kindRank = (k: string) => {
   return i === -1 ? KIND_ORDER.length : i
 }
 
-/**
- * Tier 요구 구성을 "GPU×2 + NPU×1" 형태로 표기한다.
- * 목록 응답의 selected_tier에 이미 들어 있어 노드를 따로 조회할 필요가 없다.
- */
 export function tierMix(tier: SelectedTierSummary | null): string {
   if (!tier || tier.requirements.length === 0) return ''
   return [...tier.requirements]
     .sort((a, b) => kindRank(a.kind) - kindRank(b.kind))
-    .map((r) => `${r.kind}×${r.node_count}`)
+    // 제품명이 있으면 그걸 쓴다 (A100×2). 없으면 종류로 대체 (GPU×2)
+    .map((r) => `${r.model_name ?? r.kind}×${r.node_count}`)
     .join(' + ')
 }
 

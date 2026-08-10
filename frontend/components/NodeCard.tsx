@@ -1,5 +1,4 @@
 import styles from './NodeCard.module.css'
-import KindGlyph from './KindGlyph'
 import ProgressBar from './ProgressBar'
 
 const ALERT_COLORS = {
@@ -14,7 +13,6 @@ const ALERT_SHADOWS = {
 
 interface NodeCardProps {
   name: string
-  kind: 'GPU' | 'NPU' | 'PIM'
   util: number
   jobName?: string
   jobColor?: string
@@ -25,7 +23,6 @@ interface NodeCardProps {
 
 export default function NodeCard({
   name,
-  kind,
   util,
   jobName,
   jobColor,
@@ -33,6 +30,7 @@ export default function NodeCard({
   alertSeverity = 'physical',
   onClick,
 }: NodeCardProps) {
+
   return (
     <div
       className={styles.card}
@@ -50,9 +48,7 @@ export default function NodeCard({
       )}
 
       <div className={styles.header}>
-        <KindGlyph kind={kind} size={14} />
         <span className={styles.name}>{name}</span>
-        <span className={styles.kind}>{kind}</span>
       </div>
 
       {jobName ? (

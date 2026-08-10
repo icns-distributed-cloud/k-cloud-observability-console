@@ -12,14 +12,14 @@ from app.database import get_db
 DURATION_SEC = {"train": 40, "infer": 15}
 
 # Arbitrary constant key for a Postgres advisory lock guarding every
-# read-then-write admission decision (submit_job's immediate admit,
-# sweep_and_backfill's backfill/finish loops, filler creation). Without it,
-# concurrent requests (polling from multiple tabs, or two submits at once)
-# can each read the same "queued job / free node" snapshot before either
-# commits and double-admit the same job or double-book the same node. Held
-# for the rest of the transaction (pg_advisory_xact_lock), released on
-# commit/rollback - callers should acquire it before reading any state the
-# decision depends on.
+# read-then-write job/assignment state change (submit_job's immediate admit,
+# sweep_and_backfill's backfill/finish loops, filler creation, stop_job).
+# Without it, concurrent requests (polling from multiple tabs, two submits at
+# once, a double-clicked stop) can each read the same pre-commit snapshot and
+# double-admit the same job, double-book the same node, or double-log a
+# FINISH. Held for the rest of the transaction (pg_advisory_xact_lock),
+# released on commit/rollback - callers should acquire it before reading any
+# state the decision depends on.
 _ADMISSION_LOCK_KEY = 851203
 
 
@@ -481,6 +481,12 @@ def sweep_and_backfill(db: Session) -> None:
     # not whenever this sweep happened to notice
     freed_at: dict[int, datetime] = {}
     for job in running_jobs:
+        if job.type == "infer" and job.duration_sec is None:
+            # a real (non-filler) infer job - runs indefinitely, like a persistent
+            # serving workload, until stopped through a future explicit stop
+            # endpoint. Fillers always carry an explicit duration_sec, so they're
+            # unaffected and keep cycling normally.
+            continue
         duration = job.duration_sec if job.duration_sec is not None else DURATION_SEC[job.type]
         deadline = job.started_at + timedelta(seconds=duration)
         if deadline <= now:
@@ -777,6 +783,41 @@ def submit_job(
 
     if nodes is None:
         _log_event(db, type="QUEUE", now=now, job_id=job.id)
+
+    db.commit()
+    db.refresh(job)
+    return _to_job_summary(job)
+
+
+def stop_job(db: Session, job_id: int) -> schemas.JobSummary | None:
+    _lock_admission(db)
+    job = (
+        db.query(models.Job)
+        .options(selectinload(models.Job.assignments).selectinload(models.Assignment.node))
+        .filter(models.Job.id == job_id)
+        .first()
+    )
+    if job is None:
+        return None
+    if job.type != "infer":
+        raise HTTPException(status_code=400, detail="only infer jobs can be stopped")
+    if job.status != "running":
+        raise HTTPException(status_code=400, detail="job is not running")
+
+    now = clock.now()
+    job.status = "done"
+    job.finished_at = now
+    for assignment in job.assignments:
+        if assignment.to_t is None:
+            assignment.to_t = now
+            _log_event(
+                db,
+                type="FINISH",
+                now=now,
+                job_id=job.id,
+                node_id=assignment.node_id,
+                cluster_id=assignment.node.cluster_id,
+            )
 
     db.commit()
     db.refresh(job)

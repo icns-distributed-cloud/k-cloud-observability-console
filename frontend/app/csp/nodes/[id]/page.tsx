@@ -12,6 +12,11 @@ import Sparkline from "@/components/Sparkline";
 import { generateMetricSeries } from "@/lib/metrics";
 import { useTime } from "@/lib/TimeContext";
 
+const TYPE_LABELS: Record<string, string> = {
+  train: "학습",
+  infer: "추론",
+};
+
 const SECTION_LABEL: React.CSSProperties = {
   fontSize: 15,
   fontWeight: 700,
@@ -47,8 +52,8 @@ export default function NodePage({ params }: { params: Promise<{ id: string }> }
         setNode(n);
         const [assignments, jobs] = await Promise.all([
           fetchClusterAssignments(n.cluster_id),
-          fetchJobs(),
-        ]);
+          // 필러 작업도 노드를 실제로 점유하므로 포함해야 "유휴" 판정이 맞는다
+          fetchJobs({ includeFilters: true }),]);
         setJob(mapNodeJobs(assignments, jobs)[n.id]);
         const c = await fetchClusterDetail(n.cluster_id).catch(() => null);
         setClusterName(c?.name ?? `클러스터 ${n.cluster_id}`);
@@ -59,7 +64,6 @@ export default function NodePage({ params }: { params: Promise<{ id: string }> }
   if (error) return <main style={{ padding: 24 }}>불러오기 실패: {error}</main>;
   if (!node) return <main style={{ padding: 24 }}>불러오는 중…</main>;
 
-  const kind = node.accelerators[0]?.kind ?? "GPU";
   const isIdle = !job;
 
   return (
@@ -77,16 +81,14 @@ export default function NodePage({ params }: { params: Promise<{ id: string }> }
 
       <div style={{ margin: "16px 0 20px" }}>
         <div style={{ fontSize: 27, fontWeight: 700, display: "flex", alignItems: "center", gap: 8 }}>
-          <KindGlyph kind={kind} size={16} />
           {node.name}
         </div>
         <div style={{ fontSize: 17, color: "var(--sub)", marginTop: 4 }}>
-          {clusterName || `클러스터 ${node.cluster_id}`} · {kind}
+          {clusterName || `클러스터 ${node.cluster_id}`}
         </div>
       </div>
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
-        <StatCard label="종류" value={kind} />
         <StatCard label="상태" value={isIdle ? "유휴" : "가동중"} />
         <StatCard label="가속기" value={node.accelerators.reduce((n, a) => n + a.count, 0)} unit="개" />
       </div>
@@ -143,8 +145,7 @@ export default function NodePage({ params }: { params: Promise<{ id: string }> }
               {job.model_name}
             </div>
             <div style={{ fontSize: 15, color: "var(--sub)", marginTop: 2 }}>
-              {job.type} · {JOB_STATUS_LABELS[job.status] ?? job.status}
-            </div>
+              {TYPE_LABELS[job.type] ?? job.type} · {JOB_STATUS_LABELS[job.status] ?? job.status}            </div>
           </div>
           <span style={{ marginLeft: "auto", fontSize: 15, color: "var(--sub)" }}>
             상세 보기 ›
