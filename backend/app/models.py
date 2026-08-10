@@ -231,6 +231,11 @@ class Job(Base):
     finished_at: Mapped[Optional[datetime]]
     dataset_id: Mapped[Optional[int]] = mapped_column(ForeignKey("dataset.id"))
     selected_tier_id: Mapped[Optional[int]] = mapped_column(ForeignKey("resource_tier.id"))
+    # overrides DURATION_SEC[type] for this job's run length - NULL for every real
+    # submission (frontend's 40s/15s timeline contract must stay exact for those).
+    # Only demo-filler jobs set this, so filler bars vary in length instead of every
+    # one looking identical.
+    duration_sec: Mapped[Optional[int]]
 
     model: Mapped["Model"] = relationship(back_populates="jobs")
     user: Mapped["User"] = relationship(back_populates="jobs")

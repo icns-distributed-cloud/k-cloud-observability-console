@@ -36,6 +36,9 @@ def _lock_admission(db: Session) -> None:
 FILLER_USER_NAME = "csc-demo-filler"
 FILLER_EXCLUDED_TIER_IDS = {2, 4, 8}
 FILLER_TARGET_PER_TYPE = 3
+# randomized per filler job (via job.duration_sec) instead of the fixed DURATION_SEC,
+# so the scheduler timeline doesn't show every bar at an identical length
+FILLER_DURATION_RANGE_SEC = {"train": (25, 70), "infer": (8, 30)}
 
 # one metric-card template set per job.type, copied verbatim into job_metric_profile on submission
 METRIC_TEMPLATES: dict[str, list[dict]] = {
@@ -455,6 +458,7 @@ def _maintain_filler_jobs(db: Session, now: datetime) -> None:
                 priority_pref="time",
                 submitted_at=now,
                 selected_tier_id=tier.id,
+                duration_sec=random.randint(*FILLER_DURATION_RANGE_SEC[job_type]),
             )
             db.add(job)
             db.flush()
@@ -477,7 +481,8 @@ def sweep_and_backfill(db: Session) -> None:
     # not whenever this sweep happened to notice
     freed_at: dict[int, datetime] = {}
     for job in running_jobs:
-        deadline = job.started_at + timedelta(seconds=DURATION_SEC[job.type])
+        duration = job.duration_sec if job.duration_sec is not None else DURATION_SEC[job.type]
+        deadline = job.started_at + timedelta(seconds=duration)
         if deadline <= now:
             job.status = "done"
             job.finished_at = deadline
