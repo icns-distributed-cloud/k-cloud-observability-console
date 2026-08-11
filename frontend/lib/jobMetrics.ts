@@ -16,6 +16,11 @@ export function isContinuous(job: { type: JobType; status: JobStatus }): boolean
     return job.type === 'infer' && job.status === 'running'
 }
 
+/** 완료된 추론 작업은 진행률 개념이 무의미하므로 막대·퍼센트를 모두 숨긴다. */
+export function hidesProgress(job: { type: JobType; status: JobStatus }): boolean {
+    return job.type === 'infer' && job.status === 'done'
+}
+
 /**
  * 작업의 현재 진행률(0~1)을 계산한다.
  * (지금 시각 - started_at) / 타입별 총 소요시간
