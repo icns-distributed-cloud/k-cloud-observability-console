@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from "react"; import Tabs from "@/components/Tabs";
 import { fetchJobs, stopJob } from "@/lib/api";
 import { JOB_COLORS, JOB_STATUS_LABELS, jobCost, tierMix } from "@/lib/jobs";
-import { elapsedLabel, isContinuous, jobProgress } from "@/lib/jobMetrics";
+import { elapsedLabel, hidesProgress, isContinuous, jobProgress } from "@/lib/jobMetrics";
 import { useTime } from "@/lib/TimeContext";
 import type { JobSummary } from "@/app/types";
 
@@ -129,7 +129,9 @@ export default function JobTable({ userId, showUser, showStop, onSelect, onCount
                         const progress = nowSec ? jobProgress(j, nowSec * 1000) : 0;
                         const mix = tierMix(j.selected_tier);
                         const cost = nowSec ? jobCost(j, nowSec * 1000) : 0;
-                        const continuous = isContinuous(j); return (
+                        const continuous = isContinuous(j);
+                        const hideProgress = hidesProgress(j);
+                        return (
                             <div
                                 key={j.id}
                                 onClick={() => onSelect(j.id)}
@@ -196,7 +198,7 @@ export default function JobTable({ userId, showUser, showStop, onSelect, onCount
                                         gap: 8,
                                     }}
                                 >
-                                    {continuous ? (
+                                    {hideProgress ? null : continuous ? (
                                         /* 서빙처럼 계속 도는 작업은 진행률 개념이 없다 */
                                         <span style={{ fontSize: 12.5, color: "var(--sub)" }}>
                                             지속 실행 중
