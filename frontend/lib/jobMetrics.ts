@@ -34,6 +34,16 @@ export function jobProgress(job: JobSummary, nowMs: number): number {
     return Math.max(0, Math.min(1, elapsedSec / DURATION_SEC[job.type]))
 }
 
+function formatDuration(sec: number): string {
+    const h = Math.floor(sec / 3600)
+    const m = Math.floor((sec % 3600) / 60)
+    const s = Math.floor(sec % 60)
+
+    if (h > 0) return `${h}h ${m}m`
+    if (m > 0) return `${m}m ${s}s`
+    return `${s}s`
+}
+
 /**
  * 경과 시간 라벨. 시작 전이면 "—", 완료된 작업은 finished_at까지.
  * jobProgress와 달리 가정 소요시간이 아니라 실제 타임스탬프를 쓴다.
@@ -43,13 +53,13 @@ export function elapsedLabel(job: JobSummary, nowMs: number): string {
 
     const end = job.finished_at ? new Date(job.finished_at).getTime() : nowMs
     const sec = Math.max(0, (end - new Date(job.started_at).getTime()) / 1000)
-    const h = Math.floor(sec / 3600)
-    const m = Math.floor((sec % 3600) / 60)
-    const s = Math.floor(sec % 60)
+    return formatDuration(sec)
+}
 
-    if (h > 0) return `${h}h ${m}m`
-    if (m > 0) return `${m}m ${s}s`
-    return `${s}s`
+/** 대기열에서 기다린 시간 (submitted_at 기준, 아직 배정 전이라는 전제) */
+export function waitingLabel(job: JobSummary, nowMs: number): string {
+    const sec = Math.max(0, (nowMs - new Date(job.submitted_at).getTime()) / 1000)
+    return formatDuration(sec)
 }
 
 /**
