@@ -14,6 +14,8 @@ const TYPE_LABELS: Record<string, string> = {
 const STATUS_COLORS: Record<string, string> = {
     running: "var(--active)",
     queued: "var(--alert-warning)",
+    provisioning: "var(--alert-warning)",
+    finalizing: "var(--positive)",
     done: "var(--sub)",
     failed: "var(--alert-critical)",
 };

@@ -10,6 +10,15 @@ from app import clock, models, schemas
 from app.database import get_db
 
 DURATION_SEC = {"train": 40, "infer": 15}
+# real job lifecycle either side of "running": nodes are assigned (and stay
+# occupied - see _occupied_node_ids, which only looks at Assignment rows and
+# doesn't care about status) before compute actually starts (container/model
+# load) and after compute ends (checkpoint/result save) before they're freed.
+# Kept comfortably longer than the job status board's poll interval (frontend
+# JobStatusBoard.tsx, POLL_MS) so the phase reliably shows up in at least one
+# poll instead of being skipped between two fetches.
+PROVISIONING_SEC = {"train": 10, "infer": 8}
+FINALIZING_SEC = {"train": 8, "infer": 6}
 
 # Arbitrary constant key for a Postgres advisory lock guarding every
 # read-then-write job/assignment state change (submit_job's immediate admit,
@@ -409,8 +418,12 @@ def _seed_optimization_data(db: Session, job: models.Job) -> None:
 def _admit(
     db: Session, job: models.Job, nodes: list[models.Node], start_time: datetime, event_type: str
 ) -> None:
-    job.status = "running"
+    # node(s) are held from here (Assignment.from_t=start_time) through
+    # provisioning -> running -> finalizing, all the way to done - only the
+    # job's own status label cycles in between, admission itself doesn't care.
+    job.status = "provisioning"
     job.started_at = start_time
+    job.phase_deadline = start_time + timedelta(seconds=PROVISIONING_SEC[job.type])
     for node in nodes:
         db.add(models.Assignment(job_id=job.id, node_id=node.id, from_t=start_time, to_t=None))
         _log_event(
@@ -449,7 +462,7 @@ def _maintain_filler_jobs(db: Session, now: datetime) -> None:
             .filter(
                 models.Job.user_id == filler_user_id,
                 models.Job.type == job_type,
-                models.Job.status.in_(["running", "queued"]),
+                models.Job.status.in_(["queued", "provisioning", "running", "finalizing"]),
             )
             .count()
         )
@@ -479,39 +492,69 @@ def sweep_and_backfill(db: Session) -> None:
     now = clock.now()
     _maintain_filler_jobs(db, now)
 
+    # Phase-advance every job whose current status has a pending auto-transition
+    # (phase_deadline set and passed). Node occupancy (Assignment.from_t/to_t) is
+    # untouched by provisioning->running and running->finalizing - _occupied_node_ids
+    # only looks at assignments, not job.status, so admission is unaffected. Only
+    # finalizing->done actually frees the node.
+    provisioning_jobs = (
+        db.query(models.Job)
+        .filter(models.Job.status == "provisioning", models.Job.phase_deadline <= now)
+        .all()
+    )
+    for job in provisioning_jobs:
+        job.status = "running"
+        if job.duration_sec is not None:
+            duration = job.duration_sec
+        elif job.type == "infer":
+            # a real (non-filler) infer job - runs indefinitely, like a persistent
+            # serving workload, until stopped through a future explicit stop
+            # endpoint. Fillers always carry an explicit duration_sec, so they're
+            # unaffected and keep cycling normally.
+            duration = None
+        else:
+            duration = DURATION_SEC[job.type]
+        job.phase_deadline = now + timedelta(seconds=duration) if duration is not None else None
+
     running_jobs = (
         db.query(models.Job)
-        .filter(models.Job.status == "running")
+        .filter(
+            models.Job.status == "running",
+            models.Job.phase_deadline.is_not(None),
+            models.Job.phase_deadline <= now,
+        )
+        .all()
+    )
+    for job in running_jobs:
+        job.status = "finalizing"
+        job.phase_deadline = now + timedelta(seconds=FINALIZING_SEC[job.type])
+
+    finalizing_jobs = (
+        db.query(models.Job)
+        .filter(models.Job.status == "finalizing", models.Job.phase_deadline <= now)
         .options(selectinload(models.Job.assignments).selectinload(models.Assignment.node))
         .all()
     )
     # node_id -> the correct instant it was vacated (its ex-occupant's deadline),
     # not whenever this sweep happened to notice
     freed_at: dict[int, datetime] = {}
-    for job in running_jobs:
-        if job.type == "infer" and job.duration_sec is None:
-            # a real (non-filler) infer job - runs indefinitely, like a persistent
-            # serving workload, until stopped through a future explicit stop
-            # endpoint. Fillers always carry an explicit duration_sec, so they're
-            # unaffected and keep cycling normally.
-            continue
-        duration = job.duration_sec if job.duration_sec is not None else DURATION_SEC[job.type]
-        deadline = job.started_at + timedelta(seconds=duration)
-        if deadline <= now:
-            job.status = "done"
-            job.finished_at = deadline
-            for assignment in job.assignments:
-                if assignment.to_t is None:
-                    assignment.to_t = deadline
-                    freed_at[assignment.node_id] = deadline
-                    _log_event(
-                        db,
-                        type="FINISH",
-                        now=deadline,
-                        job_id=job.id,
-                        node_id=assignment.node_id,
-                        cluster_id=assignment.node.cluster_id,
-                    )
+    for job in finalizing_jobs:
+        deadline = job.phase_deadline
+        job.status = "done"
+        job.finished_at = deadline
+        job.phase_deadline = None
+        for assignment in job.assignments:
+            if assignment.to_t is None:
+                assignment.to_t = deadline
+                freed_at[assignment.node_id] = deadline
+                _log_event(
+                    db,
+                    type="FINISH",
+                    now=deadline,
+                    job_id=job.id,
+                    node_id=assignment.node_id,
+                    cluster_id=assignment.node.cluster_id,
+                )
 
     live_cluster = _load_live_cluster(db)
     if live_cluster is not None:
@@ -824,19 +867,11 @@ def stop_job(db: Session, job_id: int) -> schemas.JobSummary | None:
         raise HTTPException(status_code=400, detail="job is not running")
 
     now = clock.now()
-    job.status = "done"
-    job.finished_at = now
-    for assignment in job.assignments:
-        if assignment.to_t is None:
-            assignment.to_t = now
-            _log_event(
-                db,
-                type="FINISH",
-                now=now,
-                job_id=job.id,
-                node_id=assignment.node_id,
-                cluster_id=assignment.node.cluster_id,
-            )
+    # like a real stop: the serving process needs a moment to unwind/save state
+    # before the node is actually released. Node stays occupied - the next
+    # sweep's finalizing->done step frees it and logs FINISH.
+    job.status = "finalizing"
+    job.phase_deadline = now + timedelta(seconds=FINALIZING_SEC["infer"])
 
     db.commit()
     db.refresh(job)

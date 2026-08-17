@@ -9,7 +9,9 @@ export const JOB_COLORS: Record<JobType, string> = {
 /** 작업 상태 라벨 */
 export const JOB_STATUS_LABELS: Record<string, string> = {
   queued: '대기중',
+  provisioning: '준비중',
   running: '실행중',
+  finalizing: '마무리중',
   done: '완료',
 }
 

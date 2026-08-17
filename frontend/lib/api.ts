@@ -119,7 +119,8 @@ export function submitInferJob(body: InferJobRequest) {
   return post<JobSummary>('/jobs/infer', body)
 }
 
-/** 추론 작업 중단. 응답으로 done 상태가 된 작업이 돌아온다.
+/** 추론 작업 중단. 응답으로 finalizing 상태가 된 작업이 돌아온다 (곧바로 done이 아니라
+ *  마무리 단계를 거친 뒤 다음 sweep에서 done으로 넘어가며 노드가 반납된다).
  *  infer가 아니거나 running이 아니면 400 */
 export function stopJob(jobId: number) {
   return post<JobSummary>(`/jobs/${jobId}/stop`, {})
