@@ -1,0 +1,47 @@
+.chip {
+  animation: enter 260ms ease-out;
+}
+
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* 나중에 오는 규칙이 이겨야 하므로 .chip 다음에 둔다 (같은 animation 속성 덮어쓰기) */
+.leaving {
+  animation: leave 320ms ease-in forwards;
+  pointer-events: none;
+}
+
+@keyframes leave {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+}
+
+/* 위치 이동(left/top)과는 별개 요소에서 계속 살짝 떠다니게 해서, 폴링 사이에도
+ * 화면이 완전히 정지해 보이지 않도록 한다. */
+.float {
+  animation: float 3.2s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+}

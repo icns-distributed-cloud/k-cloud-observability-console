@@ -239,6 +239,11 @@ class Job(Base):
     # never auto-finishes a real infer job, matching how inference serving doesn't
     # naturally end; only a future explicit stop endpoint will.
     duration_sec: Mapped[Optional[int]]
+    # when sweep_and_backfill should next auto-advance this job's status
+    # (queued->provisioning->running->finalizing->done). NULL means no pending
+    # auto-transition - either the job hasn't been admitted yet (still queued) or
+    # it's a real infer job sitting in "running" with no natural end.
+    phase_deadline: Mapped[Optional[datetime]]
 
     model: Mapped["Model"] = relationship(back_populates="jobs")
     user: Mapped["User"] = relationship(back_populates="jobs")

@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Breadcrumb from "@/components/Breadcrumb";
-import JobTable from "@/components/JobTable";
+import JobStatusBoard from "@/components/JobStatusBoard";
 
 export default function JobListPage() {
     const router = useRouter();
@@ -25,8 +25,7 @@ export default function JobListPage() {
             </div>
 
             {/* CSP는 전체 사용자의 작업을 본다 (userId 미지정) */}
-            <JobTable
-                showUser
+            <JobStatusBoard
                 onSelect={(id) => router.push(`/csp/jobs/${id}`)}
                 onCountChange={setCount}
             />
