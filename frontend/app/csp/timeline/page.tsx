@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import Breadcrumb from "@/components/Breadcrumb";
 import Card from "@/components/Card";
 import AllocationTimeline from "@/components/AllocationTimeline";
+import JobQueue from "@/components/JobQueue";
 import {
   fetchClusterAssignments,
   fetchClusterDetail,
@@ -90,7 +91,7 @@ export default function SchedulerPage() {
         );
         const allAssignments = assignmentLists.flat();
         const { train, infer } = selectSchedulerNodes(allNodes, allAssignments);
-        
+
         setData({ train, infer, jobs });
         setError(null);
       } catch (e) {
@@ -111,12 +112,21 @@ export default function SchedulerPage() {
   // 타임라인은 매 틱 다시 계산한다 (현재시각 선이 흐르고, 만료된 새 작업이 사라지도록)
   let trainTimeline: TimelineData | null = null;
   let inferTimeline: TimelineData | null = null;
+  // 대기열: status="queued"인 job을 제출 순으로 나열 (백필이 훑는 순서와 동일)
+  let trainQueue: JobSummary[] = [];
+  let inferQueue: JobSummary[] = [];
   if (data && nowMs !== null) {
     const fresh = highlight !== null && nowMs - highlight.at < HIGHLIGHT_TTL_MS;
     const highlightId = fresh ? highlight!.id : null;
     // 20초 지난 새 작업은 막대에서 제거 (시연용)
     const visible = (list: AssignmentItem[]) =>
       highlight === null || fresh ? list : list.filter((a) => a.job_id !== highlight.id);
+
+    const byType = (type: NodePurpose) => data.jobs.filter((j) => j.type === type);
+    const byIdAsc = (a: JobSummary, b: JobSummary) =>
+      new Date(a.submitted_at).getTime() - new Date(b.submitted_at).getTime();
+    trainQueue = byType("train").filter((j) => j.status === "queued").sort(byIdAsc);
+    inferQueue = byType("infer").filter((j) => j.status === "queued").sort(byIdAsc);
 
     const build = (section: SchedulerSection<NodeRef>) =>
       buildTimeline(visible(section.assignments), data.jobs, section.nodes, nowMs, highlightId);
@@ -152,13 +162,17 @@ export default function SchedulerPage() {
       ) : (
         <>
           <Section
-            title="학습 스케줄러"
+            title="학습 클러스터"
+            queueJobs={trainQueue}
+            nowMs={nowMs}
             data={trainTimeline}
             onSelectJob={(id) => router.push(`/csp/jobs/${id}`)}
           />
           <div style={{ height: 28 }} />
           <Section
-            title="추론 스케줄러"
+            title="추론 클러스터"
+            queueJobs={inferQueue}
+            nowMs={nowMs}
             data={inferTimeline}
             onSelectJob={(id) => router.push(`/csp/jobs/${id}`)}
           />
@@ -170,10 +184,14 @@ export default function SchedulerPage() {
 
 function Section({
   title,
+  queueJobs,
+  nowMs,
   data,
   onSelectJob,
 }: {
   title: string;
+  queueJobs: JobSummary[];
+  nowMs: number;
   data: TimelineData | null;
   onSelectJob: (jobId: number) => void;
 }) {
@@ -181,6 +199,8 @@ function Section({
     <>
       <div style={{ fontSize: 21, fontWeight: 700, marginBottom: 12 }}>{title}</div>
       <Card>
+        <JobQueue jobs={queueJobs} nowMs={nowMs} onSelectJob={onSelectJob} />
+        <div style={{ height: 1, background: "var(--line)", margin: "4px 0 16px" }} />
         {data ? (
           <AllocationTimeline data={data} onSelectJob={onSelectJob} />
         ) : (

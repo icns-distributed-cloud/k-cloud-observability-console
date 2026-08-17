@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 
 from fastapi import Depends, HTTPException
-from sqlalchemy import or_, text
+from sqlalchemy import case, or_, text
 from sqlalchemy.orm import Session, selectinload
 
 from app import clock, models, schemas
@@ -35,10 +35,13 @@ def _lock_admission(db: Session) -> None:
 # so it can never be admitted and would just pile up in the queue forever.
 FILLER_USER_NAME = "csc-demo-filler"
 FILLER_EXCLUDED_TIER_IDS = {2, 4, 8}
-FILLER_TARGET_PER_TYPE = 3
+FILLER_TARGET_PER_TYPE = 2
 # randomized per filler job (via job.duration_sec) instead of the fixed DURATION_SEC,
-# so the scheduler timeline doesn't show every bar at an identical length
-FILLER_DURATION_RANGE_SEC = {"train": (25, 70), "infer": (8, 30)}
+# so the scheduler timeline doesn't show every bar at an identical length.
+# Train's ceiling is capped below DURATION_SEC-scale demo patience (see
+# sweep_and_backfill's filler-deprioritization) so a filler holding the only
+# matching node never blocks a real job for much more than ~1 cycle.
+FILLER_DURATION_RANGE_SEC = {"train": (25, 50), "infer": (8, 30)}
 
 # one metric-card template set per job.type, copied verbatim into job_metric_profile on submission
 METRIC_TEMPLATES: dict[str, list[dict]] = {
@@ -415,9 +418,14 @@ def _admit(
         )
 
 
-def _maintain_filler_jobs(db: Session, now: datetime) -> None:
+def _filler_user_id(db: Session) -> int | None:
     filler_user = db.query(models.User).filter(models.User.name == FILLER_USER_NAME).first()
-    if filler_user is None:
+    return filler_user.id if filler_user is not None else None
+
+
+def _maintain_filler_jobs(db: Session, now: datetime) -> None:
+    filler_user_id = _filler_user_id(db)
+    if filler_user_id is None:
         return  # seed hasn't created the demo-filler user - feature quietly does nothing
 
     model_ids = [m.id for m in db.query(models.Model.id).all()]
@@ -439,7 +447,7 @@ def _maintain_filler_jobs(db: Session, now: datetime) -> None:
         active_count = (
             db.query(models.Job)
             .filter(
-                models.Job.user_id == filler_user.id,
+                models.Job.user_id == filler_user_id,
                 models.Job.type == job_type,
                 models.Job.status.in_(["running", "queued"]),
             )
@@ -451,7 +459,7 @@ def _maintain_filler_jobs(db: Session, now: datetime) -> None:
             tier = random.choice(type_tiers)
             job = models.Job(
                 model_id=random.choice(model_ids),
-                user_id=filler_user.id,
+                user_id=filler_user_id,
                 type=job_type,
                 status="queued",
                 batch=16,
@@ -508,11 +516,22 @@ def sweep_and_backfill(db: Session) -> None:
     live_cluster = _load_live_cluster(db)
     if live_cluster is not None:
         occupied = _occupied_node_ids(live_cluster, now)
+        filler_user_id = _filler_user_id(db)
+        # Real jobs get first crack at freed capacity every sweep; fillers only
+        # backfill into whatever real jobs don't need. Within each group it's
+        # still submitted_at order, so backfill among real jobs (or among
+        # fillers) behaves exactly as before - fillers are demo-only dressing
+        # and shouldn't make an actual user wait behind them.
+        order_cols = (
+            [case((models.Job.user_id == filler_user_id, 1), else_=0), models.Job.submitted_at]
+            if filler_user_id is not None
+            else [models.Job.submitted_at]
+        )
         queued_jobs = (
             db.query(models.Job)
             .filter(models.Job.status == "queued")
             .options(selectinload(models.Job.selected_tier).selectinload(models.ResourceTier.requirements).selectinload(models.ResourceTierRequirement.accelerator_model))
-            .order_by(models.Job.submitted_at)
+            .order_by(*order_cols)
             .all()
         )
         for job in queued_jobs:
