@@ -13,9 +13,18 @@ import {
     fetchKqvBenchmark,
     fetchModelLayers,
     fetchReallocations,
+    stopJob,
 } from "@/lib/api";
 import { JOB_COLORS, JOB_STATUS_LABELS, PRIORITY_LABELS } from "@/lib/jobs";
-import { jobProgress, metricDisplay, metricSeries } from "@/lib/jobMetrics";
+import {
+    cumulativeCount,
+    formatMetricValue,
+    isContinuous,
+    liveMetricSeries,
+    metricDisplay,
+    metricProgress,
+    metricSeries,
+} from "@/lib/jobMetrics";
 import {
     formatMakespan,
     formatOffsetTime,
@@ -55,9 +64,11 @@ interface JobDetailViewProps {
     jobId: number;
     /** 작업명 앞까지의 경로. 작업명 세그먼트는 내부에서 붙인다 */
     breadcrumbPrefix: Segment[];
+    /** 추론 작업 중단 버튼 표시 여부. CSC에서만 쓴다 (JobTable의 showStop과 동일한 이유) */
+    showStop?: boolean;
 }
 
-export default function JobDetailView({ jobId, breadcrumbPrefix }: JobDetailViewProps) {
+export default function JobDetailView({ jobId, breadcrumbPrefix, showStop }: JobDetailViewProps) {
     const { nowSec } = useTime();
     const now = nowSec === null ? null : nowSec * 1000;
 
@@ -68,6 +79,7 @@ export default function JobDetailView({ jobId, breadcrumbPrefix }: JobDetailView
     const [adjustments, setAdjustments] = useState<HyperparamAdjustmentItem[]>([]);
     const [modelLayers, setModelLayers] = useState<ModelLayersResponse | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [stopping, setStopping] = useState(false);
 
     useEffect(() => {
         Promise.all([
@@ -86,14 +98,31 @@ export default function JobDetailView({ jobId, breadcrumbPrefix }: JobDetailView
             .catch((e) => setError(String(e)));
     }, [jobId]);
 
+    // 백엔드에 push가 없어서, 페이지를 열어둔 채로 job이 (다른 탭에서 stop되는 등)
+    // 상태가 바뀌면 화면이 그걸 못 따라간다 - 특히 무기한 실행되는 추론 job은
+    // finished_at이 그대로 null로 남아있는 탓에 누적 요청 수 같은 지표가 실제로는
+    // 멈췄는데 계속 올라가는 것처럼 보인다. done된 뒤로는 더 바뀔 게 없으니 그때까지만
+    // 주기적으로 다시 조회한다.
+    useEffect(() => {
+        if (!job || job.status === "done") return;
+        const timer = setInterval(() => {
+            fetchJobDetail(jobId).then(setJob).catch(() => {});
+        }, 10_000);
+        return () => clearInterval(timer);
+    }, [jobId, job?.status]);
+
     if (error) return <main style={{ padding: 24 }}>불러오기 실패: {error}</main>;
     if (!job) return <main style={{ padding: 24 }}>불러오는 중…</main>;
 
     const color = JOB_COLORS[job.type];
-    const progress = now ? jobProgress(job, now) : 0;
+    const progress = now ? metricProgress(job, now) : 0;
     const featured = job.metrics.find((m) => m.featured);
     /** 에포크처럼 총 개수가 있는 지표 — 그래프 하단에 표시하고 카드에서는 뺀다 */
     const counter = job.metrics.find((m) => !m.featured && m.total_count !== null);
+    // 추론은 그래프 선(liveMetricSeries)에 잔물결을 얹으니, 우측 상단 "현재" 숫자도
+    // 같은 값(그래프의 가장 오른쪽 점)을 가리켜야 그래프랑 숫자가 서로 다른 걸
+    // 말하지 않는다 - progress 기반 metricDisplay는 웜업 이후 고정값이라 안 맞는다.
+    const liveSeries = job.type === "infer" && now && featured ? liveMetricSeries(featured, job, now, 30) : null;
     const realloc = summarizeReallocations(reallocs);
 
     const tabs = [
@@ -105,12 +134,42 @@ export default function JobDetailView({ jobId, breadcrumbPrefix }: JobDetailView
         <main style={{ padding: "24px 28px" }}>
             <Breadcrumb segments={[...breadcrumbPrefix, { label: `J-${job.id}` }]} />
             
-            <div style={{ margin: "16px 0 20px" }}>
-                <div style={{ fontSize: 20, fontWeight: 700 }}>J-{job.id}</div>
-                <div style={{ fontSize: 12.5, color: "var(--sub)", marginTop: 4 }}>
-                    {job.model_name} · {TYPE_LABELS[job.type] ?? job.type} ·{" "}
-                    {JOB_STATUS_LABELS[job.status] ?? job.status}
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", margin: "16px 0 20px" }}>
+                <div>
+                    <div style={{ fontSize: 20, fontWeight: 700 }}>J-{job.id}</div>
+                    <div style={{ fontSize: 12.5, color: "var(--sub)", marginTop: 4 }}>
+                        {job.model_name} · {TYPE_LABELS[job.type] ?? job.type} ·{" "}
+                        {JOB_STATUS_LABELS[job.status] ?? job.status}
+                    </div>
                 </div>
+
+                {showStop && isContinuous(job) && (
+                    <button
+                        disabled={stopping}
+                        onClick={() => {
+                            setStopping(true);
+                            stopJob(job.id)
+                                .then((j) => setJob((prev) => (prev ? { ...prev, ...j } : prev)))
+                                .catch((e) => setError(String(e)))
+                                .finally(() => setStopping(false));
+                        }}
+                        style={{
+                            border: "1px solid var(--line)",
+                            background: "transparent",
+                            color: "var(--sub)",
+                            borderRadius: 8,
+                            padding: "8px 14px",
+                            cursor: stopping ? "default" : "pointer",
+                            opacity: stopping ? 0.5 : 1,
+                            fontFamily: "inherit",
+                            fontSize: 12.5,
+                            fontWeight: 600,
+                            flexShrink: 0,
+                        }}
+                    >
+                        {stopping ? "중지 중…" : "중지"}
+                    </button>
+                )}
             </div>
 
             <Tabs items={tabs} active={tab} onChange={setTab} />
@@ -127,37 +186,44 @@ export default function JobDetailView({ jobId, breadcrumbPrefix }: JobDetailView
                                     <StatCard key={m.id} label={m.label} value={d.value} unit={d.unit ?? undefined} />
                                 );
                             })}
-                        <StatCard label="배치 크기" value={job.batch} />
                         {job.dataset_name && (
                             <StatCard label="데이터셋" value={job.dataset_name} />
                         )}
+                        <StatCard label="배치 크기" value={job.batch} />
                         <StatCard
                             label="우선순위"
                             value={PRIORITY_LABELS[job.priority_pref] ?? job.priority_pref}
                         />
                     </div>
 
-                    <div style={{ marginBottom: 24 }}>
-                        <div style={{ ...SECTION_LABEL, marginBottom: 8 }}>진행률</div>
-                        <ProgressBar value={progress} color={color} />
-                    </div>
+                    {job.type === "train" && (
+                        <div style={{ marginBottom: 24 }}>
+                            <div style={{ ...SECTION_LABEL, marginBottom: 8 }}>진행률</div>
+                            <ProgressBar value={progress} color={color} />
+                        </div>
+                    )}
 
                     {featured && now && (
                         <Card>
                             <MetricChart
                                 title={`${TYPE_LABELS[job.type] ?? job.type} 현황`}
                                 currentLabel={`현재 ${featured.label}`}
-                                currentValue={metricDisplay(featured, progress).value}
+                                currentValue={
+                                    liveSeries
+                                        ? formatMetricValue(liveSeries[liveSeries.length - 1])
+                                        : metricDisplay(featured, progress).value
+                                }
                                 unit={featured.unit}
-                                values={metricSeries(featured, progress, 30)}
-                                progress={progress}
+                                values={liveSeries ?? metricSeries(featured, progress, 30)}
+                                progress={job.type === "infer" ? 1 : progress}
                                 color={color}
                                 footerLeft={
                                     counter
-                                        ? `${counter.label} ${Math.round(progress * counter.total_count!)} / ${counter.total_count}`
+                                        ? job.type === "infer"
+                                            ? `${counter.label} ${cumulativeCount(Number(featured.target_value ?? 0), job, now)}`
+                                            : `${counter.label} ${Math.round(progress * counter.total_count!)} / ${counter.total_count}`
                                         : undefined
                                 }
-                                xLabel={counter?.label}
                             />
                         </Card>
                     )}
