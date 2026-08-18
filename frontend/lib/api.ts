@@ -53,16 +53,10 @@ export function fetchClusterAssignments(clusterId: number) {
   return get<AssignmentItem[]>(`/clusters/${clusterId}/assignments`)
 }
 
-export function fetchJobs(params?: {
-  status?: string
-  userId?: number
-  /** 스케줄러 타임라인용 데모 필러 작업까지 포함할지. 기본은 제외 */
-  includeFillers?: boolean
-}) {
+export function fetchJobs(params?: { status?: string; userId?: number }) {
   const q = new URLSearchParams()
   if (params?.status) q.set('status', params.status)
   if (params?.userId !== undefined) q.set('user_id', String(params.userId))
-  if (params?.includeFillers) q.set('include_fillers', 'true')
   const query = q.toString()
   return get<JobSummary[]>(`/jobs${query ? `?${query}` : ''}`)
 }

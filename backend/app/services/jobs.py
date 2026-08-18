@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 
 from fastapi import Depends, HTTPException
-from sqlalchemy import case, or_, text
+from sqlalchemy import case, desc, or_, text
 from sqlalchemy.orm import Session, selectinload
 
 from app import clock, models, schemas
@@ -44,13 +44,13 @@ def _lock_admission(db: Session) -> None:
 # so it can never be admitted and would just pile up in the queue forever.
 FILLER_USER_NAME = "csc-demo-filler"
 FILLER_EXCLUDED_TIER_IDS = {2, 4, 8}
-FILLER_TARGET_PER_TYPE = 2
+FILLER_TARGET_PER_TYPE = 4
 # randomized per filler job (via job.duration_sec) instead of the fixed DURATION_SEC,
-# so the scheduler timeline doesn't show every bar at an identical length.
-# Train's ceiling is capped below DURATION_SEC-scale demo patience (see
-# sweep_and_backfill's filler-deprioritization) so a filler holding the only
-# matching node never blocks a real job for much more than ~1 cycle.
-FILLER_DURATION_RANGE_SEC = {"train": (25, 50), "infer": (8, 30)}
+# so the scheduler timeline doesn't show every bar at an identical length. Kept short
+# so fillers cycle through provisioning->running->finalizing->done quickly - more
+# visible turnover in the job list/timeline, and any filler holding a node only
+# blocks a real job for a short window.
+FILLER_DURATION_RANGE_SEC = {"train": (15, 30), "infer": (5, 15)}
 
 # one metric-card template set per job.type, copied verbatim into job_metric_profile on submission
 METRIC_TEMPLATES: dict[str, list[dict]] = {
@@ -595,12 +595,17 @@ def sweep_dependency(db: Session = Depends(get_db)) -> None:
     sweep_and_backfill(db)
 
 
+JOB_LIST_LIMIT = 30
+
+
 def list_jobs(
     db: Session,
     status: str | None = None,
     user_id: int | None = None,
-    include_fillers: bool = False,
 ) -> list[schemas.JobSummary]:
+    # Fillers show up here now too (demo timeline should look busy in the list, not
+    # just the scheduler) - safe now that the list is actually capped instead of
+    # growing unbounded for as long as the server's been up.
     query = db.query(models.Job).options(
         selectinload(models.Job.model),
         selectinload(models.Job.dataset),
@@ -611,15 +616,11 @@ def list_jobs(
         query = query.filter(models.Job.status == status)
     if user_id is not None:
         query = query.filter(models.Job.user_id == user_id)
-    elif not include_fillers:
-        # no explicit user filter means "show everything" (CSP's job list) - demo
-        # filler jobs are noise there, not something a real viewer asked to see.
-        # An explicit ?user_id=<filler id> still works, this only affects the default.
-        # include_fillers=true opts back in (e.g. cluster detail's node-occupancy card,
-        # which needs the real job behind every active assignment, filler or not).
-        filler_user = db.query(models.User).filter(models.User.name == FILLER_USER_NAME).first()
-        if filler_user is not None:
-            query = query.filter(models.Job.user_id != filler_user.id)
+    # id as a tiebreaker: two fillers created in the same sweep share the exact same
+    # submitted_at (clock.now() called once, reused for both), and without a tiebreaker
+    # Postgres doesn't guarantee a stable order among ties - same list, reshuffled
+    # between polls.
+    query = query.order_by(desc(models.Job.submitted_at), desc(models.Job.id)).limit(JOB_LIST_LIMIT)
     return [_to_job_summary(job) for job in query.all()]
 
 

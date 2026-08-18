@@ -45,7 +45,7 @@ export default function ClusterPage({ params }: { params: Promise<{ id: string }
       fetchClusterDetail(clusterId),
       fetchClusterMetrics(clusterId),
       fetchClusterAssignments(clusterId),
-      fetchJobs({ includeFillers: true }),
+      fetchJobs(),
     ])
       .then(([c, m, assignments, jobs]) => {
         setCluster(c);
