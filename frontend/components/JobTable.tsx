@@ -5,6 +5,7 @@ import { JOB_COLORS, JOB_STATUS_LABELS, jobCost, tierMix } from "@/lib/jobs";
 import { elapsedLabel, hidesProgress, isContinuous, jobProgress } from "@/lib/jobMetrics";
 import { useTime } from "@/lib/TimeContext";
 import type { JobSummary } from "@/app/types";
+import styles from "./JobTable.module.css";
 
 const TYPE_LABELS: Record<string, string> = {
     train: "학습",
@@ -136,6 +137,7 @@ export default function JobTable({ userId, showUser, showStop, onSelect, onCount
                         return (
                             <div
                                 key={j.id}
+                                className={styles.row}
                                 onClick={() => onSelect(j.id)}
                                 style={{
                                     display: "flex",

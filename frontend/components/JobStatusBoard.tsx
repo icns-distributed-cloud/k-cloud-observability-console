@@ -25,6 +25,11 @@ const STATUS_LABELS_EN: Record<JobStatus, string> = {
 };
 /** 해바라기 나선 패킹에 쓰는 golden angle (라디안) */
 const GOLDEN_ANGLE = 137.5 * (Math.PI / 180);
+/** 나선 슬롯을 job.id % 이 값으로 고정한다 (zone 안 "몇 번째냐"로 정하면, 형제 job이
+ * 들고 날 때마다 순번이 밀려서 다른 job들 위치까지 같이 튄다 - 필러가 자주 도니까
+ * 매 폴링마다 여러 zone이 통째로 재배치되는 것처럼 보였다). id % N은 zone 인원과
+ * 무관하게 항상 같은 슬롯이라, 같은 job은 형제가 바뀌어도 제자리에 머문다. */
+const SPIRAL_SLOTS = 30;
 const CHIP_W = 78;
 const CHIP_H = 26;
 
@@ -95,13 +100,12 @@ export default function JobStatusBoard({ onSelect, onCountChange }: Props) {
 
     if (departed.length > 0) {
       setLeavingIds((prev) => new Set([...prev, ...departed]));
+      // 나가는 job만 퇴장 애니메이션이 끝날 때까지 예전 스냅샷을 들고 있는다 - 남아있는
+      // job까지 죄다 옛날 데이터로 되돌리면(이전 방식), 누구 하나 나갈 때마다 한 폴링
+      // 주기 동안 화면 전체가 멈췄다 따라잡는 것처럼 보인다.
       setRendered((prevList) => {
-        const known = new Set(prevList.map((j) => j.id));
-        const stillOrLeaving = prevList.filter(
-          (j) => incomingIds.has(j.id) || departed.includes(j.id)
-        );
-        const arrived = visibleJobs.filter((j) => !known.has(j.id));
-        return [...stillOrLeaving, ...arrived];
+        const departingSnapshots = prevList.filter((j) => departed.includes(j.id));
+        return [...visibleJobs, ...departingSnapshots];
       });
     } else {
       setRendered(visibleJobs);
@@ -134,17 +138,19 @@ export default function JobStatusBoard({ onSelect, onCountChange }: Props) {
     byStatus.get(job.status as JobStatus)?.push(job);
   }
 
+  // 슬롯 개수가 고정이라 spacing도 고정 - zone 인원수가 늘고 줄어도 이미 있던
+  // job들의 위치는 안 바뀐다 (SPIRAL_SLOTS 위 주석 참고).
+  const spiralSpacing = Math.max(Math.min(zoneRadius / Math.sqrt(SPIRAL_SLOTS), 46), 24);
   const positioned: Positioned[] = [];
   STATUSES.forEach((status, zi) => {
     const list = byStatus.get(status) ?? [];
     const { cx, cy } = zoneCenter(zi);
-    // zone 인원이 많을수록 나선 간격을 좁혀서 배경 원 반지름 안에 들어오게 한다
-    const spacing = Math.max(Math.min(zoneRadius / Math.sqrt(Math.max(list.length, 1)), 46), 24);
-    list.forEach((job, i) => {
-      const angle = i * GOLDEN_ANGLE;
-      const r = spacing * Math.sqrt(i);
+    for (const job of list) {
+      const slot = job.id % SPIRAL_SLOTS;
+      const angle = slot * GOLDEN_ANGLE;
+      const r = spiralSpacing * Math.sqrt(slot);
       positioned.push({ job, x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) });
-    });
+    }
   });
   const posById = new Map(positioned.map((p) => [p.job.id, p]));
 
