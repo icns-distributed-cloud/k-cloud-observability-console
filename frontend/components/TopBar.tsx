@@ -1,5 +1,6 @@
 "use client";
 import { useRouter, usePathname } from "next/navigation";
+import { CURRENT_USER_ID } from "@/lib/auth";
 
 export default function TopBar() {
   const router = useRouter();
@@ -36,7 +37,7 @@ export default function TopBar() {
         />
         <div>
           <div style={{ fontSize: 19, fontWeight: 700, letterSpacing: "-0.01em" }}>
-            K-Cloud 연구 클러스터
+            K-Cloud Insight
           </div>
           <div
             style={{
@@ -83,6 +84,19 @@ export default function TopBar() {
           </>
         )}
       </nav>
+
+      {isCsc && (
+        <div
+          style={{
+            marginLeft: "auto",
+            fontSize: 12.5,
+            color: "var(--sub)",
+            fontFamily: "'IBM Plex Mono', monospace",
+          }}
+        >
+          U-{CURRENT_USER_ID}
+        </div>
+      )}
     </header>
   );
 }

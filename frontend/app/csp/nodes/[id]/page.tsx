@@ -89,6 +89,7 @@ export default function NodePage({ params }: { params: Promise<{ id: string }> }
       </div>
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
+        <StatCard label="용도" value={TYPE_LABELS[node.purpose] ?? node.purpose} />
         <StatCard label="상태" value={isIdle ? "유휴" : "가동중"} />
         <StatCard label="가속기" value={node.accelerators.reduce((n, a) => n + a.count, 0)} unit="개" />
       </div>
