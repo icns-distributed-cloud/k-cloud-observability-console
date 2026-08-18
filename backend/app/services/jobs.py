@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from fastapi import Depends, HTTPException
 from sqlalchemy import case, desc, or_, text
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Query, Session, selectinload
 
 from app import clock, models, schemas
 from app.database import get_db
@@ -179,6 +179,31 @@ def _to_selected_tier(tier: models.ResourceTier | None) -> schemas.SelectedTierS
     )
 
 
+def _phase_progress(job: models.Job) -> float | None:
+    """0~1, 현재 단계(provisioning/finalizing/running) 안에서 얼마나 지났는지.
+    phase_deadline은 "이 단계가 언제 끝나는지"만 들고 있으니, 단계별 고정 길이를 빼면
+    단계 시작 시각이 나오고 거기서 경과 비율을 계산할 수 있다. queued/done이면 None.
+    추론의 running도 전부 None - 실제 제출된 추론은 무기한 실행이라 애초에
+    phase_deadline이 없고, 필러 추론은 고정 duration이 있어 값을 낼 수는 있지만
+    그러면 "이 추론은 왜 진행률이 있고 저건 없지"처럼 일관성이 깨진다."""
+    if job.phase_deadline is None:
+        return None
+    if job.type == "infer" and job.status == "running":
+        return None
+    if job.status == "provisioning":
+        duration = PROVISIONING_SEC[job.type]
+    elif job.status == "finalizing":
+        duration = FINALIZING_SEC[job.type]
+    elif job.status == "running":
+        duration = job.duration_sec if job.duration_sec is not None else DURATION_SEC[job.type]
+    else:
+        return None
+
+    phase_start = job.phase_deadline - timedelta(seconds=duration)
+    elapsed = (clock.now() - phase_start).total_seconds()
+    return max(0.0, min(1.0, elapsed / duration))
+
+
 def _to_job_summary(job: models.Job) -> schemas.JobSummary:
     return schemas.JobSummary(
         id=job.id,
@@ -204,6 +229,7 @@ def _to_job_summary(job: models.Job) -> schemas.JobSummary:
             )
             for a in job.assignments
         ],
+        phase_progress=_phase_progress(job),
     )
 
 
@@ -606,22 +632,40 @@ def list_jobs(
     # Fillers show up here now too (demo timeline should look busy in the list, not
     # just the scheduler) - safe now that the list is actually capped instead of
     # growing unbounded for as long as the server's been up.
-    query = db.query(models.Job).options(
-        selectinload(models.Job.model),
-        selectinload(models.Job.dataset),
-        selectinload(models.Job.selected_tier).selectinload(models.ResourceTier.requirements).selectinload(models.ResourceTierRequirement.accelerator_model),
-        selectinload(models.Job.assignments).selectinload(models.Assignment.node).selectinload(models.Node.cluster),
-    )
-    if status is not None:
-        query = query.filter(models.Job.status == status)
-    if user_id is not None:
-        query = query.filter(models.Job.user_id == user_id)
+    def base_query() -> Query:
+        q = db.query(models.Job).options(
+            selectinload(models.Job.model),
+            selectinload(models.Job.dataset),
+            selectinload(models.Job.selected_tier).selectinload(models.ResourceTier.requirements).selectinload(models.ResourceTierRequirement.accelerator_model),
+            selectinload(models.Job.assignments).selectinload(models.Assignment.node).selectinload(models.Node.cluster),
+        )
+        if user_id is not None:
+            q = q.filter(models.Job.user_id == user_id)
+        return q
+
     # id as a tiebreaker: two fillers created in the same sweep share the exact same
     # submitted_at (clock.now() called once, reused for both), and without a tiebreaker
     # Postgres doesn't guarantee a stable order among ties - same list, reshuffled
     # between polls.
-    query = query.order_by(desc(models.Job.submitted_at), desc(models.Job.id)).limit(JOB_LIST_LIMIT)
-    return [_to_job_summary(job) for job in query.all()]
+    order = (desc(models.Job.submitted_at), desc(models.Job.id))
+
+    if status is not None:
+        query = base_query().filter(models.Job.status == status).order_by(*order)
+        if status == "done":
+            query = query.limit(JOB_LIST_LIMIT)
+        jobs = query.all()
+    else:
+        # Cap only the done bucket - it's the one that grows without bound for as long
+        # as the server's up. Active jobs (queued/provisioning/running/finalizing) are
+        # naturally bounded by real cluster capacity and must never be capped by age:
+        # a real infer job now runs indefinitely, so a plain submitted_at-based limit
+        # would eventually push a still-running job out of the window just because
+        # enough fillers were created after it.
+        active = base_query().filter(models.Job.status != "done").order_by(*order).all()
+        done = base_query().filter(models.Job.status == "done").order_by(*order).limit(JOB_LIST_LIMIT).all()
+        jobs = sorted(active + done, key=lambda j: (j.submitted_at, j.id), reverse=True)
+
+    return [_to_job_summary(job) for job in jobs]
 
 
 def get_job_detail(db: Session, job_id: int) -> schemas.JobDetail | None:
