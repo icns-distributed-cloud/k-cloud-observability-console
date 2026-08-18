@@ -303,9 +303,13 @@ INSERT INTO node_alert (node_id, severity, message) VALUES
 -- ============================================================
 -- model / model_layer / model_layer_edge / dataset
 -- ============================================================
--- 3 of the 12 (BERT-base, ResNet-50, Whisper-base) get real layer graphs, one per
--- category (nlp/cv/audio), so "모델 분석" has something to show across categories -
--- the rest exist for variety in job/dataset pairing and have no layer data.
+-- all 12 get real layer graphs (demo presenter can't predict which model gets picked
+-- live, so every model needs something to show under "모델 분석"). Each graph reflects
+-- that model's actual published architecture, including its real branch/merge points
+-- (embedding fan-in, attention/FFN residuals, ResNet skip connections, U-Net skips,
+-- FPN-PAN neck, dual encoder towers, ...) rather than a flat chain - buildGraphColumns
+-- on the frontend lays out same-depth layers side by side automatically from these
+-- edges, no separate "row" concept needed here.
 INSERT INTO model (name, type) VALUES
   ('BERT-base', 'nlp'),
   ('GPT-2', 'nlp'),
@@ -320,21 +324,230 @@ INSERT INTO model (name, type) VALUES
   ('Whisper-base', 'audio'),
   ('CLIP-ViT', 'multimodal');
 
+-- id ranges (RESTART IDENTITY above means this is exact): 1 BERT-base 1-11,
+-- 2 GPT-2 12-23, 3 RoBERTa-large 24-32, 4 T5-base 33-47, 5 LLaMA-7B 48-57,
+-- 6 ResNet-50 58-72, 7 ViT-Base 73-83, 8 YOLOv8 84-100, 9 EfficientNet-B4 101-112,
+-- 10 Stable-Diffusion-v2 113-123, 11 Whisper-base 124-142, 12 CLIP-ViT 143-153
 INSERT INTO model_layer (model_id, op_name, shape, gflops, mem_mb, characteristic) VALUES
+  -- 1 BERT-base: 3-way embedding fan-in, post-LN encoder block (attn + FFN residuals), pooler
   (1, 'Token Embedding', '512x768', 2.1, 3.1, 'memory_bound'),
-  (1, 'Transformer Block x12', '512x768', 38.4, 24.0, 'balanced'),
-  (6, 'Stem Conv 7x7', '224x224x64', 5.4, 2.1, 'compute_bound'),
-  (6, 'Residual Stage 1-4', '56x56x256', 41.7, 14.2, 'balanced'),
-  (6, 'Global Avg Pool + FC', '1x1x2048', 2.1, 0.3, 'memory_bound'),
+  (1, 'Position Embedding', '512x768', 0.1, 1.6, 'memory_bound'),
+  (1, 'Segment Embedding', '512x768', 0.05, 1.6, 'memory_bound'),
+  (1, 'Embedding Add & LayerNorm', '512x768', 0.3, 3.1, 'memory_bound'),
+  (1, 'Multi-Head Self-Attention', '512x768', 12.6, 6.2, 'compute_bound'),
+  (1, 'Attention Add & LayerNorm', '512x768', 0.3, 3.1, 'memory_bound'),
+  (1, 'Feed-Forward (GELU)', '512x3072', 25.8, 14.7, 'compute_bound'),
+  (1, 'FFN Add & LayerNorm', '512x768', 0.3, 3.1, 'memory_bound'),
+  (1, 'Transformer Blocks 2-12 (반복)', '512x768', 386.1, 220.5, 'balanced'),
+  (1, 'Pooler (CLS → Tanh)', '1x768', 0.6, 2.4, 'memory_bound'),
+  (1, 'Classification Head', '1x2', 0.001, 0.1, 'memory_bound'),
+
+  -- 2 GPT-2: pre-LN decoder-only, causal self-attention, tied-weight LM head
+  (2, 'Token Embedding', '1024x768', 2.4, 3.5, 'memory_bound'),
+  (2, 'Position Embedding', '1024x768', 0.1, 1.8, 'memory_bound'),
+  (2, 'Embedding Add', '1024x768', 0.2, 3.5, 'memory_bound'),
+  (2, 'LayerNorm (pre-attn)', '1024x768', 0.1, 3.5, 'memory_bound'),
+  (2, 'Masked Self-Attention', '1024x768', 14.2, 7.4, 'compute_bound'),
+  (2, 'Attention Residual Add', '1024x768', 0.2, 3.5, 'memory_bound'),
+  (2, 'LayerNorm (pre-FFN)', '1024x768', 0.1, 3.5, 'memory_bound'),
+  (2, 'Feed-Forward (GELU)', '1024x3072', 28.9, 16.8, 'compute_bound'),
+  (2, 'FFN Residual Add', '1024x768', 0.2, 3.5, 'memory_bound'),
+  (2, 'Decoder Blocks 2-12 (반복)', '1024x768', 432.6, 247.2, 'balanced'),
+  (2, 'Final LayerNorm', '1024x768', 0.1, 3.5, 'memory_bound'),
+  (2, 'LM Head (tied weights)', '1024x50257', 39.6, 18.4, 'compute_bound'),
+
+  -- 3 RoBERTa-large: BERT-style block but no segment embedding / NSP (real RoBERTa
+  -- detail - only token+position fan-in), MLM head only
+  (3, 'Token Embedding', '512x1024', 2.8, 4.2, 'memory_bound'),
+  (3, 'Position Embedding', '512x1024', 0.1, 2.1, 'memory_bound'),
+  (3, 'Embedding Add & LayerNorm', '512x1024', 0.3, 4.2, 'memory_bound'),
+  (3, 'Multi-Head Self-Attention', '512x1024', 22.4, 11.3, 'compute_bound'),
+  (3, 'Attention Add & LayerNorm', '512x1024', 0.3, 4.2, 'memory_bound'),
+  (3, 'Feed-Forward (GELU)', '512x4096', 45.9, 26.1, 'compute_bound'),
+  (3, 'FFN Add & LayerNorm', '512x1024', 0.3, 4.2, 'memory_bound'),
+  (3, 'Transformer Blocks 2-24 (반복)', '512x1024', 1562.8, 802.4, 'balanced'),
+  (3, 'MLM Head', '512x50265', 52.3, 24.6, 'compute_bound'),
+
+  -- 4 T5-base: real encoder-decoder, relative-position bias (no separate position
+  -- embedding layer), decoder cross-attention merges with encoder output
+  (4, 'Shared Token Embedding', '512x768', 2.1, 3.4, 'memory_bound'),
+  (4, 'Encoder Self-Attention (rel. pos bias)', '512x768', 12.9, 6.4, 'compute_bound'),
+  (4, 'Encoder Attn Residual Add', '512x768', 0.3, 3.4, 'memory_bound'),
+  (4, 'Encoder Gated-GELU FFN', '512x2048', 24.6, 12.9, 'compute_bound'),
+  (4, 'Encoder FFN Residual Add', '512x768', 0.3, 3.4, 'memory_bound'),
+  (4, 'Encoder Layers 2-12 (반복)', '512x768', 372.4, 205.6, 'balanced'),
+  (4, 'Decoder Token Embedding', '512x768', 2.1, 3.4, 'memory_bound'),
+  (4, 'Decoder Masked Self-Attention', '512x768', 12.9, 6.4, 'compute_bound'),
+  (4, 'Decoder Self-Attn Residual Add', '512x768', 0.3, 3.4, 'memory_bound'),
+  (4, 'Decoder Cross-Attention', '512x768', 12.9, 6.4, 'compute_bound'),
+  (4, 'Decoder Cross-Attn Residual Add', '512x768', 0.3, 3.4, 'memory_bound'),
+  (4, 'Decoder Gated-GELU FFN', '512x2048', 24.6, 12.9, 'compute_bound'),
+  (4, 'Decoder FFN Residual Add', '512x768', 0.3, 3.4, 'memory_bound'),
+  (4, 'Decoder Layers 2-12 (반복)', '512x768', 446.8, 246.7, 'balanced'),
+  (4, 'LM Head', '512x32128', 33.4, 15.8, 'compute_bound'),
+
+  -- 5 LLaMA-7B: RMSNorm (not LayerNorm), RoPE folded into attention, SwiGLU FFN
+  (5, 'Token Embedding', '2048x4096', 8.4, 12.6, 'memory_bound'),
+  (5, 'RMSNorm (pre-attn)', '2048x4096', 0.2, 12.6, 'memory_bound'),
+  (5, 'Self-Attention (RoPE, causal)', '2048x4096', 68.2, 34.8, 'compute_bound'),
+  (5, 'Attention Residual Add', '2048x4096', 0.4, 12.6, 'memory_bound'),
+  (5, 'RMSNorm (pre-FFN)', '2048x4096', 0.2, 12.6, 'memory_bound'),
+  (5, 'SwiGLU FFN', '2048x11008', 184.6, 92.4, 'compute_bound'),
+  (5, 'FFN Residual Add', '2048x4096', 0.4, 12.6, 'memory_bound'),
+  (5, 'Decoder Blocks 2-32 (반복)', '2048x4096', 7862.4, 3924.8, 'balanced'),
+  (5, 'Final RMSNorm', '2048x4096', 0.2, 12.6, 'memory_bound'),
+  (5, 'LM Head', '2048x32000', 268.4, 128.6, 'compute_bound'),
+
+  -- 6 ResNet-50: 4 residual stages, each a real conv-path/skip-path branch that merges
+  (6, 'Stem (Conv7x7 + MaxPool)', '224x224x64', 5.4, 2.1, 'compute_bound'),
+  (6, 'Stage1 Conv Path', '56x56x256', 10.8, 3.6, 'compute_bound'),
+  (6, 'Stage1 Skip (1x1 Conv)', '56x56x256', 1.2, 1.4, 'memory_bound'),
+  (6, 'Stage1 Add', '56x56x256', 0.1, 3.6, 'memory_bound'),
+  (6, 'Stage2 Conv Path', '28x28x512', 12.6, 4.2, 'compute_bound'),
+  (6, 'Stage2 Skip (1x1 Conv, stride2)', '28x28x512', 1.6, 1.6, 'memory_bound'),
+  (6, 'Stage2 Add', '28x28x512', 0.1, 4.2, 'memory_bound'),
+  (6, 'Stage3 Conv Path', '14x14x1024', 12.6, 4.2, 'compute_bound'),
+  (6, 'Stage3 Skip (1x1 Conv, stride2)', '14x14x1024', 1.6, 1.6, 'memory_bound'),
+  (6, 'Stage3 Add', '14x14x1024', 0.1, 4.2, 'memory_bound'),
+  (6, 'Stage4 Conv Path', '7x7x2048', 8.4, 2.8, 'compute_bound'),
+  (6, 'Stage4 Skip (1x1 Conv, stride2)', '7x7x2048', 1.1, 1.1, 'memory_bound'),
+  (6, 'Stage4 Add', '7x7x2048', 0.1, 2.8, 'memory_bound'),
+  (6, 'Global Avg Pool', '1x1x2048', 0.02, 0.3, 'memory_bound'),
+  (6, 'FC Classifier', '1x1000', 0.02, 0.4, 'memory_bound'),
+
+  -- 7 ViT-Base: patch embedding + CLS token + position embedding all fan into the
+  -- encoder input, then a BERT-style post-LN block
+  (7, 'Patch Embedding (Conv16x16, stride16)', '196x768', 4.6, 4.8, 'compute_bound'),
+  (7, 'CLS Token', '1x768', 0.001, 0.1, 'memory_bound'),
+  (7, 'Position Embedding', '197x768', 0.1, 1.5, 'memory_bound'),
+  (7, 'Embedding Concat & Add', '197x768', 0.2, 4.8, 'memory_bound'),
+  (7, 'Multi-Head Self-Attention', '197x768', 9.8, 5.4, 'compute_bound'),
+  (7, 'Attention Add & LayerNorm', '197x768', 0.2, 4.8, 'memory_bound'),
+  (7, 'MLP (GELU)', '197x3072', 19.6, 11.2, 'compute_bound'),
+  (7, 'MLP Add & LayerNorm', '197x768', 0.2, 4.8, 'memory_bound'),
+  (7, 'Transformer Blocks 2-12 (반복)', '197x768', 316.8, 179.4, 'balanced'),
+  (7, 'Final LayerNorm', '197x768', 0.1, 4.8, 'memory_bound'),
+  (7, 'MLP Head (CLS → classes)', '1x1000', 0.8, 3.1, 'memory_bound'),
+
+  -- 8 YOLOv8: backbone feeds a real FPN-PAN neck (top-down upsample/concat then
+  -- bottom-up downsample/concat) feeding 3 scale-specific detection heads
+  (8, 'Stem Conv', '640x640x32', 3.7, 1.8, 'compute_bound'),
+  (8, 'Backbone Stage1', '320x320x64', 8.4, 3.2, 'compute_bound'),
+  (8, 'Backbone Stage2 (P3)', '160x160x128', 14.6, 5.6, 'compute_bound'),
+  (8, 'Backbone Stage3 (P4)', '80x80x256', 18.2, 6.8, 'compute_bound'),
+  (8, 'Backbone Stage4 (P5)', '40x40x512', 16.4, 6.2, 'compute_bound'),
+  (8, 'SPPF', '40x40x512', 3.8, 2.4, 'compute_bound'),
+  (8, 'Neck Upsample P5→P4', '80x80x256', 0.4, 1.6, 'memory_bound'),
+  (8, 'Neck Concat P4', '80x80x512', 6.2, 3.8, 'compute_bound'),
+  (8, 'Neck Upsample P4→P3', '160x160x128', 0.4, 1.6, 'memory_bound'),
+  (8, 'Neck Concat P3', '160x160x256', 6.8, 4.1, 'compute_bound'),
+  (8, 'Neck Downsample P3→P4', '80x80x256', 3.6, 2.2, 'compute_bound'),
+  (8, 'Neck Concat P4-v2', '80x80x512', 6.2, 3.8, 'compute_bound'),
+  (8, 'Neck Downsample P4→P5', '40x40x512', 3.6, 2.2, 'compute_bound'),
+  (8, 'Neck Concat P5-v2', '40x40x1024', 6.8, 4.1, 'compute_bound'),
+  (8, 'Detect Head Small', '160x160x144', 4.2, 2.4, 'compute_bound'),
+  (8, 'Detect Head Medium', '80x80x144', 3.1, 1.8, 'compute_bound'),
+  (8, 'Detect Head Large', '40x40x144', 2.4, 1.4, 'compute_bound'),
+
+  -- 9 EfficientNet-B4: MBConv block with squeeze-excite branch (pool → FC-FC-sigmoid
+  -- → channel-wise scale) plus the outer residual, the two branch points that
+  -- distinguish it from a plain conv stack
+  (9, 'Stem Conv (3x3)', '380x380x48', 3.2, 1.6, 'compute_bound'),
+  (9, 'MBConv Expand (1x1 Conv)', '190x190x288', 4.8, 2.4, 'compute_bound'),
+  (9, 'Depthwise Conv (3x3)', '190x190x288', 2.1, 1.8, 'compute_bound'),
+  (9, 'SE Squeeze (Global Pool)', '1x1x288', 0.01, 0.1, 'memory_bound'),
+  (9, 'SE Excite (FC-ReLU-FC-Sigmoid)', '1x1x288', 0.02, 0.2, 'memory_bound'),
+  (9, 'SE Scale', '190x190x288', 0.1, 1.8, 'memory_bound'),
+  (9, 'Project (1x1 Conv)', '190x190x48', 1.6, 1.2, 'compute_bound'),
+  (9, 'Block Residual Add', '190x190x48', 0.05, 1.2, 'memory_bound'),
+  (9, 'MBConv Blocks 2-32 (반복)', '190x190x48', 342.6, 168.4, 'balanced'),
+  (9, 'Head Conv (1x1)', '12x12x1792', 4.6, 3.2, 'compute_bound'),
+  (9, 'Global Avg Pool', '1x1x1792', 0.01, 0.2, 'memory_bound'),
+  (9, 'FC Classifier', '1x1000', 0.02, 0.4, 'memory_bound'),
+
+  -- 10 Stable-Diffusion-v2: latent diffusion U-Net - text encoder cross-attends into
+  -- the mid block, and each down-block output skips straight across to its matching
+  -- up-block (the defining U-Net shape), then a VAE decoder to pixels
+  (10, 'Text Encoder (CLIP)', '77x1024', 6.8, 5.2, 'compute_bound'),
+  (10, 'Latent Input (noised)', '64x64x4', 0.01, 0.1, 'memory_bound'),
+  (10, 'Down Block 1 (ResNet + Self-Attn)', '64x64x320', 12.4, 6.8, 'compute_bound'),
+  (10, 'Down Block 2', '32x32x640', 18.6, 9.4, 'compute_bound'),
+  (10, 'Down Block 3', '16x16x1280', 22.8, 11.6, 'compute_bound'),
+  (10, 'Mid Block (ResNet + Cross-Attn)', '8x8x1280', 14.2, 7.8, 'compute_bound'),
+  (10, 'Up Block 1 (+ skip)', '16x16x1280', 24.6, 12.4, 'compute_bound'),
+  (10, 'Up Block 2 (+ skip)', '32x32x640', 20.4, 10.2, 'compute_bound'),
+  (10, 'Up Block 3 (+ skip)', '64x64x320', 14.8, 7.6, 'compute_bound'),
+  (10, 'Output Conv (denoised latent)', '64x64x4', 0.2, 0.8, 'memory_bound'),
+  (10, 'VAE Decoder', '512x512x3', 38.6, 22.4, 'compute_bound'),
+
+  -- 11 Whisper-base: conv stem feeds an encoder, decoder cross-attention reaches all
+  -- the way back to the encoder's final output (the encoder-decoder bridge)
   (11, 'Mel Spectrogram', '80x3000', 1.2, 1.8, 'memory_bound'),
-  (11, 'Conv Encoder x2', '1500x512', 12.6, 8.4, 'compute_bound'),
-  (11, 'Transformer Encoder x6', '1500x512', 45.2, 28.6, 'balanced'),
-  (11, 'Transformer Decoder x6', '448x512', 22.8, 16.4, 'balanced');
+  (11, 'Conv1D Stem 1', '1500x512', 6.4, 3.8, 'compute_bound'),
+  (11, 'Conv1D Stem 2', '1500x512', 6.2, 4.6, 'compute_bound'),
+  (11, 'Positional Encoding (sinusoidal)', '1500x512', 0.01, 1.2, 'memory_bound'),
+  (11, 'Encoder Embedding Add', '1500x512', 0.2, 4.6, 'memory_bound'),
+  (11, 'Encoder Self-Attention', '1500x512', 14.6, 8.2, 'compute_bound'),
+  (11, 'Encoder Attn Add & LayerNorm', '1500x512', 0.2, 4.6, 'memory_bound'),
+  (11, 'Encoder FFN', '1500x2048', 22.4, 12.6, 'compute_bound'),
+  (11, 'Encoder FFN Add & LayerNorm', '1500x512', 0.2, 4.6, 'memory_bound'),
+  (11, 'Encoder Layers 2-6 (반복)', '1500x512', 148.2, 82.4, 'balanced'),
+  (11, 'Decoder Token Embedding', '448x512', 0.4, 1.6, 'memory_bound'),
+  (11, 'Decoder Masked Self-Attention', '448x512', 4.8, 2.9, 'compute_bound'),
+  (11, 'Decoder Self-Attn Add & LayerNorm', '448x512', 0.1, 1.6, 'memory_bound'),
+  (11, 'Decoder Cross-Attention', '448x512', 6.2, 3.4, 'compute_bound'),
+  (11, 'Decoder Cross-Attn Add & LayerNorm', '448x512', 0.1, 1.6, 'memory_bound'),
+  (11, 'Decoder FFN', '448x2048', 8.6, 4.8, 'compute_bound'),
+  (11, 'Decoder FFN Add & LayerNorm', '448x512', 0.1, 1.6, 'memory_bound'),
+  (11, 'Decoder Layers 2-6 (반복)', '448x512', 76.4, 42.8, 'balanced'),
+  (11, 'Output Projection (Linear+Softmax)', '448x51865', 11.8, 6.4, 'compute_bound'),
+
+  -- 12 CLIP-ViT: two fully independent encoder towers (image ViT, text transformer)
+  -- that only ever meet at the final contrastive similarity - the two long parallel
+  -- branches this graph is really meant to show off
+  (12, 'Image Patch Embedding', '196x768', 4.6, 4.8, 'compute_bound'),
+  (12, 'Image Position Embedding', '196x768', 0.1, 1.5, 'memory_bound'),
+  (12, 'Image Embedding Add', '196x768', 0.2, 4.8, 'memory_bound'),
+  (12, 'Image Transformer Encoder (x12 반복)', '196x768', 348.6, 196.4, 'balanced'),
+  (12, 'Image Projection Head', '1x512', 0.4, 1.8, 'memory_bound'),
+  (12, 'Text Token Embedding', '77x512', 0.8, 1.2, 'memory_bound'),
+  (12, 'Text Position Embedding', '77x512', 0.05, 0.6, 'memory_bound'),
+  (12, 'Text Embedding Add', '77x512', 0.1, 1.2, 'memory_bound'),
+  (12, 'Text Transformer Encoder (x12 반복)', '77x512', 68.4, 38.6, 'balanced'),
+  (12, 'Text Projection Head', '1x512', 0.4, 1.8, 'memory_bound'),
+  (12, 'Contrastive Similarity', '1x1', 0.001, 0.05, 'memory_bound');
 
 INSERT INTO model_layer_edge (from_layer_id, to_layer_id) VALUES
-  (1, 2),
-  (3, 4), (4, 5),
-  (6, 7), (7, 8), (8, 9);
+  -- 1 BERT-base
+  (1, 4), (2, 4), (3, 4), (4, 5), (4, 6), (5, 6), (6, 7), (6, 8), (7, 8), (8, 9), (9, 10), (10, 11),
+  -- 2 GPT-2
+  (12, 14), (13, 14), (14, 15), (15, 16), (14, 17), (16, 17), (17, 18), (18, 19), (17, 20), (19, 20), (20, 21), (21, 22), (22, 23),
+  -- 3 RoBERTa-large
+  (24, 26), (25, 26), (26, 27), (26, 28), (27, 28), (28, 29), (28, 30), (29, 30), (30, 31), (31, 32),
+  -- 4 T5-base
+  (33, 34), (33, 35), (34, 35), (35, 36), (35, 37), (36, 37), (37, 38),
+  (39, 40), (39, 41), (40, 41), (41, 42), (38, 42), (41, 43), (42, 43), (43, 44), (43, 45), (44, 45), (45, 46), (46, 47),
+  -- 5 LLaMA-7B
+  (48, 49), (49, 50), (48, 51), (50, 51), (51, 52), (52, 53), (51, 54), (53, 54), (54, 55), (55, 56), (56, 57),
+  -- 6 ResNet-50
+  (58, 59), (58, 60), (59, 61), (60, 61), (61, 62), (61, 63), (62, 64), (63, 64), (64, 65), (64, 66),
+  (65, 67), (66, 67), (67, 68), (67, 69), (68, 70), (69, 70), (70, 71), (71, 72),
+  -- 7 ViT-Base
+  (73, 76), (74, 76), (75, 76), (76, 77), (76, 78), (77, 78), (78, 79), (78, 80), (79, 80), (80, 81), (81, 82), (82, 83),
+  -- 8 YOLOv8
+  (84, 85), (85, 86), (86, 87), (87, 88), (88, 89), (89, 90), (90, 91), (87, 91), (91, 92), (92, 93),
+  (86, 93), (93, 94), (94, 95), (91, 95), (95, 96), (96, 97), (89, 97), (93, 98), (95, 99), (97, 100),
+  -- 9 EfficientNet-B4
+  (101, 102), (102, 103), (103, 104), (104, 105), (103, 106), (105, 106), (106, 107),
+  (101, 108), (107, 108), (108, 109), (109, 110), (110, 111), (111, 112),
+  -- 10 Stable-Diffusion-v2
+  (114, 115), (115, 116), (116, 117), (117, 118), (113, 118), (118, 119), (117, 119),
+  (119, 120), (116, 120), (120, 121), (115, 121), (121, 122), (122, 123),
+  -- 11 Whisper-base
+  (124, 125), (125, 126), (126, 128), (127, 128), (128, 129), (128, 130), (129, 130), (130, 131), (130, 132), (131, 132), (132, 133),
+  (134, 135), (134, 136), (135, 136), (136, 137), (133, 137), (136, 138), (137, 138), (138, 139), (138, 140), (139, 140), (140, 141), (141, 142),
+  -- 12 CLIP-ViT
+  (143, 145), (144, 145), (145, 146), (146, 147), (148, 150), (149, 150), (150, 151), (151, 152), (147, 153), (152, 153);
 
 -- datasets paired to whichever model would plausibly train/eval on them.
 -- Common-Crawl is left unlinked (model_id NULL) since dataset.model_id is nullable.
