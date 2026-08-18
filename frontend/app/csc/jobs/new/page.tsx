@@ -137,6 +137,10 @@ export default function JobWizardPage() {
         }
     };
 
+    // 방금 admit된 job은 provisioning/running/finalizing 중 하나로 시작한다
+    // (곧장 done일 리는 없다) - queued일 때만 실제로 대기 중인 것.
+    const admitted = result !== null && result.status !== "queued";
+
     return (
         <main style={{ padding: "24px 28px",  maxWidth: 700, margin: "0 auto" }}>
             <div style={{ marginBottom: 20 }}>
@@ -393,22 +397,19 @@ export default function JobWizardPage() {
                                     fontSize: 11,
                                     fontWeight: 700,
                                     letterSpacing: "0.08em",
-                                    color:
-                                        result.status === "running"
-                                            ? "var(--active)"
-                                            : "var(--alert-warning)",
+                                    color: admitted ? "var(--active)" : "var(--alert-warning)",
                                     fontFamily: "'IBM Plex Mono', monospace",
                                     marginBottom: 10,
                                 }}
                             >
-                                {result.status === "running" ? "ADMITTED" : "QUEUED"}
+                                {admitted ? "ADMITTED" : "QUEUED"}
                             </div>
 
                             <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>
                                 {result.model_name}
                             </div>
                             <div style={{ fontSize: 12.5, color: "var(--sub)", marginBottom: 18 }}>
-                                {result.status === "running"
+                                {admitted
                                     ? "여유 자원이 있어 즉시 배정되었습니다."
                                     : "현재 여유 자원이 없어 대기열에 등록되었습니다."}
                             </div>
