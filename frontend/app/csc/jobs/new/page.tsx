@@ -445,7 +445,10 @@ export default function JobWizardPage() {
                         <button
                             onClick={() => {
                                 setResult(null);
-                                setForm(INITIAL_FORM);
+                                // 모델 목록은 이미 불러온 상태라 재조회 없이 첫 항목으로 다시 채운다.
+                                // INITIAL_FORM.modelId(null) 그대로 두면 컴포넌트가 리마운트되지
+                                // 않는 한 채워주는 effect가 다시 안 돌아서 "다음" 버튼이 안 풀린다.
+                                setForm({ ...INITIAL_FORM, modelId: models[0]?.id ?? null });
                                 setStep(0);
                             }}
                             style={secondaryBtn}
