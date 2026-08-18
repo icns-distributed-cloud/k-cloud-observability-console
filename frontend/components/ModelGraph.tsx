@@ -15,15 +15,17 @@ export default function ModelGraph({ layers, edges }: ModelGraphProps) {
     );
   }
 
-  const columns = buildGraphColumns(layers, edges);
+  // buildGraphColumns의 "column"은 depth 단위 그룹일 뿐 방향은 안 정한다 - 세로 배치는
+  // 그 depth 그룹을 위에서 아래로 쌓고, 같은 depth(=병렬 브랜치)는 그 안에서 가로로 나열한다.
+  const rows = buildGraphColumns(layers, edges);
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, overflowX: "auto", paddingBottom: 8 }}>
-        {columns.map((col, ci) => (
-          <div key={col.depth} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {col.layers.map((l) => {
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, paddingBottom: 8 }}>
+        {rows.map((row, ri) => (
+          <div key={row.depth} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 8 }}>
+              {row.layers.map((l) => {
                 const color = CHARACTERISTIC_COLORS[l.characteristic] ?? "var(--sub)";
                 return (
                   <div
@@ -64,8 +66,8 @@ export default function ModelGraph({ layers, edges }: ModelGraphProps) {
               })}
             </div>
 
-            {ci < columns.length - 1 && (
-              <span style={{ color: "var(--sub)", fontSize: 14, flexShrink: 0 }}>→</span>
+            {ri < rows.length - 1 && (
+              <span style={{ color: "var(--sub)", fontSize: 14, flexShrink: 0 }}>↓</span>
             )}
           </div>
         ))}
