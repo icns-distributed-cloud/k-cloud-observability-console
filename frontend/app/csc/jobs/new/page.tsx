@@ -7,6 +7,7 @@ import Tabs from "@/components/Tabs";
 import ModelGraph from "@/components/ModelGraph";
 import { fetchDatasets, fetchModelLayers, fetchModels, fetchResourceTiers, submitInferJob, submitTrainJob } from "@/lib/api";
 import { JOB_STATUS_LABELS, tierMix } from "@/lib/jobs";
+import { CURRENT_USER_ID } from "@/lib/auth";
 import type {
     DatasetItem,
     ModelItem,
@@ -17,9 +18,6 @@ import type {
 } from "@/app/types";
 
 const STEPS = ["작업 정보", "모델 분석", "자원 선택", "제출 완료"];
-
-/** 인증이 없으므로 CSC 포털의 "로그인된" 사용자를 고정한다 (시드의 csc-user-01) */
-const CURRENT_USER_ID = 1;
 
 export interface WizardForm {
     jobType: "train" | "infer";
