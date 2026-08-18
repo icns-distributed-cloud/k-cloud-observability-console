@@ -57,6 +57,10 @@ export default function JobStatusBoard({ onSelect, onCountChange }: Props) {
   const [leavingIds, setLeavingIds] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const prevIdsRef = useRef<Set<number>>(new Set());
+  // 단계가 바뀐(예: provisioning -> running) job은 진행률 바가 이전 폭에서 부드럽게
+  // "줄어드는" 게 아니라 즉시 리셋돼야 한다 - width 트랜지션을 그 한 번만 꺼서 스냅시킨다.
+  const prevStatusRef = useRef<Map<number, JobStatus>>(new Map());
+  const [phaseResetIds, setPhaseResetIds] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     const el = stageRef.current;
@@ -89,6 +93,14 @@ export default function JobStatusBoard({ onSelect, onCountChange }: Props) {
   }, []);
 
   useEffect(() => {
+    const changedStatus = new Set<number>();
+    for (const job of jobs) {
+      const prevStatus = prevStatusRef.current.get(job.id);
+      if (prevStatus !== undefined && prevStatus !== job.status) changedStatus.add(job.id);
+      prevStatusRef.current.set(job.id, job.status);
+    }
+    setPhaseResetIds(changedStatus);
+
     const done = jobs.filter((j) => j.status === "done").sort(byOldestFirst);
     const overflowIds = new Set(
       (done.length > DONE_CAP ? done.slice(0, done.length - DONE_CAP) : []).map((j) => j.id)
@@ -243,11 +255,13 @@ export default function JobStatusBoard({ onSelect, onCountChange }: Props) {
                     className={styles.float}
                     title={`J-${job.id} · ${job.model_name}`}
                     style={{
+                      position: "relative",
                       width: "100%",
                       height: "100%",
                       borderRadius: 13,
                       background: JOB_COLORS[job.type],
                       boxShadow: "0 1px 4px rgba(0,0,0,0.18)",
+                      overflow: "hidden",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
@@ -256,6 +270,32 @@ export default function JobStatusBoard({ onSelect, onCountChange }: Props) {
                       animationDelay: `${(job.id % 10) * 0.28}s`,
                     }}
                   >
+                    {job.phase_progress !== null && (
+                      // provisioning/finalizing/running 단계 진행률 (queued·done·무기한
+                      // 추론 running은 백엔드가 null로 내려줘서 여기 아예 안 보인다).
+                      // 항상 보이는 트랙을 깔아야 진행률이 낮을 때도 "진행바가 있다"는
+                      // 게 보이고, width에 폴링 주기만큼 트랜지션을 걸어야 4초마다
+                      // 스냅으로 뚝뚝 튀지 않고 부드럽게 차오르는 것처럼 보인다.
+                      <div
+                        style={{
+                          position: "absolute",
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          height: 4,
+                          background: "rgba(0,0,0,0.3)",
+                        }}
+                      >
+                        <div
+                          style={{
+                            height: "100%",
+                            width: `${job.phase_progress * 100}%`,
+                            background: "#FFFFFF",
+                            transition: phaseResetIds.has(job.id) ? "none" : `width ${POLL_MS}ms linear`,
+                          }}
+                        />
+                      </div>
+                    )}
                     <span
                       style={{
                         color: "#FFFFFF",

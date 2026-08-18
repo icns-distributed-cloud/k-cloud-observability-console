@@ -175,6 +175,9 @@ export interface JobSummary {
     dataset_name: string | null
     selected_tier: SelectedTierSummary | null
     assigned_nodes: AssignedNodeItem[]
+    /** 0~1, 현재 단계(provisioning/finalizing/running) 진행률. queued/done이거나
+     *  추론 running이면 null (실제 제출은 무기한 실행, 필러도 일관성을 위해 뺌) */
+    phase_progress: number | null
 }
 
 export interface JobDetail extends JobSummary {

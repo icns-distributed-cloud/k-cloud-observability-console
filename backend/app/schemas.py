@@ -180,6 +180,10 @@ class JobSummary(BaseModel):
     dataset_name: Optional[str]
     selected_tier: Optional[SelectedTierSummary]
     assigned_nodes: list[AssignedNodeItem]
+    # 0~1, 현재 단계(provisioning/finalizing/running) 안에서 얼마나 지났는지.
+    # queued/done이거나, 추론 running이면 None (진행률 개념 없음 - 실제 제출은 무기한
+    # 실행이고, 필러 추론은 duration이 있어도 일관성을 위해 마찬가지로 뺀다).
+    phase_progress: Optional[float]
 
 
 # ---------- GET /api/v1/jobs/{job_id} ----------
