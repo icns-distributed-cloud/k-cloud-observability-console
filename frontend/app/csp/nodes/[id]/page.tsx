@@ -52,8 +52,8 @@ export default function NodePage({ params }: { params: Promise<{ id: string }> }
         setNode(n);
         const [assignments, jobs] = await Promise.all([
           fetchClusterAssignments(n.cluster_id),
-          // 필러 작업도 노드를 실제로 점유하므로 포함해야 "유휴" 판정이 맞는다
-          fetchJobs({ includeFillers: true }),]);
+          fetchJobs(),
+        ]);
         setJob(mapNodeJobs(assignments, jobs)[n.id]);
         const c = await fetchClusterDetail(n.cluster_id).catch(() => null);
         setClusterName(c?.name ?? `클러스터 ${n.cluster_id}`);
