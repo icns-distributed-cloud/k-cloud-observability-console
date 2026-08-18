@@ -1,0 +1,18 @@
+/* 폴링마다 목록 창(최근 N개)에 새로 들어오는 행이 애니메이션 없이 그냥 "짠" 나타나면
+ * 필러가 자주 돌 때 마치 행들이 뒤섞이는 것처럼 보인다. React가 key(job.id)로 이미
+ * DOM 노드를 재사용하니, 새로 마운트되는 행에만 살짝 슬라이드+페이드를 줘서 자연스럽게
+ * "위에서 들어오는" 느낌으로 보이게 한다. */
+@keyframes rowEnter {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.row {
+  animation: rowEnter 320ms ease-out;
+}
