@@ -45,32 +45,28 @@ export interface SchedulerSection<T> {
  * node.purpose가 용도를 직접 알려주므로, 배정된 작업 타입으로 역산할 필요가 없다.
  * 할당 이력이 없는 유휴 노드도 제 풀에 정확히 들어간다.
  *
- * 정렬은 라이브 클러스터 여부를 막대 유무보다 우선한다.
- * 새 작업은 라이브 클러스터에만 배정되므로, 그 노드가 비어 있더라도
- * 자리를 잡고 있어야 제출 직후 막대가 나타날 행이 존재한다.
- * 막대 유무만으로 정렬하면 과거 이력이 쌓인 다른 클러스터 노드가
- * 앞자리를 채워, 정작 배정 대상 노드가 잘려나가 막대가 안 보였다.
+ * 라이브 클러스터 노드만 보여준다 - 새 작업은 항상 라이브 클러스터에만 배정되니,
+ * 다른 클러스터 노드는 여기 섞여봤자 영원히 빈 트랙일 뿐이다. (예전엔 섹션당 칸
+ * 수를 채우려고 부족한 만큼 다른 클러스터 노드로 채웠는데, 그러면 학습처럼 라이브
+ * 풀이 딱 맞아떨어지는 섹션은 안 티 나다가, 추론처럼 라이브 풀이 더 작은 섹션에서
+ * 수원이 아닌 노드가 섞여 보이는 문제가 있었다.)
  */
 export function selectSchedulerNodes<
   T extends { id: number; purpose: NodePurpose; isLive: boolean },
 >(
   nodes: T[],
-  assignments: AssignmentItem[],
-  // 시드 기준 라이브 클러스터의 train 풀만 4개라, 4칸이면 다른 클러스터가 아예 안 낀다
-  perSection = 7
+  assignments: AssignmentItem[]
 ): { train: SchedulerSection<T>; infer: SchedulerSection<T> } {
   const section = (purpose: NodePurpose): SchedulerSection<T> => {
-    const pool = nodes.filter((n) => n.purpose === purpose)
+    const pool = nodes.filter((n) => n.purpose === purpose && n.isLive)
     const poolIds = new Set(pool.map((n) => n.id))
     const sectionAssignments = assignments.filter((a) => poolIds.has(a.node_id))
 
-    // 라이브(0/1) → 막대 유무(0/1) 순으로 가중치를 더해 4단계 우선순위를 만든다.
-    // sort는 안정 정렬이라 같은 순위끼리는 원래 순서(=클러스터 조회 순)를 유지한다.
+    // 막대 있는 노드를 위로 - sort는 안정 정렬이라 동률(둘 다 유휴)이면 원래 순서 유지
     const busyIds = new Set(sectionAssignments.map((a) => a.node_id))
-    const rank = (n: T) => (n.isLive ? 0 : 2) + (busyIds.has(n.id) ? 0 : 1)
-    const ordered = [...pool].sort((a, b) => rank(a) - rank(b))
+    const ordered = [...pool].sort((a, b) => Number(busyIds.has(b.id)) - Number(busyIds.has(a.id)))
 
-    return { nodes: ordered.slice(0, perSection), assignments: sectionAssignments }
+    return { nodes: ordered, assignments: sectionAssignments }
   }
 
   return { train: section('train'), infer: section('infer') }
