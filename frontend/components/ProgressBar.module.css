@@ -9,4 +9,7 @@
 .fill {
   height: 100%;
   border-radius: 4px;
+  /* 진행률이 이제 폴링 스냅샷(job.phase_progress)이라 값이 뚝뚝 튄다 - 다음 값으로
+     부드럽게 넘어가게 트랜지션을 건다 */
+  transition: width 600ms ease;
 }

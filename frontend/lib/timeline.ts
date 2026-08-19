@@ -1,3 +1,4 @@
+import { CURRENT_USER_ID } from '@/lib/auth'
 import type { AssignmentItem, JobSummary, NodePurpose } from '@/app/types'
 
 export interface TimelineBar {
@@ -7,7 +8,8 @@ export interface TimelineBar {
   start: number
   width: number
   job?: JobSummary
-  isNew: boolean
+  /** 시연 유저(CSC, user_id=1)가 제출한 job인지 - CSP 화면들에서 항상 눈에 띄게 강조한다 */
+  isMine: boolean
 }
 
 export interface TimelineRow {
@@ -76,8 +78,7 @@ export function buildTimeline(
   assignments: AssignmentItem[],
   jobs: JobSummary[],
   nodes: { id: number; name: string }[],
-  nowMs: number,
-  highlightJobId?: number | null
+  nowMs: number
 ): TimelineData | null {
   if (nodes.length === 0) return null
 
@@ -121,7 +122,7 @@ export function buildTimeline(
           start: (s - fromMs) / span,
           width: Math.max((e - s) / span, 0.006),
           job: jobById.get(a.job_id),
-          isNew: highlightJobId != null && a.job_id === highlightJobId,
+          isMine: jobById.get(a.job_id)?.user_id === CURRENT_USER_ID,
         }
       })
       .sort((x, y) => x.start - y.start),

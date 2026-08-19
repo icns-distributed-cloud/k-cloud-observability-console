@@ -47,7 +47,7 @@ export default function AllocationTimeline({ data, onSelectJob }: Props) {
               }}
             >
               {row.bars.map((bar) => {
-                const color = bar.isNew
+                const color = bar.isMine
                   ? "var(--new-job)"
                   : bar.job
                     ? JOB_COLORS[bar.job.type]
@@ -65,7 +65,7 @@ export default function AllocationTimeline({ data, onSelectJob }: Props) {
                       height: "100%",
                       background: color,
                       borderRadius: 6,
-                      boxShadow: bar.isNew ? "0 0 0 2px var(--new-job-glow)" : undefined,
+                      boxShadow: bar.isMine ? "0 0 0 2px var(--new-job-glow)" : undefined,
                       display: "flex",
                       alignItems: "center",
                       paddingLeft: 8,

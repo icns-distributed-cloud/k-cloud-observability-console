@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import Card from "@/components/Card";
 import { fetchJobs } from "@/lib/api";
+import { CURRENT_USER_ID } from "@/lib/auth";
 import { JOB_COLORS } from "@/lib/jobs";
 import type { JobStatus, JobSummary } from "@/app/types";
 import styles from "./JobStatusBoard.module.css";
@@ -249,6 +250,11 @@ export default function JobStatusBoard({ onSelect, onCountChange }: Props) {
                     height: CHIP_H,
                     cursor: leaving ? "default" : "pointer",
                     transition: "left 500ms ease, top 500ms ease",
+                    // 겹친 칩들 사이에서 링이 이웃 칩에 가려 일부만 보이지 않도록, 강조된 칩을
+                    // 항상 맨 위로 그린다. (실제로 둥둥 떠다니는 애니메이션은 안쪽 .float에
+                    // 걸려있어서, z-index만 여기 두고 테두리 자체는 .float에 같이 둔다 -
+                    // 그래야 칩이 위아래로 떠다닐 때 테두리도 같이 움직인다.)
+                    zIndex: job.user_id === CURRENT_USER_ID ? 5 : undefined,
                   }}
                 >
                   <div
@@ -260,8 +266,16 @@ export default function JobStatusBoard({ onSelect, onCountChange }: Props) {
                       height: "100%",
                       borderRadius: 13,
                       background: JOB_COLORS[job.type],
-                      boxShadow: "0 1px 4px rgba(0,0,0,0.18)",
-                      overflow: "hidden",
+                      // 시연 유저(CSC, user_id=1)가 제출한 job은 링을 둘러서 필러 사이에서도
+                      // 바로 눈에 띄게 한다. 링은 진행률 바를 자르는 overflow:hidden과 같은
+                      // 엘리먼트에 두면 자기 자신의 box-shadow까지 잘려서 안 보인다 - 그래서
+                      // overflow:hidden은 진행률 바 트랙(아래, 훨씬 작은 범위)으로 내리고 여긴
+                      // 안 둔다. 색은 이 칩 팔레트(초록/주황)와도, 칩들이 겹칠 때 생기는 기본
+                      // drop-shadow 착시(옅은 흰 테두리)와도 안 섞이는 rose(--new-job)로 골랐다.
+                      boxShadow:
+                        job.user_id === CURRENT_USER_ID
+                          ? "0 1px 4px rgba(0,0,0,0.18), 0 0 0 3px var(--new-job)"
+                          : "0 1px 4px rgba(0,0,0,0.18)",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
@@ -276,6 +290,9 @@ export default function JobStatusBoard({ onSelect, onCountChange }: Props) {
                       // 항상 보이는 트랙을 깔아야 진행률이 낮을 때도 "진행바가 있다"는
                       // 게 보이고, width에 폴링 주기만큼 트랜지션을 걸어야 4초마다
                       // 스냅으로 뚝뚝 튀지 않고 부드럽게 차오르는 것처럼 보인다.
+                      // overflow:hidden은 위 .float가 아니라 여기 둔다 - 부모의 box-shadow
+                      // 링을 자르지 않으면서, 진행률 바 자체는 알약 모양 아래쪽 모서리에
+                      // 맞춰 둥글게 잘라내야 해서 borderRadius도 같이 준다.
                       <div
                         style={{
                           position: "absolute",
@@ -284,6 +301,8 @@ export default function JobStatusBoard({ onSelect, onCountChange }: Props) {
                           bottom: 0,
                           height: 4,
                           background: "rgba(0,0,0,0.3)",
+                          borderRadius: "0 0 13px 13px",
+                          overflow: "hidden",
                         }}
                       >
                         <div
