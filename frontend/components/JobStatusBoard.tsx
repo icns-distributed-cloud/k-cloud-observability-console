@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type Key, type ReactNode } from "react";
 import Card from "@/components/Card";
 import { fetchJobs } from "@/lib/api";
 import { CURRENT_USER_ID } from "@/lib/auth";
-import { JOB_COLORS, JOB_STATUS_LABELS } from "@/lib/jobs";
+import { JOB_COLORS, JOB_STATUS_COLORS, JOB_STATUS_LABELS } from "@/lib/jobs";
 import type { JobStatus, JobSummary } from "@/app/types";
 import styles from "./JobStatusBoard.module.css";
 
@@ -209,8 +209,10 @@ export default function JobStatusBoard({ onSelect, onCountChange }: Props) {
                       width: zoneRadius * 2,
                       height: zoneRadius * 2,
                       borderRadius: "50%",
-                      border: "1px dashed var(--line)",
-                      background: "var(--panel-2)",
+                      border: `1.5px dashed ${JOB_STATUS_COLORS[status]}`,
+                      // 존 색을 그대로 배경에 칠하면 안에 떠 있는 칩들과 부딪혀서 안 보인다 -
+                      // 섞어서 "이 존은 이 상태 색"이라는 걸 드러내되, 칩과 안 부딪히게 조절한다.
+                      background: `color-mix(in srgb, ${JOB_STATUS_COLORS[status]} 30%, var(--panel-2))`,
                     }}
                   />
                   <div
