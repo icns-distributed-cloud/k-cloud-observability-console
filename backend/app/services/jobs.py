@@ -628,6 +628,8 @@ def list_jobs(
     db: Session,
     status: str | None = None,
     user_id: int | None = None,
+    limit: int | None = None,
+    before_id: int | None = None,
 ) -> list[schemas.JobSummary]:
     # Fillers show up here now too (demo timeline should look busy in the list, not
     # just the scheduler) - safe now that the list is actually capped instead of
@@ -648,6 +650,22 @@ def list_jobs(
     # Postgres doesn't guarantee a stable order among ties - same list, reshuffled
     # between polls.
     order = (desc(models.Job.submitted_at), desc(models.Job.id))
+
+    if limit is not None:
+        # Paginated browsing (job list page below the live board) - separate access
+        # pattern from the dashboard calls below, so it ignores the active/done split
+        # and JOB_LIST_LIMIT entirely and just pages through whatever `status`/`user_id`
+        # matches, oldest-first cut by id. id alone is enough of an order (it's assigned
+        # in submission order here) and sidesteps the submitted_at-tie issue above.
+        # Fetch one extra row so the caller can tell whether another page exists
+        # without changing the response shape (still a plain list[JobSummary]).
+        query = base_query()
+        if status is not None:
+            query = query.filter(models.Job.status == status)
+        if before_id is not None:
+            query = query.filter(models.Job.id < before_id)
+        jobs = query.order_by(desc(models.Job.id)).limit(limit + 1).all()
+        return [_to_job_summary(job) for job in jobs]
 
     if status is not None:
         query = base_query().filter(models.Job.status == status).order_by(*order)

@@ -12,13 +12,15 @@ const TYPE_LABELS: Record<string, string> = {
     infer: "추론",
 };
 
+// 작업 타입(JOB_COLORS: 초록=학습/주황=추론)과 겹치면 행에서 뭐가 타입이고 뭐가
+// 상태인지 구분이 안 된다 - 상태 배지는 아예 파랑~보라 계열로만 쓴다.
 const STATUS_COLORS: Record<string, string> = {
-    running: "var(--active)",
-    queued: "var(--alert-warning)",
-    provisioning: "var(--alert-warning)",
-    finalizing: "var(--positive)",
-    done: "var(--sub)",
-    failed: "var(--alert-critical)",
+    queued: "var(--job-status-queued)",
+    provisioning: "var(--job-status-provisioning)",
+    running: "var(--job-status-running)",
+    finalizing: "var(--job-status-finalizing)",
+    done: "var(--job-status-done)",
+    failed: "var(--job-status-failed)",
 };
 
 const FILTERS = [
@@ -41,13 +43,21 @@ interface JobTableProps {
     onSelect: (jobId: number) => void;
     /** 총 건수를 바깥 헤더에 표시하려는 경우 */
     onCountChange?: (count: number) => void;
+    /** 주면 커서 페이지네이션 모드로 전환한다 (필러 때문에 계속 늘어나는 완료 작업을
+     *  다 훑어볼 수 있게). 안 주면 기존처럼 대시보드용 상한(최근 30건)만 보여준다. */
+    pageSize?: number;
 }
 
-export default function JobTable({ userId, showUser, showStop, onSelect, onCountChange }: JobTableProps) {
+export default function JobTable({ userId, showUser, showStop, onSelect, onCountChange, pageSize }: JobTableProps) {
     const { nowSec } = useTime();
     const [jobs, setJobs] = useState<JobSummary[]>([]);
     const [filter, setFilter] = useState("all");
     const [error, setError] = useState<string | null>(null);
+    // 페이지 경계의 커서(before_id) 스택. cursors[0]은 항상 1페이지(=undefined, 처음부터).
+    const [cursors, setCursors] = useState<(number | undefined)[]>([undefined]);
+    const [pageIndex, setPageIndex] = useState(0);
+    const [hasMore, setHasMore] = useState(false);
+    const paginated = pageSize !== undefined;
 
     // 중지 버튼에서도 호출해야 해서 useEffect 밖에 둔다
     const load = useCallback(
@@ -55,24 +65,46 @@ export default function JobTable({ userId, showUser, showStop, onSelect, onCount
             fetchJobs({
                 status: filter === "all" ? undefined : filter,
                 userId,
+                limit: pageSize,
+                beforeId: paginated ? cursors[pageIndex] : undefined,
             })
                 .then((list) => {
-                    setJobs(list);
+                    // limit+1개가 왔으면 다음 페이지가 더 있다는 뜻 - 화면엔 limit개만 보여준다.
+                    const hasNext = paginated && list.length > pageSize;
+                    setJobs(hasNext ? list.slice(0, pageSize) : list);
+                    setHasMore(hasNext);
                     onCountChange?.(list.length);
                 })
                 .catch((e) => setError(String(e))),
         // onCountChange는 매 렌더 새 함수일 수 있어 의존성에서 뺀다 (폴링이 재시작되지 않도록)
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [filter, userId]
+        [filter, userId, pageSize, paginated, cursors, pageIndex]
     );
+
+    // 필터를 바꾸면 지금까지 쌓아온 페이지 커서는 다른 조건 기준이라 의미가 없다 - 1페이지로 리셋.
+    useEffect(() => {
+        setCursors([undefined]);
+        setPageIndex(0);
+    }, [filter]);
 
     useEffect(() => {
         load();
+        // 과거 페이지를 보는 중엔 자동 새로고침을 끈다 - 폴링 중 새 필러가 쌓이면 커서
+        // 기준(before_id)이 가리키는 위치 자체가 밀려서 페이지 내용이 널뛴다.
+        if (paginated && pageIndex > 0) return;
         // 백엔드에 push가 없으므로 주기적으로 다시 조회한다.
         // CSC에서 제출한 작업이 새로고침 없이 CSP 목록에도 나타나야 한다.
         const timer = setInterval(load, 10_000);
         return () => clearInterval(timer);
-    }, [load]);
+    }, [load, paginated, pageIndex]);
+
+    const goNext = () => {
+        if (!hasMore || jobs.length === 0) return;
+        const lastId = jobs[jobs.length - 1].id;
+        setCursors((prev) => [...prev.slice(0, pageIndex + 1), lastId]);
+        setPageIndex((i) => i + 1);
+    };
+    const goPrev = () => setPageIndex((i) => Math.max(0, i - 1));
 
     if (error) return <div style={{ padding: 24 }}>불러오기 실패: {error}</div>;
 
@@ -114,15 +146,15 @@ export default function JobTable({ userId, showUser, showStop, onSelect, onCount
                         <Head w={W.id}>JOB ID</Head>
                         {showUser && <Head w={W.user}>USER</Head>}
                         <Head w={W.model}>MODEL</Head>
+                        <Head w={W.status} align="center">
+                            STATUS
+                        </Head>
                         <Head>PROGRESS</Head>
                         <Head w={W.elapsed}>ELAPSED</Head>
                         <Head w={W.resource}>RESOURCE</Head>
                         <Head w={W.nodes}>NODES</Head>
                         <Head w={W.cost} align="right">
                             COST
-                        </Head>
-                        <Head w={W.status} align="center">
-                            STATUS
                         </Head>
                         {showStop && <Head w={W.action}>{null}</Head>}
                     </div>
@@ -192,6 +224,24 @@ export default function JobTable({ userId, showUser, showStop, onSelect, onCount
                                         {j.dataset_name && ` · ${j.dataset_name}`}
                                     </div>
                                 </div>
+
+                                <span
+                                    style={{
+                                        width: W.status,
+                                        flexShrink: 0,
+                                        textAlign: "center",
+                                        fontSize: 12,
+                                        fontWeight: 700,
+                                        color: "#FFFFFF",
+                                        // 예전엔 배지 배경이 전부 같고 글자색만 상태별로 바뀌어서 눈에 잘
+                                        // 안 띄었다 - 배지 배경 자체를 상태 색으로 채운다.
+                                        background: STATUS_COLORS[j.status] ?? "var(--sub)",
+                                        borderRadius: 6,
+                                        padding: "4px 0",
+                                    }}
+                                >
+                                    {JOB_STATUS_LABELS[j.status] ?? j.status}
+                                </span>
 
                                 <div
                                     style={{
@@ -313,23 +363,6 @@ export default function JobTable({ userId, showUser, showStop, onSelect, onCount
                                     {cost === 0 ? "—" : `${cost.toFixed(2)} credit`}
                                 </span>
 
-                                <span
-                                    style={{
-                                        width: W.status,
-                                        flexShrink: 0,
-                                        textAlign: "center",
-                                        fontSize: 12,
-                                        fontWeight: 700,
-                                        color: STATUS_COLORS[j.status] ?? "var(--sub)",
-                                        background: "var(--panel-2)",
-                                        border: "1px solid var(--line)",
-                                        borderRadius: 6,
-                                        padding: "4px 0",
-                                    }}
-                                >
-                                    {JOB_STATUS_LABELS[j.status] ?? j.status}
-                                </span>
-
                                 {showStop && (
                                     <span
                                         style={{ width: W.action, flexShrink: 0, textAlign: "center" }}
@@ -364,7 +397,59 @@ export default function JobTable({ userId, showUser, showStop, onSelect, onCount
                     })}
                 </div>
             )}
+
+            {paginated && jobs.length > 0 && (
+                <div
+                    style={{
+                        display: "flex",
+                        justifyContent: "center",
+                        alignItems: "center",
+                        gap: 12,
+                        marginTop: 14,
+                    }}
+                >
+                    <PagerButton onClick={goPrev} disabled={pageIndex === 0}>
+                        이전 페이지
+                    </PagerButton>
+                    <span style={{ fontSize: 12.5, color: "var(--sub)", fontFamily: "'IBM Plex Mono', monospace" }}>
+                        {pageIndex + 1}
+                    </span>
+                    <PagerButton onClick={goNext} disabled={!hasMore}>
+                        다음 페이지
+                    </PagerButton>
+                </div>
+            )}
         </>
+    );
+}
+
+function PagerButton({
+    children,
+    onClick,
+    disabled,
+}: {
+    children: React.ReactNode;
+    onClick: () => void;
+    disabled?: boolean;
+}) {
+    return (
+        <button
+            onClick={onClick}
+            disabled={disabled}
+            style={{
+                border: "1px solid var(--line)",
+                background: disabled ? "var(--panel-2)" : "var(--panel)",
+                color: disabled ? "var(--sub)" : "inherit",
+                borderRadius: 6,
+                padding: "6px 12px",
+                cursor: disabled ? "default" : "pointer",
+                fontFamily: "inherit",
+                fontSize: 12.5,
+                fontWeight: 600,
+            }}
+        >
+            {children}
+        </button>
     );
 }
 

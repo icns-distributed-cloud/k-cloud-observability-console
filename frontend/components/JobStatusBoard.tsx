@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import Card from "@/components/Card";
 import { fetchJobs } from "@/lib/api";
 import { CURRENT_USER_ID } from "@/lib/auth";
-import { JOB_COLORS } from "@/lib/jobs";
+import { JOB_COLORS, JOB_STATUS_LABELS } from "@/lib/jobs";
 import type { JobStatus, JobSummary } from "@/app/types";
 import styles from "./JobStatusBoard.module.css";
 
@@ -17,13 +17,6 @@ const WAVE_OFFSET = [0, -34, 26, -30, 6];
 /** 완료 zone에 무한정 쌓이지 않도록, 최근 이만큼만 보여준다 */
 const DONE_CAP = 24;
 const STATUSES: JobStatus[] = ["queued", "provisioning", "running", "finalizing", "done"];
-const STATUS_LABELS_EN: Record<JobStatus, string> = {
-  queued: "Queued",
-  provisioning: "Provisioning",
-  running: "Running",
-  finalizing: "Finalizing",
-  done: "Done",
-};
 /** 해바라기 나선 패킹에 쓰는 golden angle (라디안) */
 const GOLDEN_ANGLE = 137.5 * (Math.PI / 180);
 /** 나선 슬롯을 job.id % 이 값으로 고정한다 (zone 안 "몇 번째냐"로 정하면, 형제 job이
@@ -225,7 +218,7 @@ export default function JobStatusBoard({ onSelect, onCountChange }: Props) {
                       fontFamily: "'IBM Plex Mono', monospace",
                     }}
                   >
-                    {STATUS_LABELS_EN[status]}{" "}
+                    {JOB_STATUS_LABELS[status]}{" "}
                     <span style={{ color: "var(--sub)", fontWeight: 600 }}>({count})</span>
                   </div>
                 </div>

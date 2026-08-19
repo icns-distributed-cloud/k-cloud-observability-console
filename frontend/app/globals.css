@@ -24,6 +24,16 @@
   --job-train: #0E8F5C;
   --job-infer: #C2620A;
 
+  /* 작업 상태 - 작업 타입(초록/주황)과 안 겹치게, 서로도 한눈에 구분되도록 색상환에서
+     멀리 떨어뜨려 놓는다: 대기/완료는 무채색(밝기 차이로 구분), 진행 3단계는
+     청록→파랑→보라로 뚜렷하게 갈라놓고, 실패만 별도로 빨강. */
+  --job-status-queued: #6B7280;
+  --job-status-provisioning: #0891B2;
+  --job-status-running: #2563EB;
+  --job-status-finalizing: #7C3AED;
+  --job-status-done: #374151;
+  --job-status-failed: #DC2626;
+
   /* 지도 */
   --map-land: #165ebd49;
   --map-stroke: #8f99a936;

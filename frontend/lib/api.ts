@@ -53,10 +53,20 @@ export function fetchClusterAssignments(clusterId: number) {
   return get<AssignmentItem[]>(`/clusters/${clusterId}/assignments`)
 }
 
-export function fetchJobs(params?: { status?: string; userId?: number }) {
+export function fetchJobs(params?: {
+  status?: string
+  userId?: number
+  /** 주면 커서 기반 페이지네이션 모드 - beforeId보다 오래된(id가 작은) 것들 중
+   *  limit+1개를 받는다 (마지막 한 개는 "다음 페이지 있음" 판단용, 응답 형태는
+   *  그대로 JobSummary[]라 페이지네이션 안 쓰는 호출과 스키마가 동일하다). */
+  limit?: number
+  beforeId?: number
+}) {
   const q = new URLSearchParams()
   if (params?.status) q.set('status', params.status)
   if (params?.userId !== undefined) q.set('user_id', String(params.userId))
+  if (params?.limit !== undefined) q.set('limit', String(params.limit))
+  if (params?.beforeId !== undefined) q.set('before_id', String(params.beforeId))
   const query = q.toString()
   return get<JobSummary[]>(`/jobs${query ? `?${query}` : ''}`)
 }
