@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react"; import Tabs from "@/components/Tabs";
 import { fetchJobs, stopJob } from "@/lib/api";
-import { JOB_COLORS, JOB_STATUS_LABELS, jobCost, tierMix } from "@/lib/jobs";
+import { JOB_COLORS, JOB_STATUS_COLORS, JOB_STATUS_LABELS, JOB_STATUS_TEXT_COLORS, jobCost, tierMix } from "@/lib/jobs";
 import { elapsedLabel, hidesProgress, isContinuous, phaseProgress } from "@/lib/jobMetrics";
 import { useTime } from "@/lib/TimeContext";
 import type { JobSummary } from "@/app/types";
@@ -10,17 +10,6 @@ import styles from "./JobTable.module.css";
 const TYPE_LABELS: Record<string, string> = {
     train: "학습",
     infer: "추론",
-};
-
-// 작업 타입(JOB_COLORS: 초록=학습/주황=추론)과 겹치면 행에서 뭐가 타입이고 뭐가
-// 상태인지 구분이 안 된다 - 상태 배지는 아예 파랑~보라 계열로만 쓴다.
-const STATUS_COLORS: Record<string, string> = {
-    queued: "var(--job-status-queued)",
-    provisioning: "var(--job-status-provisioning)",
-    running: "var(--job-status-running)",
-    finalizing: "var(--job-status-finalizing)",
-    done: "var(--job-status-done)",
-    failed: "var(--job-status-failed)",
 };
 
 const FILTERS = [
@@ -232,10 +221,11 @@ export default function JobTable({ userId, showUser, showStop, onSelect, onCount
                                         textAlign: "center",
                                         fontSize: 12,
                                         fontWeight: 700,
-                                        color: "#FFFFFF",
                                         // 예전엔 배지 배경이 전부 같고 글자색만 상태별로 바뀌어서 눈에 잘
-                                        // 안 띄었다 - 배지 배경 자체를 상태 색으로 채운다.
-                                        background: STATUS_COLORS[j.status] ?? "var(--sub)",
+                                        // 안 띄었다 - 배지 배경 자체를 상태 색으로 채운다. 대기중처럼
+                                        // 옅은 배경엔 흰 글자가 안 보여서 글자색도 상태별로 같이 바꾼다.
+                                        color: JOB_STATUS_TEXT_COLORS[j.status] ?? "#FFFFFF",
+                                        background: JOB_STATUS_COLORS[j.status] ?? "var(--sub)",
                                         borderRadius: 6,
                                         padding: "4px 0",
                                     }}
