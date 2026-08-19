@@ -19,12 +19,8 @@ import {
 } from "@/lib/timeline";
 import { flattenRegions, isDomestic } from "@/lib/mapData";
 import { useTime } from "@/lib/TimeContext";
-import type { AssignmentItem, JobSummary, NodePurpose } from "@/app/types";
+import type { JobSummary, NodePurpose } from "@/app/types";
 
-const HIGHLIGHT_KEY = "kcloud:lastSubmittedJobId";
-const HIGHLIGHT_AT_KEY = "kcloud:lastSubmittedAt";
-/** 시연용: 방금 제출한 작업 막대는 20초만 보여주고 지운다 */
-const HIGHLIGHT_TTL_MS = 20_000;
 /** 백엔드에 push가 없으므로 주기적으로 다시 조회한다 (sweep 결과·새 작업 반영) */
 const POLL_MS = 10_000;
 
@@ -48,15 +44,10 @@ export default function SchedulerPage() {
   const nowMs = nowSec === null ? null : nowSec * 1000;
 
   const [data, setData] = useState<SchedulerData | null>(null);
-  const [highlight, setHighlight] = useState<{ id: number; at: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const id = sessionStorage.getItem(HIGHLIGHT_KEY);
-    const at = sessionStorage.getItem(HIGHLIGHT_AT_KEY);
-    if (id) setHighlight({ id: Number(id), at: at ? Number(at) : Date.now() });
-
     let cancelled = false;
 
     const load = async () => {
@@ -116,12 +107,6 @@ export default function SchedulerPage() {
   let trainQueue: JobSummary[] = [];
   let inferQueue: JobSummary[] = [];
   if (data && nowMs !== null) {
-    const fresh = highlight !== null && nowMs - highlight.at < HIGHLIGHT_TTL_MS;
-    const highlightId = fresh ? highlight!.id : null;
-    // 20초 지난 새 작업은 막대에서 제거 (시연용)
-    const visible = (list: AssignmentItem[]) =>
-      highlight === null || fresh ? list : list.filter((a) => a.job_id !== highlight.id);
-
     const byType = (type: NodePurpose) => data.jobs.filter((j) => j.type === type);
     const byIdAsc = (a: JobSummary, b: JobSummary) =>
       new Date(a.submitted_at).getTime() - new Date(b.submitted_at).getTime();
@@ -129,7 +114,7 @@ export default function SchedulerPage() {
     inferQueue = byType("infer").filter((j) => j.status === "queued").sort(byIdAsc);
 
     const build = (section: SchedulerSection<NodeRef>) =>
-      buildTimeline(visible(section.assignments), data.jobs, section.nodes, nowMs, highlightId);
+      buildTimeline(section.assignments, data.jobs, section.nodes, nowMs);
 
     trainTimeline = build(data.train);
     inferTimeline = build(data.infer);

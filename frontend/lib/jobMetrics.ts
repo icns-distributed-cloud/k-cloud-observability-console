@@ -1,14 +1,5 @@
 import type { JobMetricProfileItem, JobSummary, JobType, JobStatus } from '@/app/types'
 
-/**
- * 작업 타입별 가정 소요 시간(초).
- * 백엔드에 실제 소요 시간 정보가 없어 협의된 값으로 고정.
- */
-export const DURATION_SEC: Record<JobType, number> = {
-    train: 40,
-    infer: 15,
-}
-
 /** 실제 추론 작업은 서빙처럼 계속 돈다 (백엔드가 자동 종료하지 않음).
  *  진행률 개념이 없으므로 화면에서 막대 대신 "지속 실행"으로 표시한다.
  *  데모 필러는 duration_sec을 갖고 순환하지만 목록에 안 나오므로 여기선 무관. */
@@ -21,34 +12,25 @@ export function hidesProgress(job: { type: JobType; status: JobStatus }): boolea
     return job.type === 'infer' && job.status === 'done'
 }
 
-/**
- * 작업의 현재 진행률(0~1)을 계산한다.
- * (지금 시각 - started_at) / 타입별 총 소요시간
- */
-export function jobProgress(job: JobSummary, nowMs: number): number {
+/** job.phase_progress(서버가 계산해서 내려주는 값) 기반 통합 진행률. done→1,
+ *  queued→0으로 보정하고, 그 외(provisioning/running/finalizing)는 서버 값을 그대로
+ *  쓴다. 예전엔 프론트에서 (지금 시각 - started_at) / 고정 소요시간으로 직접 계산했는데,
+ *  job 상태가 queued→provisioning→running→finalizing→done 여러 단계로 나뉘면서
+ *  started_at이 "job이 admit된 시각"(=provisioning 시작)이 됐음에도 그 계산은
+ *  provisioning/finalizing 구간 길이를 전혀 모르고 여전히 전체 경과시간을 running
+ *  소요시간 하나로만 나눴다 - CSC/CSP 양쪽 다 이 값을 쓰는데 폴링 타이밍이 어긋나면
+ *  서로 다른 스냅샷을 들고 있어 값이 갈려 보이기도 했다. 백엔드가 단계별 길이를 이미
+ *  정확히 알고 계산해 주니, 프론트는 그 값을 그대로 신뢰하는 게 맞다. */
+export function phaseProgress(job: JobSummary): number {
     if (job.status === 'done') return 1
-    if (job.status === 'queued' || !job.started_at) return 0
-
-    const startedMs = new Date(job.started_at).getTime()
-    const elapsedSec = (nowMs - startedMs) / 1000
-    return Math.max(0, Math.min(1, elapsedSec / DURATION_SEC[job.type]))
+    if (job.status === 'queued') return 0
+    return job.phase_progress ?? 0
 }
 
-/** 실제 추론은 완료 시점이 없어(무기한 실행) job 전체 진행률을 지표 곡선에 못 쓴다 -
- *  jobProgress는 DURATION_SEC['infer']=15초를 기준으로 곧장 1에 고정돼버려서, 처리량
- *  같은 지표가 웜업도 없이 바로 목표치를 찍고, 그 뒤로도 "0~1 전체" 구간을 매번 다시
- *  그리는 탓에 계속 오르는 것처럼 보였다. 대신 짧은 웜업 구간(실제 서빙이 초반에
- *  안정화되는 것과 같은 모양)만 갖고, 그 이후로는 목표치에서 그대로 유지된다.
- *  학습은 실제로 끝이 있는 작업이라 기존 jobProgress를 그대로 쓴다. */
+/** 실제 추론은 완료 시점이 없어(무기한 실행) 처리량 곡선에 job 전체 진행률을 못 쓴다.
+ *  짧은 웜업 구간(실제 서빙이 초반에 안정화되는 것과 같은 모양)만 갖고, 그 이후로는
+ *  목표치에서 그대로 유지된다 (liveMetricSeries에서 사용). */
 const INFER_WARMUP_SEC = 20
-
-export function metricProgress(job: JobSummary, nowMs: number): number {
-    if (job.type === 'train') return jobProgress(job, nowMs)
-    if (!job.started_at || job.status === 'queued') return 0
-
-    const elapsedSec = (nowMs - new Date(job.started_at).getTime()) / 1000
-    return Math.max(0, Math.min(1, elapsedSec / INFER_WARMUP_SEC))
-}
 
 /** 상한이 없는 누적 카운터(예: 누적 요청 수). ratePerSec(보통 처리량 지표의 목표치,
  *  req/s 같은 실측 단위)를 실제 경과 시간에 곱해서, 시간이 지날수록 계속 늘어나게 한다.

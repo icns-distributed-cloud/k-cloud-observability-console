@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from "react"; import Tabs from "@/components/Tabs";
 import { fetchJobs, stopJob } from "@/lib/api";
 import { JOB_COLORS, JOB_STATUS_LABELS, jobCost, tierMix } from "@/lib/jobs";
-import { elapsedLabel, hidesProgress, isContinuous, jobProgress } from "@/lib/jobMetrics";
+import { elapsedLabel, hidesProgress, isContinuous, phaseProgress } from "@/lib/jobMetrics";
 import { useTime } from "@/lib/TimeContext";
 import type { JobSummary } from "@/app/types";
 import styles from "./JobTable.module.css";
@@ -129,7 +129,7 @@ export default function JobTable({ userId, showUser, showStop, onSelect, onCount
 
                     {jobs.map((j) => {
                         const color = JOB_COLORS[j.type];
-                        const progress = nowSec ? jobProgress(j, nowSec * 1000) : 0;
+                        const progress = phaseProgress(j);
                         const mix = tierMix(j.selected_tier);
                         const cost = nowSec ? jobCost(j, nowSec * 1000) : 0;
                         const continuous = isContinuous(j);

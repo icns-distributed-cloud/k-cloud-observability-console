@@ -126,9 +126,6 @@ export default function JobWizardPage() {
                       })
                     : await submitInferJob(base);
             setResult(job);
-            // 스케줄러에서 방금 제출한 작업 막대를 잠깐 강조하기 위한 표식
-            sessionStorage.setItem("kcloud:lastSubmittedJobId", String(job.id));
-            sessionStorage.setItem("kcloud:lastSubmittedAt", String(Date.now()));
             setStep(3);
         } catch (e) {
             setError(String(e));

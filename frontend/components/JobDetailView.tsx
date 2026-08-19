@@ -22,8 +22,8 @@ import {
     isContinuous,
     liveMetricSeries,
     metricDisplay,
-    metricProgress,
     metricSeries,
+    phaseProgress,
 } from "@/lib/jobMetrics";
 import {
     formatMakespan,
@@ -115,7 +115,7 @@ export default function JobDetailView({ jobId, breadcrumbPrefix, showStop }: Job
     if (!job) return <main style={{ padding: 24 }}>불러오는 중…</main>;
 
     const color = JOB_COLORS[job.type];
-    const progress = now ? metricProgress(job, now) : 0;
+    const progress = phaseProgress(job);
     const featured = job.metrics.find((m) => m.featured);
     /** 에포크처럼 총 개수가 있는 지표 — 그래프 하단에 표시하고 카드에서는 뺀다 */
     const counter = job.metrics.find((m) => !m.featured && m.total_count !== null);
