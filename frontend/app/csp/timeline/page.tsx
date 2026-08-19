@@ -309,6 +309,11 @@ function Section({
   showActiveModel?: boolean;
   onSelectJob: (jobId: number) => void;
 }) {
+  // showActiveModel은 사실상 "이게 추론 섹션이냐"와 같은 값이라 따로 prop을 안 늘리고
+  // 재사용한다. 학습 섹션은 손 안 대고(기존 그대로 무채색 숫자·초록 그래프), 추론
+  // 섹션만 추론을 뜻하는 주황(--job-infer)으로 숫자·그래프 색을 맞춘다.
+  const metricColor = showActiveModel ? "var(--job-infer)" : undefined;
+
   return (
     <>
       <div style={{ fontSize: 21, fontWeight: 700, marginBottom: 12 }}>{title}</div>
@@ -318,14 +323,21 @@ function Section({
           {commonMetrics.length > 0 && (
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
               {commonMetrics.map((m) => (
-                <StatCard key={m.label} label={m.label} value={m.value.toFixed(1)} unit={m.unit} compact />
+                <StatCard
+                  key={m.label}
+                  label={m.label}
+                  value={m.value.toFixed(1)}
+                  unit={m.unit}
+                  compact
+                  valueColor={metricColor}
+                />
               ))}
             </div>
           )}
           {commonMetrics.length > 0 && specialMetrics.length > 0 && (
             <div style={{ height: 20 }} />
           )}
-          <MetricRow metrics={specialMetrics} />
+          <MetricRow metrics={specialMetrics} color={metricColor} />
         </Card>
       )}
       <div style={{ height: 16 }} />
@@ -345,12 +357,12 @@ function Section({
   );
 }
 
-function MetricRow({ metrics }: { metrics: MetricSeries[] }) {
+function MetricRow({ metrics, color }: { metrics: MetricSeries[]; color?: string }) {
   if (metrics.length === 0) return null;
   return (
     <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
       {metrics.map((m) => (
-        <Sparkline key={m.label} label={m.label} values={m.values} numberOnly={m.numberOnly} />
+        <Sparkline key={m.label} label={m.label} values={m.values} numberOnly={m.numberOnly} color={color} />
       ))}
     </div>
   );
