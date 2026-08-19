@@ -7,6 +7,24 @@
   padding: 14px 16px;
 }
 
+.compact {
+  min-width: 100px;
+  padding: 8px 12px;
+}
+
+.compact .label {
+  font-size: 11px;
+  margin-bottom: 3px;
+}
+
+.compact .value {
+  font-size: 20px;
+}
+
+.compact .unit {
+  font-size: 12px;
+}
+
 .label {
   font-size: 14px;
   font-weight: 700;

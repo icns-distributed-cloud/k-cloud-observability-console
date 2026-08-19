@@ -24,10 +24,13 @@ export interface DistributedLinkItem {
     cluster_b_id: number
     active: boolean
 }
-/** 테이블마다 허용값이 다름 (cluster: power/utilization/sla, node: util/cpu/mem/temp, accelerator: util/mem/power) */
+/** 테이블마다 허용값이 다름 (cluster: power/utilization/sla + 학습/추론 전용 지표,
+ *  node: util/cpu/mem/temp, accelerator: util/mem/power) */
 export type MetricType =
     | 'power' | 'utilization' | 'sla'
     | 'util' | 'cpu' | 'mem' | 'temp'
+    | 'throughput' | 'jct' | 'goodput'
+    | 'ttft' | 'tpot' | 'slo_violation'
 
 
 // ========== Infra ==========

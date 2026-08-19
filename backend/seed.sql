@@ -191,26 +191,43 @@ INSERT INTO cluster_metric_profile (cluster_id, metric_type, baseline, amplitude
   (9, 'utilization', 10, 3, 55, 'pct'), (9, 'power', 14, 3, 80, 'kW'), (9, 'sla', 99.0, 0.35, 120, 'pct'),
   (10, 'utilization', 9, 3, 55, 'pct'), (10, 'power', 11, 2, 85, 'kW'), (10, 'sla', 98.9, 0.4, 118, 'pct');
 
+-- 학습/추론 전용 지표. 스케줄러 페이지 두 섹션(학습 클러스터/추론 클러스터)에서만 쓰는
+-- 클러스터 단위 값이라, 실제 job이 도는 유일한 라이브 클러스터(2)에만 의미가 있다.
+-- metric_type 이름 자체가 학습/추론 어느 한쪽에서만 쓰이므로(예: jct는 학습 섹션만
+-- 필터링해서 읽음) 같은 cluster_id에 같이 둬도 섞이지 않는다.
+INSERT INTO cluster_metric_profile (cluster_id, metric_type, baseline, amplitude, period_sec, unit) VALUES
+  (2, 'throughput', 850, 120, 75, 'samples/s'),
+  (2, 'jct', 42, 8, 100, 's'),
+  (2, 'goodput', 91, 4, 80, 'pct'),
+  (2, 'ttft', 180, 35, 50, 'ms'),
+  (2, 'tpot', 22, 5, 45, 'ms'),
+  -- slo_violation은 다른 지표처럼 사인파로 오르내리면 안 되는 누적 카운터라, 프론트가
+  -- baseline만 "시간당 위반 건수"로 읽고 amplitude/period_sec은 안 쓴다 (그래도
+  -- NOT NULL이라 값은 채워야 함).
+  (2, 'slo_violation', 8, 2, 70, 'count');
+
 -- nodes 4-14 (live cluster) see real occasional load (demo submissions + the
 -- auto-filler mechanism), so a moderate 30-60% util baseline is plausible. Every
 -- other node here NEVER receives a real job (admission only ever targets the live
 -- cluster) - they'd sit idle forever, so their util/power baselines are deliberately
 -- low (idle draw, not load) instead of matching the same 30-60% range.
+-- cpu는 4-14(라이브)만 채운다 - GPU util보다 낮은, 그럴듯한 비율(대략 0.6~0.7배)로.
+-- 다른 노드들엔 원래도 cpu가 없었다(스케줄러 페이지 지표에만 필요해서 여기서 추가).
 INSERT INTO node_metric_profile (node_id, metric_type, baseline, amplitude, period_sec, unit) VALUES
   (1, 'util', 8, 3, 45, 'pct'), (1, 'cpu', 6, 2, 40, 'pct'), (1, 'mem', 12, 3, 55, 'pct'), (1, 'temp', 34, 2, 50, 'C'), (1, 'power', 75, 15, 42, 'W'),
   (2, 'util', 6, 2, 45, 'pct'), (2, 'temp', 32, 2, 50, 'C'), (2, 'power', 30, 8, 45, 'W'),
   (3, 'util', 10, 3, 45, 'pct'), (3, 'temp', 36, 2, 50, 'C'), (3, 'power', 120, 25, 40, 'W'),
-  (4, 'util', 55, 12, 40, 'pct'), (4, 'temp', 52, 4, 50, 'C'), (4, 'power', 560, 130, 42, 'W'),
-  (5, 'util', 42, 10, 45, 'pct'), (5, 'temp', 47, 3, 50, 'C'), (5, 'power', 300, 55, 46, 'W'),
-  (6, 'util', 38, 9, 45, 'pct'), (6, 'temp', 46, 3, 50, 'C'), (6, 'power', 160, 30, 35, 'W'),
-  (7, 'util', 45, 13, 42, 'pct'), (7, 'temp', 50, 3, 46, 'C'), (7, 'power', 310, 58, 44, 'W'),
-  (8, 'util', 38, 11, 41, 'pct'), (8, 'temp', 47, 3, 44, 'C'), (8, 'power', 155, 28, 36, 'W'),
-  (9, 'util', 32, 9, 43, 'pct'), (9, 'temp', 44, 3, 47, 'C'), (9, 'power', 120, 22, 38, 'W'),
-  (10, 'util', 58, 14, 38, 'pct'), (10, 'temp', 60, 4, 40, 'C'), (10, 'power', 960, 185, 34, 'W'),
-  (11, 'util', 54, 13, 39, 'pct'), (11, 'temp', 58, 4, 41, 'C'), (11, 'power', 940, 180, 35, 'W'),
-  (12, 'util', 46, 12, 44, 'pct'), (12, 'temp', 52, 3, 47, 'C'), (12, 'power', 290, 50, 42, 'W'),
-  (13, 'util', 62, 15, 30, 'pct'), (13, 'temp', 65, 5, 32, 'C'), (13, 'power', 1450, 260, 24, 'W'),
-  (14, 'util', 57, 14, 31, 'pct'), (14, 'temp', 63, 5, 33, 'C'), (14, 'power', 1420, 255, 25, 'W'),
+  (4, 'util', 55, 12, 40, 'pct'), (4, 'cpu', 35, 8, 38, 'pct'), (4, 'temp', 52, 4, 50, 'C'), (4, 'power', 560, 130, 42, 'W'),
+  (5, 'util', 42, 10, 45, 'pct'), (5, 'cpu', 28, 6, 43, 'pct'), (5, 'temp', 47, 3, 50, 'C'), (5, 'power', 300, 55, 46, 'W'),
+  (6, 'util', 38, 9, 45, 'pct'), (6, 'cpu', 25, 6, 43, 'pct'), (6, 'temp', 46, 3, 50, 'C'), (6, 'power', 160, 30, 35, 'W'),
+  (7, 'util', 45, 13, 42, 'pct'), (7, 'cpu', 30, 8, 40, 'pct'), (7, 'temp', 50, 3, 46, 'C'), (7, 'power', 310, 58, 44, 'W'),
+  (8, 'util', 38, 11, 41, 'pct'), (8, 'cpu', 26, 7, 39, 'pct'), (8, 'temp', 47, 3, 44, 'C'), (8, 'power', 155, 28, 36, 'W'),
+  (9, 'util', 32, 9, 43, 'pct'), (9, 'cpu', 22, 6, 41, 'pct'), (9, 'temp', 44, 3, 47, 'C'), (9, 'power', 120, 22, 38, 'W'),
+  (10, 'util', 58, 14, 38, 'pct'), (10, 'cpu', 38, 9, 36, 'pct'), (10, 'temp', 60, 4, 40, 'C'), (10, 'power', 960, 185, 34, 'W'),
+  (11, 'util', 54, 13, 39, 'pct'), (11, 'cpu', 35, 8, 37, 'pct'), (11, 'temp', 58, 4, 41, 'C'), (11, 'power', 940, 180, 35, 'W'),
+  (12, 'util', 46, 12, 44, 'pct'), (12, 'cpu', 30, 7, 42, 'pct'), (12, 'temp', 52, 3, 47, 'C'), (12, 'power', 290, 50, 42, 'W'),
+  (13, 'util', 62, 15, 30, 'pct'), (13, 'cpu', 40, 10, 29, 'pct'), (13, 'temp', 65, 5, 32, 'C'), (13, 'power', 1450, 260, 24, 'W'),
+  (14, 'util', 57, 14, 31, 'pct'), (14, 'cpu', 37, 9, 30, 'pct'), (14, 'temp', 63, 5, 33, 'C'), (14, 'power', 1420, 255, 25, 'W'),
   (15, 'util', 9, 3, 45, 'pct'), (15, 'temp', 35, 2, 48, 'C'), (15, 'power', 65, 15, 38, 'W'),
   (16, 'util', 5, 2, 47, 'pct'), (16, 'temp', 30, 2, 49, 'C'), (16, 'power', 22, 6, 39, 'W'),
   (17, 'util', 8, 3, 46, 'pct'), (17, 'temp', 34, 2, 48, 'C'), (17, 'power', 78, 16, 37, 'W'),

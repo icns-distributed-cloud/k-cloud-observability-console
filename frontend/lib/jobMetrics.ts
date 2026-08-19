@@ -1,4 +1,5 @@
 import type { JobMetricProfileItem, JobSummary, JobType, JobStatus } from '@/app/types'
+import { pseudoJitter } from '@/lib/metrics'
 
 /** 실제 추론 작업은 서빙처럼 계속 돈다 (백엔드가 자동 종료하지 않음).
  *  진행률 개념이 없으므로 화면에서 막대 대신 "지속 실행"으로 표시한다.
@@ -133,17 +134,6 @@ export function metricSeries(
 
 const INFER_WINDOW_SEC = 60
 const INFER_JITTER_FRAC = 0.07
-
-/** 여러 사인파를 합쳐 "노이즈처럼" 보이는 결정론적 값을 낸다 (진짜 Math.random()이면
- *  매 렌더마다 이미 지나간 구간까지 다시 흔들린다 - (seed, 시각)이 같으면 항상 같은
- *  값이 나와야 창이 옆으로 흘러갈 때 지나간 부분이 안정적으로 유지된다). */
-function pseudoJitter(seed: number, t: number): number {
-    return (
-        Math.sin(t * 0.31 + seed) * 0.5 +
-        Math.sin(t * 0.7 + seed * 2.7) * 0.3 +
-        Math.sin(t * 1.9 + seed * 5.3) * 0.2
-    )
-}
 
 /** 추론 지표의 "최근 60초" 슬라이딩 윈도우 시계열. job 진행률로 타임라인 전체를
  *  펼치는 metricSeries와 달리 실제 경과시간 기준으로 최근 구간을 매번 새로 계산해서,
