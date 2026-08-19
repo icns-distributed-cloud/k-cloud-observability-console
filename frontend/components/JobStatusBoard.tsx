@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type Key, type ReactNode } from "react";
 import Card from "@/components/Card";
 import { fetchJobs } from "@/lib/api";
 import { CURRENT_USER_ID } from "@/lib/auth";
@@ -26,6 +26,14 @@ const GOLDEN_ANGLE = 137.5 * (Math.PI / 180);
 const SPIRAL_SLOTS = 30;
 const CHIP_W = 78;
 const CHIP_H = 26;
+/** 노드 여러 개에 분산 배정된 job은 (라벨 없는 점으로 위성을 두는 대신) 같은 라벨이
+ * 붙은 칩을 노드 개수만큼 이어붙여서 보여준다. wrapper(존 이동 시 통째로 움직이는 그
+ * 엘리먼트) 안에서만 배치하기 때문에, 상태가 바뀌어 wrapper가 다음 zone으로 이동할 때
+ * 전부 자동으로 같이 따라간다. 한 줄로 쭉 늘어놓으면 3개부터 어색해 보여서, 한 줄에
+ * 최대 이 개수까지만 놓고 그 이상은 다음 줄로 접는다 (2개면 가로 한 줄, 3개면 2+1). */
+const ROW_CAP = 2;
+const LINK_W = 12;
+const ROW_GAP = 6;
 
 interface Props {
   onSelect: (jobId: number) => void;
@@ -229,6 +237,115 @@ export default function JobStatusBoard({ onSelect, onCountChange }: Props) {
               const pos = posById.get(job.id);
               if (!pos) return null;
               const leaving = leavingIds.has(job.id);
+              // 미배정(대기중)이면 assigned_nodes가 비어있다 - 그때도 칩은 하나 그린다.
+              const pillCount = Math.max(1, job.assigned_nodes.length);
+              const distributed = pillCount > 1;
+              const mine = job.user_id === CURRENT_USER_ID;
+
+              // 한 줄에 ROW_CAP개까지, 넘어가면 다음 줄로 접는다 (2개=가로 한 줄,
+              // 3개=2+1, 4개=2+2, ...). 마지막 줄에 자리가 덜 차면 가운데 정렬한다.
+              const numRows = Math.ceil(pillCount / ROW_CAP);
+              const groupWidth = Math.min(pillCount, ROW_CAP) * CHIP_W + (Math.min(pillCount, ROW_CAP) - 1) * LINK_W;
+              const groupHeight = numRows * CHIP_H + (numRows - 1) * ROW_GAP;
+              const centers: { x: number; y: number }[] = [];
+              for (let i = 0; i < pillCount; i++) {
+                const row = Math.floor(i / ROW_CAP);
+                const col = i % ROW_CAP;
+                const itemsInRow = Math.min(ROW_CAP, pillCount - row * ROW_CAP);
+                const rowWidth = itemsInRow * CHIP_W + (itemsInRow - 1) * LINK_W;
+                const rowLeft = (groupWidth - rowWidth) / 2;
+                const left = rowLeft + col * (CHIP_W + LINK_W);
+                const top = row * (CHIP_H + ROW_GAP);
+                centers.push({ x: left + CHIP_W / 2, y: top + CHIP_H / 2 });
+              }
+
+              const pill = (key: Key, title: string, left: number, top: number) => (
+                <div
+                  key={key}
+                  className={styles.float}
+                  title={title}
+                  style={{
+                    position: "absolute",
+                    left,
+                    top,
+                    width: CHIP_W,
+                    height: CHIP_H,
+                    borderRadius: 13,
+                    background: JOB_COLORS[job.type],
+                    // 시연 유저(CSC, user_id=1)가 제출한 job은 링을 둘러서 필러 사이에서도
+                    // 바로 눈에 띄게 한다. 링은 진행률 바를 자르는 overflow:hidden과 같은
+                    // 엘리먼트에 두면 자기 자신의 box-shadow까지 잘려서 안 보인다 - 그래서
+                    // overflow:hidden은 진행률 바 트랙(아래, 훨씬 작은 범위)으로 내리고 여긴
+                    // 안 둔다. 색은 이 칩 팔레트(초록/주황)와도, 칩들이 겹칠 때 생기는 기본
+                    // drop-shadow 착시(옅은 흰 테두리)와도 안 섞이는 rose(--new-job)로 골랐다.
+                    boxShadow: mine
+                      ? "0 1px 4px rgba(0,0,0,0.18), 0 0 0 3px var(--new-job)"
+                      : "0 1px 4px rgba(0,0,0,0.18)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: "0 8px",
+                    // 같은 job이면 분산된 칩들도 전부 같은 위상으로 움직여야 한 덩어리처럼
+                    // 보인다 - 노드 인덱스가 아니라 job.id로만 딜레이를 준다.
+                    animationDelay: `${(job.id % 10) * 0.28}s`,
+                  }}
+                >
+                  {job.phase_progress !== null && (
+                    // provisioning/finalizing/running 단계 진행률 (queued·done·무기한
+                    // 추론 running은 백엔드가 null로 내려줘서 여기 아예 안 보인다).
+                    // 항상 보이는 트랙을 깔아야 진행률이 낮을 때도 "진행바가 있다"는
+                    // 게 보이고, width에 폴링 주기만큼 트랜지션을 걸어야 4초마다
+                    // 스냅으로 뚝뚝 튀지 않고 부드럽게 차오르는 것처럼 보인다.
+                    // overflow:hidden은 위 .float가 아니라 여기 둔다 - 부모의 box-shadow
+                    // 링을 자르지 않으면서, 진행률 바 자체는 알약 모양 아래쪽 모서리에
+                    // 맞춰 둥글게 잘라내야 해서 borderRadius도 같이 준다.
+                    <div
+                      style={{
+                        position: "absolute",
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        height: 4,
+                        background: "rgba(0,0,0,0.3)",
+                        borderRadius: "0 0 13px 13px",
+                        overflow: "hidden",
+                      }}
+                    >
+                      <div
+                        style={{
+                          height: "100%",
+                          width: `${job.phase_progress * 100}%`,
+                          background: "#FFFFFF",
+                          transition: phaseResetIds.has(job.id) ? "none" : `width ${POLL_MS}ms linear`,
+                        }}
+                      />
+                    </div>
+                  )}
+                  <span
+                    style={{
+                      color: "#FFFFFF",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      overflow: "hidden",
+                      whiteSpace: "nowrap",
+                      textOverflow: "ellipsis",
+                    }}
+                  >
+                    {job.model_name}
+                  </span>
+                </div>
+              );
+
+              const pills: ReactNode[] = [];
+              for (let i = 0; i < pillCount; i++) {
+                const node = job.assigned_nodes[i];
+                const title = node
+                  ? `J-${job.id} · ${job.model_name} · ${node.node_name} (${i + 1}/${pillCount})`
+                  : `J-${job.id} · ${job.model_name}`;
+                const c = centers[i];
+                pills.push(pill(`pill-${i}`, title, c.x - CHIP_W / 2, c.y - CHIP_H / 2));
+              }
+
               return (
                 <div
                   key={job.id}
@@ -237,90 +354,56 @@ export default function JobStatusBoard({ onSelect, onCountChange }: Props) {
                   className={`${styles.chip} ${leaving ? styles.leaving : ""}`}
                   style={{
                     position: "absolute",
-                    left: pos.x - CHIP_W / 2,
-                    top: pos.y - CHIP_H / 2,
-                    width: CHIP_W,
-                    height: CHIP_H,
+                    left: pos.x - groupWidth / 2,
+                    top: pos.y - groupHeight / 2,
+                    width: groupWidth,
+                    height: groupHeight,
                     cursor: leaving ? "default" : "pointer",
                     transition: "left 500ms ease, top 500ms ease",
                     // 겹친 칩들 사이에서 링이 이웃 칩에 가려 일부만 보이지 않도록, 강조된 칩을
                     // 항상 맨 위로 그린다. (실제로 둥둥 떠다니는 애니메이션은 안쪽 .float에
                     // 걸려있어서, z-index만 여기 두고 테두리 자체는 .float에 같이 둔다 -
                     // 그래야 칩이 위아래로 떠다닐 때 테두리도 같이 움직인다.)
-                    zIndex: job.user_id === CURRENT_USER_ID ? 5 : undefined,
+                    zIndex: mine ? 5 : distributed ? 2 : undefined,
                   }}
                 >
-                  <div
-                    className={styles.float}
-                    title={`J-${job.id} · ${job.model_name}`}
-                    style={{
-                      position: "relative",
-                      width: "100%",
-                      height: "100%",
-                      borderRadius: 13,
-                      background: JOB_COLORS[job.type],
-                      // 시연 유저(CSC, user_id=1)가 제출한 job은 링을 둘러서 필러 사이에서도
-                      // 바로 눈에 띄게 한다. 링은 진행률 바를 자르는 overflow:hidden과 같은
-                      // 엘리먼트에 두면 자기 자신의 box-shadow까지 잘려서 안 보인다 - 그래서
-                      // overflow:hidden은 진행률 바 트랙(아래, 훨씬 작은 범위)으로 내리고 여긴
-                      // 안 둔다. 색은 이 칩 팔레트(초록/주황)와도, 칩들이 겹칠 때 생기는 기본
-                      // drop-shadow 착시(옅은 흰 테두리)와도 안 섞이는 rose(--new-job)로 골랐다.
-                      boxShadow:
-                        job.user_id === CURRENT_USER_ID
-                          ? "0 1px 4px rgba(0,0,0,0.18), 0 0 0 3px var(--new-job)"
-                          : "0 1px 4px rgba(0,0,0,0.18)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      padding: "0 8px",
-                      // 같은 job이라도 항상 같은 위상으로 떠서 폴링마다 리듬이 안 바뀌게
-                      animationDelay: `${(job.id % 10) * 0.28}s`,
-                    }}
-                  >
-                    {job.phase_progress !== null && (
-                      // provisioning/finalizing/running 단계 진행률 (queued·done·무기한
-                      // 추론 running은 백엔드가 null로 내려줘서 여기 아예 안 보인다).
-                      // 항상 보이는 트랙을 깔아야 진행률이 낮을 때도 "진행바가 있다"는
-                      // 게 보이고, width에 폴링 주기만큼 트랜지션을 걸어야 4초마다
-                      // 스냅으로 뚝뚝 튀지 않고 부드럽게 차오르는 것처럼 보인다.
-                      // overflow:hidden은 위 .float가 아니라 여기 둔다 - 부모의 box-shadow
-                      // 링을 자르지 않으면서, 진행률 바 자체는 알약 모양 아래쪽 모서리에
-                      // 맞춰 둥글게 잘라내야 해서 borderRadius도 같이 준다.
-                      <div
-                        style={{
-                          position: "absolute",
-                          left: 0,
-                          right: 0,
-                          bottom: 0,
-                          height: 4,
-                          background: "rgba(0,0,0,0.3)",
-                          borderRadius: "0 0 13px 13px",
-                          overflow: "hidden",
-                        }}
-                      >
-                        <div
-                          style={{
-                            height: "100%",
-                            width: `${job.phase_progress * 100}%`,
-                            background: "#FFFFFF",
-                            transition: phaseResetIds.has(job.id) ? "none" : `width ${POLL_MS}ms linear`,
-                          }}
-                        />
-                      </div>
-                    )}
-                    <span
-                      style={{
-                        color: "#FFFFFF",
-                        fontSize: 11,
-                        fontWeight: 700,
-                        overflow: "hidden",
-                        whiteSpace: "nowrap",
-                        textOverflow: "ellipsis",
-                      }}
+                  {distributed && (
+                    // 칩 중심끼리 순서대로 이어주는 선 - 같은 줄이면 가로선, 다음 줄로
+                    // 넘어가는 지점이면 대각선이 돼서 자연스럽게 지그재그로 이어진다.
+                    <svg
+                      width={groupWidth}
+                      height={groupHeight}
+                      style={{ position: "absolute", left: 0, top: 0, overflow: "visible", pointerEvents: "none" }}
                     >
-                      {job.model_name}
-                    </span>
-                  </div>
+                      {centers.slice(1).map((c, i) => (
+                        <line
+                          key={`link-${i}`}
+                          x1={centers[i].x}
+                          y1={centers[i].y}
+                          x2={c.x}
+                          y2={c.y}
+                          style={{ stroke: JOB_COLORS[job.type] }}
+                          strokeWidth={3}
+                          opacity={0.6}
+                        />
+                      ))}
+                      {pillCount >= 3 && (
+                        // 마지막 칩을 첫 칩으로 되돌려 닫는다 - 3개면 삼각형, 그 이상이면
+                        // 마지막 줄 끝과 첫 줄 시작을 잇는 선 하나가 더 생겨서 전체가 하나의
+                        // 닫힌 그룹으로 보인다.
+                        <line
+                          x1={centers[pillCount - 1].x}
+                          y1={centers[pillCount - 1].y}
+                          x2={centers[0].x}
+                          y2={centers[0].y}
+                          style={{ stroke: JOB_COLORS[job.type] }}
+                          strokeWidth={3}
+                          opacity={0.6}
+                        />
+                      )}
+                    </svg>
+                  )}
+                  {pills}
                 </div>
               );
             })}
