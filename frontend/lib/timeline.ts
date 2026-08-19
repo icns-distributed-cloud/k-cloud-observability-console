@@ -10,6 +10,15 @@ export interface TimelineBar {
   job?: JobSummary
   /** 시연 유저(CSC, user_id=1)가 제출한 job인지 - CSP 화면들에서 항상 눈에 띄게 강조한다 */
   isMine: boolean
+  /** 아직 안 끝난(to_t === null) 배정인지 - 지금 이 노드를 점유 중인 job이라는 뜻.
+   *  행 라벨에 모델명을 붙일지는 이 값으로 정한다 (처리량을 못 가져와 펄스 속도
+   *  계산에 실패해도, 지금 뭘 서빙 중인지는 항상 보여줘야 하므로 pulseIntervalSec과
+   *  분리해뒀다). */
+  isActive: boolean
+  /** 지금 이 순간 요청을 받고 있는 추론 막대에만 붙는다 - "펄스 하나 = 요청 약 1000개"
+   *  기준으로 처리량(req/s)에서 뽑은 평균 간격(초). 값이 있으면 이 주기로 반복해서
+   *  요청 하나가 오른쪽(트랙)에서 왼쪽(노드 라벨)으로 날아드는 것처럼 보여준다. */
+  pulseIntervalSec?: number
 }
 
 export interface TimelineRow {
@@ -74,11 +83,17 @@ export function selectSchedulerNodes<
   return { train: section('train'), infer: section('infer') }
 }
 
+/** 요청 펄스 하나가 상징하는 실제 요청 수. 처리량을 이 값으로 나눠 펄스 간격을 구한다 -
+ *  요청 하나하나를 그리면 처리량이 높을 때 다시 촘촘해져 못 알아보게 된다. */
+const REQUESTS_PER_PULSE = 1000
+
 export function buildTimeline(
   assignments: AssignmentItem[],
   jobs: JobSummary[],
   nodes: { id: number; name: string }[],
-  nowMs: number
+  nowMs: number,
+  /** jobId -> 현재 처리량(req/s). 지금 요청을 받고 있는 추론 job에 대해서만 넘긴다. */
+  pulseRatesByJobId?: Map<number, number>
 ): TimelineData | null {
   if (nodes.length === 0) return null
 
@@ -115,6 +130,9 @@ export function buildTimeline(
         // 표시 구간으로 클램프
         const s = Math.max(rawS, fromMs)
         const e = Math.min(rawE, toMs)
+        // 아직 안 끝난(to_t === null) 배정만 "지금 요청을 받고 있다" - 과거 배정에
+        // 펄스를 붙이면 이미 끝난 서빙이 지금도 요청을 받는 것처럼 보인다.
+        const rate = a.to_t === null ? pulseRatesByJobId?.get(a.job_id) : undefined
         return {
           assignmentId: a.id,
           jobId: a.job_id,
@@ -123,6 +141,8 @@ export function buildTimeline(
           width: Math.max((e - s) / span, 0.006),
           job: jobById.get(a.job_id),
           isMine: jobById.get(a.job_id)?.user_id === CURRENT_USER_ID,
+          isActive: a.to_t === null,
+          pulseIntervalSec: rate && rate > 0 ? REQUESTS_PER_PULSE / rate : undefined,
         }
       })
       .sort((x, y) => x.start - y.start),

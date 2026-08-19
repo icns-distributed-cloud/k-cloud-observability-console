@@ -135,6 +135,16 @@ export function metricSeries(
 const INFER_WINDOW_SEC = 60
 const INFER_JITTER_FRAC = 0.07
 
+/** liveMetricSeries/currentLiveValue가 공유하는 한 시점의 값 계산 (웜업 곡선 + 웜업
+ *  끝난 뒤의 지터). target/startedMs는 호출부에서 이미 null 체크를 끝낸 뒤 넘긴다. */
+function liveValueAt(metric: JobMetricProfileItem, jobId: number, startedMs: number, target: number, atMs: number): number {
+    const elapsedSec = (atMs - startedMs) / 1000
+    const warmup = Math.max(0, Math.min(1, elapsedSec / INFER_WARMUP_SEC))
+    const base = metricCurrentValue(metric, warmup) ?? target
+    const jitter = warmup >= 1 ? pseudoJitter(jobId, atMs / 1000) * INFER_JITTER_FRAC * target : 0
+    return Math.max(0, base + jitter)
+}
+
 /** 추론 지표의 "최근 60초" 슬라이딩 윈도우 시계열. job 진행률로 타임라인 전체를
  *  펼치는 metricSeries와 달리 실제 경과시간 기준으로 최근 구간을 매번 새로 계산해서,
  *  창이 옆으로 흘러가는 것처럼 보이게 한다. 콜드스타트 구간은 목표치로 수렴하는 곡선을
@@ -155,10 +165,18 @@ export function liveMetricSeries(
 
     return Array.from({ length: points }, (_, i) => {
         const atMs = windowStartMs + ((endMs - windowStartMs) * i) / (points - 1)
-        const elapsedSec = (atMs - startedMs) / 1000
-        const warmup = Math.max(0, Math.min(1, elapsedSec / INFER_WARMUP_SEC))
-        const base = metricCurrentValue(metric, warmup) ?? target
-        const jitter = warmup >= 1 ? pseudoJitter(job.id, atMs / 1000) * INFER_JITTER_FRAC * target : 0
-        return Math.max(0, base + jitter)
+        return liveValueAt(metric, job.id, startedMs, target, atMs)
     })
+}
+
+/** liveMetricSeries와 같은 웜업+지터 공식으로 "지금 이 순간" 값 하나만 계산한다.
+ *  스케줄러 타임라인의 "요청 도착" 애니메이션 속도(처리량 req/s 기반)처럼, 그래프 전체가
+ *  아니라 현재값 하나만 필요할 때 쓴다. */
+export function currentLiveValue(metric: JobMetricProfileItem, job: JobSummary, nowMs: number): number {
+    const target = metric.target_value === null ? null : Number(metric.target_value)
+    if (target === null || !job.started_at) return 0
+
+    const startedMs = new Date(job.started_at).getTime()
+    const endMs = job.finished_at ? new Date(job.finished_at).getTime() : nowMs
+    return liveValueAt(metric, job.id, startedMs, target, endMs)
 }

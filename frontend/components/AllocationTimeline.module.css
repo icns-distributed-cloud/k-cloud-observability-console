@@ -1,0 +1,48 @@
+/* 요청 하나가 트랙 오른쪽("지금")에서 나타나 트랙 왼쪽 끝까지 날아가 사라지는 애니메이션.
+ * animation-duration은 인라인 스타일로 처리량마다 다르게 준다 (여기선 모양/이동 궤적만).
+ * 폴링 주기나 2분짜리 타임라인 스크롤과 무관하게 브라우저 자체 애니메이션 타이머로
+ * 돌아서, 실제로는 그 둘보다 훨씬 빠른 리듬으로 계속 날아든다.
+ * left를 트랙(이 span의 가장 가까운 position:relative 조상) 기준 0~100%로 애니메이션
+ * 하는 거라, 딱 트랙 폭 안에서만 움직이고 그 왼쪽의 모델명 칸까지는 못 넘어간다. */
+.pulse {
+  position: absolute;
+  top: 50%;
+  width: 54px;
+  height: 18px;
+  margin-top: -9px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: 'IBM Plex Mono', monospace;
+  color: #FFFFFF;
+  white-space: nowrap;
+  /* 흰색 점만으로는 밝은 배경 위에서 거의 안 보였다 - 칩 색(초록/주황)과도, 밝은
+     트랙과도 확실히 대비되는 채도 높은 색 + 테두리로 바꾼다. */
+  background: #F59E0B;
+  box-shadow: 0 0 0 2px #FFFFFF, 0 0 6px 1px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  z-index: 5;
+  animation-name: fly-in;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+@keyframes fly-in {
+  0% {
+    left: calc(100% - 54px);
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    left: 0;
+    opacity: 0;
+  }
+}
