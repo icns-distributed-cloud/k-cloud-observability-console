@@ -11,6 +11,7 @@ import {
   fetchClusterAssignments,
   fetchClusterDetail,
   fetchClusterMetrics,
+  fetchJobDetail,
   fetchJobs,
   fetchProviders,
 } from "@/lib/api";
@@ -21,6 +22,7 @@ import {
   type TimelineData,
 } from "@/lib/timeline";
 import { averageMetricSeries, cumulativeThisHour, generateMetricSeries } from "@/lib/metrics";
+import { currentLiveValue } from "@/lib/jobMetrics";
 import { flattenRegions, isDomestic } from "@/lib/mapData";
 import { useTime } from "@/lib/TimeContext";
 import type { JobSummary, MetricProfilePoint, MetricType, NodePurpose } from "@/app/types";
@@ -84,6 +86,8 @@ interface SchedulerData {
   jobs: JobSummary[];
   /** 라이브 클러스터의 학습/추론 전용 지표 (cluster_metric_profile) */
   clusterMetrics: MetricProfilePoint[];
+  /** 지금 요청을 받고 있는 추론 job의 처리량(req/s) - 타임라인 펄스 속도 계산용 */
+  pulseRatesByJobId: Map<number, number>;
 }
 
 export default function SchedulerPage() {
@@ -141,7 +145,26 @@ export default function SchedulerPage() {
         if (cancelled) return;
         const clusterMetrics = clusterMetricLists.flat();
 
-        setData({ train, infer, jobs, clusterMetrics });
+        // 지금 실제로 요청을 받고 있는(할당이 아직 안 끝난) 추론 job들의 처리량을 가져와
+        // 타임라인 막대의 "요청 도착" 펄스 속도를 정한다. JobSummary엔 지표가 없어서
+        // 상세 조회가 필요한데, 동시에 요청 받는 추론 job 수는 노드 수만큼이라 적다.
+        const activeInferJobIds = [...new Set(
+          infer.assignments.filter((a) => a.to_t === null).map((a) => a.job_id)
+        )];
+        const activeInferDetails = await Promise.all(
+          activeInferJobIds.map((id) => fetchJobDetail(id).catch(() => null))
+        );
+        if (cancelled) return;
+        const pulseRatesByJobId = new Map<number, number>();
+        for (const detail of activeInferDetails) {
+          if (!detail) continue;
+          const featured = detail.metrics.find((m) => m.featured);
+          if (!featured) continue;
+          const rate = currentLiveValue(featured, detail, Date.now());
+          if (rate > 0) pulseRatesByJobId.set(detail.id, rate);
+        }
+
+        setData({ train, infer, jobs, clusterMetrics, pulseRatesByJobId });
         setError(null);
       } catch (e) {
         if (!cancelled) setError(String(e));
@@ -175,11 +198,11 @@ export default function SchedulerPage() {
     trainQueue = byType("train").filter((j) => j.status === "queued").sort(byIdAsc);
     inferQueue = byType("infer").filter((j) => j.status === "queued").sort(byIdAsc);
 
-    const build = (section: SchedulerSection<NodeRef>) =>
-      buildTimeline(section.assignments, data.jobs, section.nodes, nowMs);
+    const build = (section: SchedulerSection<NodeRef>, pulseRates?: Map<number, number>) =>
+      buildTimeline(section.assignments, data.jobs, section.nodes, nowMs, pulseRates);
 
     trainTimeline = build(data.train);
-    inferTimeline = build(data.infer);
+    inferTimeline = build(data.infer, data.pulseRatesByJobId);
 
     const poolMetrics = (nodes: NodeRef[]): MetricStat[] =>
       COMMON_METRICS.flatMap(({ type, label }) => {
@@ -257,6 +280,7 @@ export default function SchedulerPage() {
             data={inferTimeline}
             commonMetrics={inferCommonMetrics}
             specialMetrics={inferSpecialMetrics}
+            showActiveModel
             onSelectJob={(id) => router.push(`/csp/jobs/${id}`)}
           />
         </>
@@ -272,6 +296,7 @@ function Section({
   data,
   commonMetrics,
   specialMetrics,
+  showActiveModel,
   onSelectJob,
 }: {
   title: string;
@@ -280,6 +305,8 @@ function Section({
   data: TimelineData | null;
   commonMetrics: MetricStat[];
   specialMetrics: MetricSeries[];
+  /** 추론 섹션 전용: 점유 막대 대신 지금 서빙 중인 모델명 칸 + 요청 도착 애니메이션을 보여준다 */
+  showActiveModel?: boolean;
   onSelectJob: (jobId: number) => void;
 }) {
   return (
@@ -307,7 +334,7 @@ function Section({
         <JobQueue jobs={queueJobs} nowMs={nowMs} onSelectJob={onSelectJob} />
         <div style={{ height: 1, background: "var(--line)", margin: "4px 0 16px" }} />
         {data ? (
-          <AllocationTimeline data={data} onSelectJob={onSelectJob} />
+          <AllocationTimeline data={data} onSelectJob={onSelectJob} showActiveModel={showActiveModel} />
         ) : (
           <div style={{ padding: 32, textAlign: "center", fontSize: 15, color: "var(--sub)" }}>
             표시할 노드가 없습니다.
