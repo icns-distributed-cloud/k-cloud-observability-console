@@ -1,4 +1,5 @@
 "use client";
+import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
 import { CURRENT_USER_ID } from "@/lib/auth";
 
@@ -26,14 +27,12 @@ export default function TopBar() {
         onClick={() => router.push(isCsc ? "/csc/jobs" : "/csp")}
         style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}
       >
-        <span
-          style={{
-            width: 18,
-            height: 18,
-            borderRadius: 5,
-            background: "var(--accent)",
-            flexShrink: 0,
-          }}
+        <Image
+          src="/logo.png"
+          alt="K-Cloud Insight"
+          width={66}
+          height={34}
+          style={{ flexShrink: 0, objectFit: "contain" }}
         />
         <div>
           <div style={{ fontSize: 19, fontWeight: 700, letterSpacing: "-0.01em" }}>
@@ -47,7 +46,7 @@ export default function TopBar() {
               letterSpacing: "0.04em",
             }}
           >
-            경희대 ICNS
+            경희대 ICNS Lab
           </div>
         </div>
       </div>
