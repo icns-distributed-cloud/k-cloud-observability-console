@@ -7,6 +7,8 @@ import Tabs from "@/components/Tabs";
 import ProgressBar from "@/components/ProgressBar";
 import MetricChart from "@/components/MetricChart";
 import ModelGraph from "@/components/ModelGraph";
+import Sparkline from "@/components/Sparkline";
+import { averageMetricSeries } from "@/lib/metrics";
 import {
     fetchEvents,
     fetchHyperparamAdjustments,
@@ -41,6 +43,7 @@ import type {
     JobDetail,
     JobKqvBenchmarkResponse,
     JobMetricProfileItem,
+    MetricProfilePoint,
     ModelLayersResponse,
     NodeDetail,
     ReallocationItem,
@@ -59,6 +62,15 @@ const SECTION_LABEL: React.CSSProperties = {
 const TYPE_LABELS: Record<string, string> = {
     train: "학습",
     infer: "추론",
+};
+
+/** 노드 상세 페이지와 같은 라벨 - 여기서도 노드 단위 지표를 그대로 보여준다 */
+const METRIC_LABELS: Record<string, string> = {
+    util: "활용률 (%)",
+    cpu: "CPU (%)",
+    mem: "메모리 (%)",
+    temp: "온도 (°C)",
+    power: "전력 (W)",
 };
 
 interface Segment {
@@ -112,7 +124,7 @@ export default function JobDetailView({ jobId, breadcrumbPrefix, showStop }: Job
     // 조회한다 - 스케줄러 페이지에서 이미 쓴 것과 같은 패턴.
     useEffect(() => {
         if (!job) return;
-        fetchEvents(job.id).then(setEvents).catch(() => {});
+        fetchEvents(job.id).then(setEvents).catch(() => { });
         Promise.all(job.assigned_nodes.map((n) => fetchNodeDetail(n.node_id).catch(() => null))).then(
             (results) => setNodeDetails(results.filter((n): n is NodeDetail => n !== null))
         );
@@ -126,7 +138,7 @@ export default function JobDetailView({ jobId, breadcrumbPrefix, showStop }: Job
     useEffect(() => {
         if (!job || job.status === "done") return;
         const timer = setInterval(() => {
-            fetchJobDetail(jobId).then(setJob).catch(() => {});
+            fetchJobDetail(jobId).then(setJob).catch(() => { });
         }, 10_000);
         return () => clearInterval(timer);
     }, [jobId, job?.status]);
@@ -150,6 +162,18 @@ export default function JobDetailView({ jobId, breadcrumbPrefix, showStop }: Job
     const profilingLiveSeries = liveSeriesFor(profilingMetrics.featured);
     const realloc = summarizeReallocations(reallocs);
 
+    // 배정 노드의 지표를 metric_type별로 묶는다. 분산 작업이면 노드가 여러 개라
+    // 지점별 평균을 낸다 (스케줄러 페이지가 학습/추론 풀 평균 낼 때 쓰는 것과 같은 함수).
+    const monitorTypes = [
+        ...new Set(nodeDetails.flatMap((n) => n.metric_profiles.map((m) => m.metric_type))),
+    ];
+    const monitorMetrics = monitorTypes.map((type) => ({
+        type,
+        profiles: nodeDetails
+            .map((n) => n.metric_profiles.find((m) => m.metric_type === type))
+            .filter((m): m is MetricProfilePoint => m !== undefined),
+    }));
+
     const tabs = [
         { id: "overview", label: "개요" },
         { id: "optimize", label: "최적화" },
@@ -159,7 +183,7 @@ export default function JobDetailView({ jobId, breadcrumbPrefix, showStop }: Job
     return (
         <main style={{ padding: "24px 28px" }}>
             <Breadcrumb segments={[...breadcrumbPrefix, { label: `J-${job.id}` }]} />
-            
+
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", margin: "16px 0 20px" }}>
                 <div>
                     <div style={{ fontSize: 20, fontWeight: 700 }}>J-{job.id}</div>
@@ -202,6 +226,28 @@ export default function JobDetailView({ jobId, breadcrumbPrefix, showStop }: Job
 
             {tab === "overview" && (
                 <div>
+                    {nowSec !== null && monitorMetrics.length > 0 && (
+                        <>
+                            <SectionHead
+                                title="실시간 모니터링"
+                                desc={job.assigned_nodes.map((n) => n.node_name).join(" · ")}
+                            />
+                            <div style={{ marginBottom: 24 }}>
+                                <Card>
+                                    <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+                                        {monitorMetrics.map((m) => (
+                                            <Sparkline
+                                                key={m.type}
+                                                label={METRIC_LABELS[m.type] ?? m.type}
+                                                values={averageMetricSeries(m.profiles, nowSec, 90, 14)}
+                                            />
+                                        ))}
+                                    </div>
+                                </Card>
+                            </div>
+                        </>
+                    )}
+
                     <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
                         {overview.others.map((m) => {
                             const d = metricDisplay(m, progress);
@@ -391,7 +437,7 @@ export default function JobDetailView({ jobId, breadcrumbPrefix, showStop }: Job
                                     <span style={{ color: "var(--sub)" }}>
                                         {e.node_id !== null
                                             ? job.assigned_nodes.find((n) => n.node_id === e.node_id)?.node_name ??
-                                              `노드 #${e.node_id}`
+                                            `노드 #${e.node_id}`
                                             : "—"}
                                     </span>
                                 </div>
