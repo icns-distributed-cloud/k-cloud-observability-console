@@ -46,7 +46,7 @@ export default function TopBar() {
               letterSpacing: "0.04em",
             }}
           >
-            경희대 ICNS
+            경희대 ICNS Lab
           </div>
         </div>
       </div>
