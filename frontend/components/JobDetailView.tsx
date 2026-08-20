@@ -8,10 +8,12 @@ import ProgressBar from "@/components/ProgressBar";
 import MetricChart from "@/components/MetricChart";
 import ModelGraph from "@/components/ModelGraph";
 import {
+    fetchEvents,
     fetchHyperparamAdjustments,
     fetchJobDetail,
     fetchKqvBenchmark,
     fetchModelLayers,
+    fetchNodeDetail,
     fetchReallocations,
     stopJob,
 } from "@/lib/api";
@@ -23,7 +25,7 @@ import {
     liveMetricSeries,
     metricDisplay,
     metricSeries,
-    phaseProgress,
+    trainingProgress,
 } from "@/lib/jobMetrics";
 import {
     formatMakespan,
@@ -33,10 +35,14 @@ import {
 } from "@/lib/jobOptimize";
 import { useTime } from "@/lib/TimeContext";
 import type {
+    EventItem,
+    EventType,
     HyperparamAdjustmentItem,
     JobDetail,
     JobKqvBenchmarkResponse,
+    JobMetricProfileItem,
     ModelLayersResponse,
+    NodeDetail,
     ReallocationItem,
 } from "@/app/types";
 
@@ -78,6 +84,8 @@ export default function JobDetailView({ jobId, breadcrumbPrefix, showStop }: Job
     const [reallocs, setReallocs] = useState<ReallocationItem[]>([]);
     const [adjustments, setAdjustments] = useState<HyperparamAdjustmentItem[]>([]);
     const [modelLayers, setModelLayers] = useState<ModelLayersResponse | null>(null);
+    const [events, setEvents] = useState<EventItem[]>([]);
+    const [nodeDetails, setNodeDetails] = useState<NodeDetail[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [stopping, setStopping] = useState(false);
 
@@ -98,6 +106,18 @@ export default function JobDetailView({ jobId, breadcrumbPrefix, showStop }: Job
             .catch((e) => setError(String(e)));
     }, [jobId]);
 
+    // 프로파일링 탭 전용 - job이 로드된 뒤에 한 번만 가져온다(배정 노드 목록이
+    // job.assigned_nodes에서 나오므로 job보다 먼저는 못 부른다). 노드 상세는
+    // ClusterDetail.nodes(NodeSummary)에 없는 가속기 스펙이 필요해서 노드마다 따로
+    // 조회한다 - 스케줄러 페이지에서 이미 쓴 것과 같은 패턴.
+    useEffect(() => {
+        if (!job) return;
+        fetchEvents(job.id).then(setEvents).catch(() => {});
+        Promise.all(job.assigned_nodes.map((n) => fetchNodeDetail(n.node_id).catch(() => null))).then(
+            (results) => setNodeDetails(results.filter((n): n is NodeDetail => n !== null))
+        );
+    }, [job?.id]);
+
     // 백엔드에 push가 없어서, 페이지를 열어둔 채로 job이 (다른 탭에서 stop되는 등)
     // 상태가 바뀌면 화면이 그걸 못 따라간다 - 특히 무기한 실행되는 추론 job은
     // finished_at이 그대로 null로 남아있는 탓에 누적 요청 수 같은 지표가 실제로는
@@ -115,19 +135,25 @@ export default function JobDetailView({ jobId, breadcrumbPrefix, showStop }: Job
     if (!job) return <main style={{ padding: 24 }}>불러오는 중…</main>;
 
     const color = JOB_COLORS[job.type];
-    const progress = phaseProgress(job);
-    const featured = job.metrics.find((m) => m.featured);
-    /** 에포크처럼 총 개수가 있는 지표 — 그래프 하단에 표시하고 카드에서는 뺀다 */
-    const counter = job.metrics.find((m) => !m.featured && m.total_count !== null);
+    const progress = trainingProgress(job, now);
+    // 개요(진행 상황 요약)와 프로파일링(연구용 성능 측정치)이 job.metrics를 profiling
+    // 플래그로 나눠 쓴다 - 추론은 진행률 개념이 없어 지표 전부가 profiling=true라
+    // overview.featured가 항상 비어서 개요 탭엔 그래프가 안 뜬다(의도대로).
+    const overview = pickMetricSection(job.metrics, false);
+    const profilingMetrics = pickMetricSection(job.metrics, true);
     // 추론은 그래프 선(liveMetricSeries)에 잔물결을 얹으니, 우측 상단 "현재" 숫자도
     // 같은 값(그래프의 가장 오른쪽 점)을 가리켜야 그래프랑 숫자가 서로 다른 걸
     // 말하지 않는다 - progress 기반 metricDisplay는 웜업 이후 고정값이라 안 맞는다.
-    const liveSeries = job.type === "infer" && now && featured ? liveMetricSeries(featured, job, now, 30) : null;
+    const liveSeriesFor = (m: (typeof job.metrics)[number] | undefined) =>
+        job.type === "infer" && now && m ? liveMetricSeries(m, job, now, 30) : null;
+    const overviewLiveSeries = liveSeriesFor(overview.featured);
+    const profilingLiveSeries = liveSeriesFor(profilingMetrics.featured);
     const realloc = summarizeReallocations(reallocs);
 
     const tabs = [
         { id: "overview", label: "개요" },
         { id: "optimize", label: "최적화" },
+        { id: "profiling", label: "프로파일링" },
     ];
 
     return (
@@ -177,15 +203,12 @@ export default function JobDetailView({ jobId, breadcrumbPrefix, showStop }: Job
             {tab === "overview" && (
                 <div>
                     <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
-                        {[...job.metrics]
-                            .filter((m) => !m.featured && m.id !== counter?.id)
-                            .sort((a, b) => a.seq - b.seq)
-                            .map((m) => {
-                                const d = metricDisplay(m, progress);
-                                return (
-                                    <StatCard key={m.id} label={m.label} value={d.value} unit={d.unit ?? undefined} />
-                                );
-                            })}
+                        {overview.others.map((m) => {
+                            const d = metricDisplay(m, progress);
+                            return (
+                                <StatCard key={m.id} label={m.label} value={d.value} unit={d.unit ?? undefined} />
+                            );
+                        })}
                         {job.dataset_name && (
                             <StatCard label="데이터셋" value={job.dataset_name} />
                         )}
@@ -198,30 +221,49 @@ export default function JobDetailView({ jobId, breadcrumbPrefix, showStop }: Job
 
                     {job.type === "train" && (
                         <div style={{ marginBottom: 24 }}>
-                            <div style={{ ...SECTION_LABEL, marginBottom: 8 }}>진행률</div>
-                            <ProgressBar value={progress} color={color} />
+                            <div style={{ ...SECTION_LABEL, marginBottom: 8, display: "flex", alignItems: "baseline", gap: 8 }}>
+                                <span>진행률</span>
+                                {/* trainingProgress가 준비/마무리 단계엔 0 또는 1로 고정해서(중간에
+                                    리셋된 것처럼 안 보이게) 막대 자체는 항상 단조증가하지만, 그것만
+                                    으론 "왜 지금 안 움직이지"가 안 보이니 지금 무슨 단계인지 문구로
+                                    같이 알려준다. */}
+                                {(job.status === "provisioning" || job.status === "finalizing") && (
+                                    <span
+                                        style={{
+                                            fontSize: 12.5,
+                                            fontWeight: 600,
+                                            textTransform: "none",
+                                            letterSpacing: "normal",
+                                            color: "var(--sub)",
+                                        }}
+                                    >
+                                        ({job.status === "provisioning" ? "학습 준비 중" : "마무리 처리 중"})
+                                    </span>
+                                )}
+                            </div>
+                            <ProgressBar value={progress} color={color} thick />
                         </div>
                     )}
 
-                    {featured && now && (
+                    {overview.featured && now && (
                         <Card>
                             <MetricChart
                                 title={`${TYPE_LABELS[job.type] ?? job.type} 현황`}
-                                currentLabel={`현재 ${featured.label}`}
+                                currentLabel={`현재 ${overview.featured.label}`}
                                 currentValue={
-                                    liveSeries
-                                        ? formatMetricValue(liveSeries[liveSeries.length - 1])
-                                        : metricDisplay(featured, progress).value
+                                    overviewLiveSeries
+                                        ? formatMetricValue(overviewLiveSeries[overviewLiveSeries.length - 1])
+                                        : metricDisplay(overview.featured, progress).value
                                 }
-                                unit={featured.unit}
-                                values={liveSeries ?? metricSeries(featured, progress, 30)}
+                                unit={overview.featured.unit}
+                                values={overviewLiveSeries ?? metricSeries(overview.featured, progress, 30)}
                                 progress={job.type === "infer" ? 1 : progress}
                                 color={color}
                                 footerLeft={
-                                    counter
+                                    overview.counter
                                         ? job.type === "infer"
-                                            ? `${counter.label} ${cumulativeCount(Number(featured.target_value ?? 0), job, now)}`
-                                            : `${counter.label} ${Math.round(progress * counter.total_count!)} / ${counter.total_count}`
+                                            ? `${overview.counter.label} ${cumulativeCount(Number(overview.featured.target_value ?? 0), job, now)}`
+                                            : `${overview.counter.label} ${Math.round(progress * overview.counter.total_count!)} / ${overview.counter.total_count}`
                                         : undefined
                                 }
                             />
@@ -244,6 +286,117 @@ export default function JobDetailView({ jobId, breadcrumbPrefix, showStop }: Job
                                 <ModelGraph layers={modelLayers.layers} edges={modelLayers.edges} />
                             </Card>
                         </>
+                    )}
+
+                    <div style={{ marginTop: 24 }}>
+                        <SectionHead title="하드웨어 프로파일" />
+                    </div>
+                    {nodeDetails.length === 0 ? (
+                        <div
+                            style={{
+                                border: "1px dashed var(--line)",
+                                borderRadius: 12,
+                                padding: 24,
+                                textAlign: "center",
+                                fontSize: 12.5,
+                                color: "var(--sub)",
+                            }}
+                        >
+                            배정된 노드가 없습니다.
+                        </div>
+                    ) : (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                            {nodeDetails.map((n) => (
+                                <Card key={n.id}>
+                                    <div
+                                        style={{
+                                            display: "flex",
+                                            alignItems: "baseline",
+                                            gap: 10,
+                                            marginBottom: n.accelerators.length > 0 ? 12 : 0,
+                                        }}
+                                    >
+                                        <span style={{ fontWeight: 700, fontFamily: "'IBM Plex Mono', monospace" }}>
+                                            {n.name}
+                                        </span>
+                                        <span style={{ fontSize: 12, color: "var(--sub)" }}>
+                                            {n.purpose === "train" ? "학습" : "추론"} 노드
+                                        </span>
+                                    </div>
+                                    {n.accelerators.length > 0 && (
+                                        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                                            {n.accelerators.map((a, i) => (
+                                                <div
+                                                    key={i}
+                                                    style={{
+                                                        border: "1px solid var(--line)",
+                                                        borderRadius: 10,
+                                                        padding: "8px 12px",
+                                                        fontSize: 12.5,
+                                                        minWidth: 180,
+                                                    }}
+                                                >
+                                                    <div style={{ fontWeight: 700, marginBottom: 4 }}>
+                                                        {a.model_name}
+                                                        {a.count > 1 ? ` ×${a.count}` : ""}
+                                                    </div>
+                                                    <div style={{ color: "var(--sub)", fontFamily: "'IBM Plex Mono', monospace" }}>
+                                                        {a.tflops} TFLOPS · {a.memory_gb}GB {a.memory_type ?? ""} · {a.tdp_w}W
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </Card>
+                            ))}
+                        </div>
+                    )}
+
+                    <div style={{ marginTop: 24 }}>
+                        <SectionHead title="이벤트 타임라인" />
+                    </div>
+                    {events.length === 0 ? (
+                        <div
+                            style={{
+                                border: "1px dashed var(--line)",
+                                borderRadius: 12,
+                                padding: 24,
+                                textAlign: "center",
+                                fontSize: 12.5,
+                                color: "var(--sub)",
+                            }}
+                        >
+                            기록된 이벤트가 없습니다.
+                        </div>
+                    ) : (
+                        <Card>
+                            {events.map((e, i) => (
+                                <div
+                                    key={e.id}
+                                    style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: 16,
+                                        padding: "10px 0",
+                                        borderTop: i > 0 ? "1px solid var(--line)" : "none",
+                                        fontSize: 12.5,
+                                    }}
+                                >
+                                    <span style={{ color: "var(--sub)", fontFamily: "'IBM Plex Mono', monospace", minWidth: 74 }}>
+                                        {formatEventTime(e.occurred_at)}
+                                    </span>
+                                    <span style={{ fontWeight: 700, color, minWidth: 84 }}>
+                                        {EVENT_TYPE_LABELS[e.type] ?? e.type}
+                                    </span>
+                                    <span style={{ color: "var(--sub)" }}>
+                                        {e.node_id !== null
+                                            ? job.assigned_nodes.find((n) => n.node_id === e.node_id)?.node_name ??
+                                              `노드 #${e.node_id}`
+                                            : "—"}
+                                    </span>
+                                </div>
+                            ))}
+                        </Card>
                     )}
                 </div>
             )}
@@ -280,16 +433,12 @@ export default function JobDetailView({ jobId, breadcrumbPrefix, showStop }: Job
                         </>
                     )}
 
-                    {reallocs.length > 0 && (
-                        <>
-                            <div style={SECTION_LABEL}>무중단 재할당</div>
-                            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 24 }}>
-                                <StatCard label="자원 변경" value={realloc.count} unit="회" />
-                                <StatCard label="중단 시간" value={realloc.downtimeSec} unit="초" />
-                                <StatCard label="재개 지연" value={`${realloc.resumeDelaySec}s`} />
-                            </div>
-                        </>
-                    )}
+                    <div style={SECTION_LABEL}>무중단 재할당</div>
+                    <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 24 }}>
+                        <StatCard label="자원 변경" value={realloc.count} unit="회" />
+                        <StatCard label="중단 시간" value={realloc.downtimeSec} unit="초" />
+                        <StatCard label="재개 지연" value={`${realloc.resumeDelaySec}s`} />
+                    </div>
 
                     {job.cache && (
                         <>
@@ -371,28 +520,97 @@ export default function JobDetailView({ jobId, breadcrumbPrefix, showStop }: Job
                         </>
                     )}
 
-                    {!kqv?.kqv_gain_pct &&
-                        reallocs.length === 0 &&
-                        adjustments.length === 0 &&
-                        !job.cache && (
-                            <div
-                                style={{
-                                    border: "1px dashed var(--line)",
-                                    borderRadius: 12,
-                                    padding: 24,
-                                    textAlign: "center",
-                                    fontSize: 12.5,
-                                    color: "var(--sub)",
-                                }}
-                            >
-                                이 작업에 적용된 최적화 기법이 없습니다.
-                            </div>
-                        )}
+                </div>
+            )}
+
+            {tab === "profiling" && (
+                <div>
+                    {profilingMetrics.others.length > 0 && (
+                        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
+                            {profilingMetrics.others.map((m) => {
+                                // 누적 요청 수처럼 total_count가 있는 지표는 보통 featured 그래프
+                                // 각주로 붙는데, 이 섹션엔 featured가 없을 수 있다(추론 프로파일링 -
+                                // 처리량 그래프가 개요로 빠졌으므로). 그래도 progress 기반
+                                // metricDisplay를 그대로 쓰면 무기한 실행되는 추론엔 안 맞으니
+                                // (진행률 개념이 없음), 개요 쪽 featured(처리량)의 target_value를
+                                // 속도로 빌려서 cumulativeCount로 계산한다.
+                                if (job.type === "infer" && m.total_count !== null && now) {
+                                    const rate = Number(overview.featured?.target_value ?? 0);
+                                    return (
+                                        <StatCard key={m.id} label={m.label} value={cumulativeCount(rate, job, now)} />
+                                    );
+                                }
+                                const d = metricDisplay(m, progress);
+                                return (
+                                    <StatCard key={m.id} label={m.label} value={d.value} unit={d.unit ?? undefined} />
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    {profilingMetrics.featured && now && (
+                        <Card>
+                            <MetricChart
+                                title={`${TYPE_LABELS[job.type] ?? job.type} 성능 프로파일`}
+                                currentLabel={`현재 ${profilingMetrics.featured.label}`}
+                                currentValue={
+                                    profilingLiveSeries
+                                        ? formatMetricValue(profilingLiveSeries[profilingLiveSeries.length - 1])
+                                        : metricDisplay(profilingMetrics.featured, progress).value
+                                }
+                                unit={profilingMetrics.featured.unit}
+                                values={profilingLiveSeries ?? metricSeries(profilingMetrics.featured, progress, 30)}
+                                progress={job.type === "infer" ? 1 : progress}
+                                color={color}
+                                footerLeft={
+                                    profilingMetrics.counter
+                                        ? job.type === "infer"
+                                            ? `${profilingMetrics.counter.label} ${cumulativeCount(Number(profilingMetrics.featured.target_value ?? 0), job, now)}`
+                                            : `${profilingMetrics.counter.label} ${Math.round(progress * profilingMetrics.counter.total_count!)} / ${profilingMetrics.counter.total_count}`
+                                        : undefined
+                                }
+                            />
+                        </Card>
+                    )}
                 </div>
             )}
 
         </main>
     );
+}
+
+const EVENT_TYPE_LABELS: Record<EventType, string> = {
+    ARRIVAL: "도착",
+    QUEUE: "대기열 유지",
+    BACKFILL: "백필 배정",
+    START: "즉시 배정",
+    FINISH: "노드 해제",
+};
+
+/** occurred_at(절대 시각 ISO 문자열) → "12:04:02" */
+function formatEventTime(occurredAt: string): string {
+    return new Date(occurredAt).toLocaleTimeString("ko-KR", {
+        hour12: false,
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+    });
+}
+
+/** job.metrics를 profiling 플래그로 나눠, featured(대표 그래프)/counter(누적 카운터)/
+ *  others(나머지 StatCard용)로 분리한다. 개요 탭은 profiling=false로, 프로파일링
+ *  탭은 profiling=true로 각각 부른다 - 같은 로직을 섹션마다 반복하지 않기 위해서다. */
+function pickMetricSection(metrics: JobMetricProfileItem[], profiling: boolean) {
+    const scoped = metrics.filter((m) => m.profiling === profiling);
+    const featured = scoped.find((m) => m.featured);
+    // counter(에포크/누적 요청 수 같은 총량 지표)는 featured 그래프의 하단 각주로만
+    // 쓴다 - 이 섹션에 featured가 없으면(추론 프로파일링처럼 처리량 그래프가 개요로
+    // 빠진 경우) 붙일 그래프가 없으니 others에 그냥 일반 StatCard로 남긴다.
+    const counter = featured ? scoped.find((m) => !m.featured && m.total_count !== null) : undefined;
+    const others = [...scoped]
+        .filter((m) => !m.featured && m.id !== counter?.id)
+        .sort((a, b) => a.seq - b.seq);
+    return { featured, counter, others };
 }
 
 function SectionHead({ title, desc }: { title: string; desc?: string }) {

@@ -1,6 +1,7 @@
 import type {
   AssignmentItem,
   ClusterDetail,
+  EventItem,
   HyperparamAdjustmentItem,
   JobDetail,
   JobKqvBenchmarkResponse,
@@ -101,6 +102,12 @@ export function fetchKqvBenchmark(jobId: number) {
 
 export function fetchReallocations(jobId: number) {
   return get<ReallocationItem[]>(`/jobs/${jobId}/reallocations`)
+}
+
+/** 작업 상세 "프로파일링" 탭의 이벤트 타임라인용 - job_id로 걸러서 이 작업의
+ *  ARRIVAL/QUEUE/BACKFILL(또는 START)/FINISH만 받는다 (since 없이도 전체 이력 조회). */
+export function fetchEvents(jobId: number) {
+  return get<EventItem[]>(`/events?job_id=${jobId}`)
 }
 
 export function fetchModelLayers(modelId: number) {

@@ -765,39 +765,56 @@ INSERT INTO event (type, job_id, node_id, cluster_id, occurred_at) VALUES
   ('START', 7, 13, 2, now() - interval '1 hour'),
   ('FINISH', 7, 13, 2, now() - interval '1 hour' + interval '9 seconds');
 
--- job overview cards - matches services/jobs.py METRIC_TEMPLATES exactly, same
--- template auto-seeded on every real submission.
-INSERT INTO job_metric_profile (job_id, seq, label, unit, start_value, target_value, curve_shape, total_count, featured) VALUES
-  (1, 1, '정확도', '%', 40, 92, 'exp_approach', NULL, true), (1, 2, '에포크', NULL, NULL, NULL, NULL, 100, false),
-  (3, 1, '정확도', '%', 40, 92, 'exp_approach', NULL, true), (3, 2, '에포크', NULL, NULL, NULL, NULL, 100, false),
-  (4, 1, '정확도', '%', 40, 92, 'exp_approach', NULL, true), (4, 2, '에포크', NULL, NULL, NULL, NULL, 100, false),
-  (6, 1, '정확도', '%', 40, 92, 'exp_approach', NULL, true), (6, 2, '에포크', NULL, NULL, NULL, NULL, 100, false);
+-- job overview/profiling cards - matches services/jobs.py METRIC_TEMPLATES exactly,
+-- same template auto-seeded on every real submission. profiling=false는 개요 탭
+-- (진행 상황), true는 프로파일링 탭(연구용 성능 측정치) 몫이다.
+INSERT INTO job_metric_profile (job_id, seq, label, unit, start_value, target_value, curve_shape, total_count, featured, profiling) VALUES
+  (1, 1, '정확도', '%', 40, 92, 'exp_approach', NULL, true, false), (1, 2, '에포크', NULL, NULL, NULL, NULL, 100, false, false),
+  (1, 3, '처리량', 'samples/s', 180, 420, 'exp_approach', NULL, true, true),
+  (1, 4, 'GPU 메모리 사용률', '%', NULL, 78, NULL, NULL, false, true),
+  (1, 5, '스텝당 소요시간', 'ms', NULL, 340, NULL, NULL, false, true),
+  (1, 6, '누적 처리 샘플 수', NULL, NULL, NULL, NULL, 48000, false, true),
+  (3, 1, '정확도', '%', 40, 92, 'exp_approach', NULL, true, false), (3, 2, '에포크', NULL, NULL, NULL, NULL, 100, false, false),
+  (3, 3, '처리량', 'samples/s', 180, 420, 'exp_approach', NULL, true, true),
+  (3, 4, 'GPU 메모리 사용률', '%', NULL, 78, NULL, NULL, false, true),
+  (3, 5, '스텝당 소요시간', 'ms', NULL, 340, NULL, NULL, false, true),
+  (3, 6, '누적 처리 샘플 수', NULL, NULL, NULL, NULL, 48000, false, true),
+  (4, 1, '정확도', '%', 40, 92, 'exp_approach', NULL, true, false), (4, 2, '에포크', NULL, NULL, NULL, NULL, 100, false, false),
+  (4, 3, '처리량', 'samples/s', 180, 420, 'exp_approach', NULL, true, true),
+  (4, 4, 'GPU 메모리 사용률', '%', NULL, 78, NULL, NULL, false, true),
+  (4, 5, '스텝당 소요시간', 'ms', NULL, 340, NULL, NULL, false, true),
+  (4, 6, '누적 처리 샘플 수', NULL, NULL, NULL, NULL, 48000, false, true),
+  (6, 1, '정확도', '%', 40, 92, 'exp_approach', NULL, true, false), (6, 2, '에포크', NULL, NULL, NULL, NULL, 100, false, false),
+  (6, 3, '처리량', 'samples/s', 180, 420, 'exp_approach', NULL, true, true),
+  (6, 4, 'GPU 메모리 사용률', '%', NULL, 78, NULL, NULL, false, true),
+  (6, 5, '스텝당 소요시간', 'ms', NULL, 340, NULL, NULL, false, true),
+  (6, 6, '누적 처리 샘플 수', NULL, NULL, NULL, NULL, 48000, false, true);
 
-INSERT INTO job_metric_profile (job_id, seq, label, unit, start_value, target_value, curve_shape, total_count, featured) VALUES
-  (2, 1, '처리량', 'req/s', 350, 420, 'exp_approach', NULL, true),
-  (2, 2, '응답지연 p50', 'ms', NULL, 12, NULL, NULL, false),
-  (2, 3, '응답지연 p99', 'ms', NULL, 38, NULL, NULL, false),
-  (2, 4, '누적 요청 수', NULL, NULL, NULL, NULL, 12000, false),
-  (2, 5, 'KV 캐시 적중률', '%', 45, 88, 'exp_approach', NULL, false),
-  (2, 6, '요청당 전력', 'J', NULL, 0.42, NULL, NULL, false),
-  (2, 7, 'Prefill 비율', '%', NULL, 35, NULL, NULL, false),
-  (2, 8, 'Decode 비율', '%', NULL, 65, NULL, NULL, false),
-  (5, 1, '처리량', 'req/s', 350, 420, 'exp_approach', NULL, true),
-  (5, 2, '응답지연 p50', 'ms', NULL, 12, NULL, NULL, false),
-  (5, 3, '응답지연 p99', 'ms', NULL, 38, NULL, NULL, false),
-  (5, 4, '누적 요청 수', NULL, NULL, NULL, NULL, 12000, false),
-  (5, 5, 'KV 캐시 적중률', '%', 45, 88, 'exp_approach', NULL, false),
-  (5, 6, '요청당 전력', 'J', NULL, 0.42, NULL, NULL, false),
-  (5, 7, 'Prefill 비율', '%', NULL, 35, NULL, NULL, false),
-  (5, 8, 'Decode 비율', '%', NULL, 65, NULL, NULL, false),
-  (7, 1, '처리량', 'req/s', 350, 420, 'exp_approach', NULL, true),
-  (7, 2, '응답지연 p50', 'ms', NULL, 12, NULL, NULL, false),
-  (7, 3, '응답지연 p99', 'ms', NULL, 38, NULL, NULL, false),
-  (7, 4, '누적 요청 수', NULL, NULL, NULL, NULL, 12000, false),
-  (7, 5, 'KV 캐시 적중률', '%', 45, 88, 'exp_approach', NULL, false),
-  (7, 6, '요청당 전력', 'J', NULL, 0.42, NULL, NULL, false),
-  (7, 7, 'Prefill 비율', '%', NULL, 35, NULL, NULL, false),
-  (7, 8, 'Decode 비율', '%', NULL, 65, NULL, NULL, false);
+INSERT INTO job_metric_profile (job_id, seq, label, unit, start_value, target_value, curve_shape, total_count, featured, profiling) VALUES
+  (2, 1, '처리량', 'req/s', 350, 420, 'exp_approach', NULL, true, false),
+  (2, 2, '응답지연 p50', 'ms', NULL, 12, NULL, NULL, false, true),
+  (2, 3, '응답지연 p99', 'ms', NULL, 38, NULL, NULL, false, true),
+  (2, 4, '누적 요청 수', NULL, NULL, NULL, NULL, 12000, false, true),
+  (2, 5, 'KV 캐시 적중률', '%', 45, 88, 'exp_approach', NULL, false, true),
+  (2, 6, '요청당 전력', 'J', NULL, 0.42, NULL, NULL, false, true),
+  (2, 7, 'Prefill 비율', '%', NULL, 35, NULL, NULL, false, true),
+  (2, 8, 'Decode 비율', '%', NULL, 65, NULL, NULL, false, true),
+  (5, 1, '처리량', 'req/s', 350, 420, 'exp_approach', NULL, true, false),
+  (5, 2, '응답지연 p50', 'ms', NULL, 12, NULL, NULL, false, true),
+  (5, 3, '응답지연 p99', 'ms', NULL, 38, NULL, NULL, false, true),
+  (5, 4, '누적 요청 수', NULL, NULL, NULL, NULL, 12000, false, true),
+  (5, 5, 'KV 캐시 적중률', '%', 45, 88, 'exp_approach', NULL, false, true),
+  (5, 6, '요청당 전력', 'J', NULL, 0.42, NULL, NULL, false, true),
+  (5, 7, 'Prefill 비율', '%', NULL, 35, NULL, NULL, false, true),
+  (5, 8, 'Decode 비율', '%', NULL, 65, NULL, NULL, false, true),
+  (7, 1, '처리량', 'req/s', 350, 420, 'exp_approach', NULL, true, false),
+  (7, 2, '응답지연 p50', 'ms', NULL, 12, NULL, NULL, false, true),
+  (7, 3, '응답지연 p99', 'ms', NULL, 38, NULL, NULL, false, true),
+  (7, 4, '누적 요청 수', NULL, NULL, NULL, NULL, 12000, false, true),
+  (7, 5, 'KV 캐시 적중률', '%', 45, 88, 'exp_approach', NULL, false, true),
+  (7, 6, '요청당 전력', 'J', NULL, 0.42, NULL, NULL, false, true),
+  (7, 7, 'Prefill 비율', '%', NULL, 35, NULL, NULL, false, true),
+  (7, 8, 'Decode 비율', '%', NULL, 65, NULL, NULL, false, true);
 
 -- caching: infer jobs 2, 5, 7
 INSERT INTO job_cache_profile (job_id, latency_reduction_pct) VALUES
