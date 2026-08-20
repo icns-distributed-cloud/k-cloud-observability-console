@@ -11,29 +11,23 @@ import styles from "./JobStatusBoard.module.css";
  * PROVISIONING_SEC/FINALIZING_SEC)이 이 주기보다 훨씬 짧으면 그 사이 상태를
  * 못 보고 건너뛴 것처럼 보인다. */
 const POLL_MS = 4_000;
-const STAGE_HEIGHT = 520;
-/** zone 중심을 일직선이 아니라 완만한 물결로 배치 (인덱스별 y 오프셋) */
-const WAVE_OFFSET = [0, -34, 26, -30, 6];
-/** 완료 zone에 무한정 쌓이지 않도록, 최근 이만큼만 보여준다 */
-const DONE_CAP = 24;
+const STAGE_HEIGHT = 560;
+/** 완료 열은 세로로 쌓이므로 STAGE_HEIGHT 안에 물리적으로 들어가는 만큼만 보여준다.
+ *  예산 = (STAGE_HEIGHT - HEADER_H - SLOT_GAP) / (CHIP_H + SLOT_GAP) ≈ 15슬롯.
+ *  분산 job은 2줄이라 2슬롯을 먹으니 여유를 두고 12로 잡았다. STAGE_HEIGHT나
+ *  CHIP_H를 바꾸면 이 값도 같이 봐야 한다. */
+const DONE_CAP = 12;
 const STATUSES: JobStatus[] = ["queued", "provisioning", "running", "finalizing", "done"];
-/** 해바라기 나선 패킹에 쓰는 golden angle (라디안) */
-const GOLDEN_ANGLE = 137.5 * (Math.PI / 180);
-/** 나선 슬롯을 job.id % 이 값으로 고정한다 (zone 안 "몇 번째냐"로 정하면, 형제 job이
- * 들고 날 때마다 순번이 밀려서 다른 job들 위치까지 같이 튄다 - 필러가 자주 도니까
- * 매 폴링마다 여러 zone이 통째로 재배치되는 것처럼 보였다). id % N은 zone 인원과
- * 무관하게 항상 같은 슬롯이라, 같은 job은 형제가 바뀌어도 제자리에 머문다. */
-const SPIRAL_SLOTS = 30;
 const CHIP_W = 78;
 const CHIP_H = 26;
-/** 노드 여러 개에 분산 배정된 job은 (라벨 없는 점으로 위성을 두는 대신) 같은 라벨이
- * 붙은 칩을 노드 개수만큼 이어붙여서 보여준다. wrapper(존 이동 시 통째로 움직이는 그
- * 엘리먼트) 안에서만 배치하기 때문에, 상태가 바뀌어 wrapper가 다음 zone으로 이동할 때
- * 전부 자동으로 같이 따라간다. 한 줄로 쭉 늘어놓으면 3개부터 어색해 보여서, 한 줄에
- * 최대 이 개수까지만 놓고 그 이상은 다음 줄로 접는다 (2개면 가로 한 줄, 3개면 2+1). */
-const ROW_CAP = 2;
 const LINK_W = 12;
 const ROW_GAP = 6;
+/** 열 제목이 차지하는 높이 - 칩은 이 아래에서부터 쌓인다 */
+const HEADER_H = 40;
+/** 세로로 쌓이는 칩(그룹) 사이 간격 */
+const SLOT_GAP = 8;
+/** 열 박스 좌우 여백 */
+const PAD_X = 12;
 
 interface Props {
   onSelect: (jobId: number) => void;
@@ -44,6 +38,9 @@ interface Positioned {
   job: JobSummary;
   x: number;
   y: number;
+  /** 그룹(분산 job이면 여러 줄) 높이. 레이아웃에서 이미 계산한 값을 렌더가 다시
+   *  계산하지 않고 그대로 쓴다 - 따로 계산하면 rowCap이 바뀔 때 둘이 어긋난다. */
+  h: number;
 }
 
 const byOldestFirst = (a: JobSummary, b: JobSummary) =>
@@ -139,31 +136,36 @@ export default function JobStatusBoard({ onSelect, onCountChange }: Props) {
 
   if (error) return <div style={{ padding: 24 }}>불러오기 실패: {error}</div>;
 
-  const zoneCount = STATUSES.length;
-  const colW = stageWidth / zoneCount;
-  const zoneRadius = Math.max(Math.min(colW * 0.44, 170), 100);
-  const zoneCenter = (zi: number) => ({
-    cx: colW * (zi + 0.5),
-    cy: STAGE_HEIGHT / 2 + WAVE_OFFSET[zi],
-  });
+  const colW = stageWidth / STATUSES.length;
+  const cardW = colW - PAD_X * 2;
+  const columnX = (zi: number) => colW * (zi + 0.5);
+  /** 열 폭에 칩이 가로로 몇 개 들어가는지 (예전 ROW_CAP=2 상수를 대체).
+   *  분산 job은 이 개수까지 한 줄에 놓고 넘치면 다음 줄로 접는다. */
+  const rowCap = Math.max(1, Math.floor((cardW + LINK_W) / (CHIP_W + LINK_W)));
 
   const byStatus = new Map<JobStatus, JobSummary[]>(STATUSES.map((s) => [s, []]));
   for (const job of [...rendered].sort(byOldestFirst)) {
     byStatus.get(job.status as JobStatus)?.push(job);
   }
 
-  // 슬롯 개수가 고정이라 spacing도 고정 - zone 인원수가 늘고 줄어도 이미 있던
-  // job들의 위치는 안 바뀐다 (SPIRAL_SLOTS 위 주석 참고).
-  const spiralSpacing = Math.max(Math.min(zoneRadius / Math.sqrt(SPIRAL_SLOTS), 46), 24);
+  // 열 안에서 위→아래로 쌓는다. 그룹 높이가 job마다 다르므로(분산은 2줄) 균등
+  // 간격이 아니라 누적으로 계산해야 겹치지 않는다. byStatus가 byOldestFirst로
+  // 정렬돼 있어 오래된 게 위에 오고, 맨 위가 빠지면 아래가 한 칸씩 올라오면서
+  // 큐가 전진하는 것처럼 보인다.
+  const groupHeightOf = (job: JobSummary) => {
+    const n = Math.max(1, job.assigned_nodes.length);
+    const rows = Math.ceil(n / rowCap);
+    return rows * CHIP_H + (rows - 1) * ROW_GAP;
+  };
+
   const positioned: Positioned[] = [];
   STATUSES.forEach((status, zi) => {
-    const list = byStatus.get(status) ?? [];
-    const { cx, cy } = zoneCenter(zi);
-    for (const job of list) {
-      const slot = job.id % SPIRAL_SLOTS;
-      const angle = slot * GOLDEN_ANGLE;
-      const r = spiralSpacing * Math.sqrt(slot);
-      positioned.push({ job, x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) });
+    const cx = columnX(zi);
+    let y = HEADER_H + SLOT_GAP;
+    for (const job of byStatus.get(status) ?? []) {
+      const h = groupHeightOf(job);
+      positioned.push({ job, x: cx, y: y + h / 2, h });   // x/y는 계속 그룹 중심
+      y += h + SLOT_GAP;
     }
   });
   const posById = new Map(positioned.map((p) => [p.job.id, p]));
@@ -173,53 +175,50 @@ export default function JobStatusBoard({ onSelect, onCountChange }: Props) {
       <div ref={stageRef} style={{ position: "relative", width: "100%", height: STAGE_HEIGHT }}>
         {stageWidth > 0 && (
           <>
-            {/* zone 사이 흐름을 암시하는 화살표 */}
-            {STATUSES.slice(0, -1).map((_, zi) => {
-              const a = zoneCenter(zi);
-              const b = zoneCenter(zi + 1);
-              return (
-                <div
-                  key={`arrow-${zi}`}
-                  aria-hidden
-                  style={{
-                    position: "absolute",
-                    left: (a.cx + b.cx) / 2,
-                    top: (a.cy + b.cy) / 2,
-                    transform: "translate(-50%, -50%)",
-                    fontSize: 20,
-                    color: "var(--line)",
-                    fontWeight: 700,
-                  }}
-                >
-                  →
-                </div>
-              );
-            })}
+            {/* 열 사이 흐름 - 글리프 하나를 키우는 것보다 열 사이 빈 공간을 채우는
+                셰브론이 단계 흐름으로 읽힌다. 열 제목 줄 높이에 맞춰 고정한다. */}
+            {STATUSES.slice(0, -1).map((_, zi) => (
+              <div
+                key={`arrow-${zi}`}
+                aria-hidden
+                style={{
+                  position: "absolute",
+                  left: (columnX(zi) + columnX(zi + 1)) / 2,
+                  top: HEADER_H / 2,
+                  transform: "translate(-50%, -50%)",
+                  width: PAD_X * 2,
+                  height: 14,
+                  background: "var(--line)",
+                  clipPath: "polygon(0 20%, 55% 20%, 55% 0, 100% 50%, 55% 100%, 55% 80%, 0 80%)",
+                }}
+              />
+            ))}
 
             {STATUSES.map((status, zi) => {
-              const { cx, cy } = zoneCenter(zi);
-              const count = byStatus.get(status)?.length ?? 0;
+              const cx = columnX(zi);
+              // rendered에는 퇴장 애니메이션 중인 스냅샷도 섞여 있어서 실제 서버
+              // 상태보다 크게 나온다 - 헤더 숫자는 원본 jobs 기준으로 센다.
+              const count = jobs.filter((j) => j.status === status).length;
               return (
                 <div key={status}>
                   <div
                     style={{
                       position: "absolute",
-                      left: cx - zoneRadius,
-                      top: cy - zoneRadius,
-                      width: zoneRadius * 2,
-                      height: zoneRadius * 2,
-                      borderRadius: "50%",
-                      border: `1.5px dashed ${JOB_STATUS_COLORS[status]}`,
-                      // 존 색을 그대로 배경에 칠하면 안에 떠 있는 칩들과 부딪혀서 안 보인다 -
-                      // 섞어서 "이 존은 이 상태 색"이라는 걸 드러내되, 칩과 안 부딪히게 조절한다.
-                      background: `color-mix(in srgb, ${JOB_STATUS_COLORS[status]} 30%, var(--panel-2))`,
+                      left: cx - cardW / 2,
+                      top: 0,
+                      width: cardW,
+                      height: STAGE_HEIGHT,
+                      borderRadius: 12,
+                      border: `1.5px solid ${JOB_STATUS_COLORS[status]}`,
+                      // 세로로 길어지면 같은 농도도 훨씬 진해 보여서 30% -> 12%로 낮췄다.
+                      background: `color-mix(in srgb, ${JOB_STATUS_COLORS[status]} 12%, var(--panel-2))`,
                     }}
                   />
                   <div
                     style={{
                       position: "absolute",
                       left: cx,
-                      top: cy - zoneRadius - 28,
+                      top: 10,
                       transform: "translateX(-50%)",
                       textAlign: "center",
                       fontSize: 14,
@@ -244,16 +243,16 @@ export default function JobStatusBoard({ onSelect, onCountChange }: Props) {
               const distributed = pillCount > 1;
               const mine = job.user_id === CURRENT_USER_ID;
 
-              // 한 줄에 ROW_CAP개까지, 넘어가면 다음 줄로 접는다 (2개=가로 한 줄,
-              // 3개=2+1, 4개=2+2, ...). 마지막 줄에 자리가 덜 차면 가운데 정렬한다.
-              const numRows = Math.ceil(pillCount / ROW_CAP);
-              const groupWidth = Math.min(pillCount, ROW_CAP) * CHIP_W + (Math.min(pillCount, ROW_CAP) - 1) * LINK_W;
-              const groupHeight = numRows * CHIP_H + (numRows - 1) * ROW_GAP;
+              // 한 줄에 rowCap개까지, 넘어가면 다음 줄로 접는다.
+              // 마지막 줄에 자리가 덜 차면 가운데 정렬한다.
+              const perRow = Math.min(pillCount, rowCap);
+              const groupWidth = perRow * CHIP_W + (perRow - 1) * LINK_W;
+              const groupHeight = pos.h;   // 레이아웃에서 계산한 값을 그대로 쓴다
               const centers: { x: number; y: number }[] = [];
               for (let i = 0; i < pillCount; i++) {
-                const row = Math.floor(i / ROW_CAP);
-                const col = i % ROW_CAP;
-                const itemsInRow = Math.min(ROW_CAP, pillCount - row * ROW_CAP);
+                const row = Math.floor(i / rowCap);
+                const col = i % rowCap;
+                const itemsInRow = Math.min(rowCap, pillCount - row * rowCap);
                 const rowWidth = itemsInRow * CHIP_W + (itemsInRow - 1) * LINK_W;
                 const rowLeft = (groupWidth - rowWidth) / 2;
                 const left = rowLeft + col * (CHIP_W + LINK_W);
@@ -264,7 +263,6 @@ export default function JobStatusBoard({ onSelect, onCountChange }: Props) {
               const pill = (key: Key, title: string, left: number, top: number) => (
                 <div
                   key={key}
-                  className={styles.float}
                   title={title}
                   style={{
                     position: "absolute",
@@ -287,9 +285,7 @@ export default function JobStatusBoard({ onSelect, onCountChange }: Props) {
                     alignItems: "center",
                     justifyContent: "center",
                     padding: "0 8px",
-                    // 같은 job이면 분산된 칩들도 전부 같은 위상으로 움직여야 한 덩어리처럼
-                    // 보인다 - 노드 인덱스가 아니라 job.id로만 딜레이를 준다.
-                    animationDelay: `${(job.id % 10) * 0.28}s`,
+
                   }}
                 >
                   {job.phase_progress !== null && (
