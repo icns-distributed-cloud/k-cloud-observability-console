@@ -6,9 +6,15 @@
   overflow: hidden;
 }
 
+.track.thick {
+  height: 18px;
+  border-radius: 9px;
+}
+
 .fill {
   height: 100%;
-  border-radius: 4px;
+  /* track이 thick일 때도 항상 track의 둥근 정도를 그대로 따라가게 */
+  border-radius: inherit;
   /* 진행률이 이제 폴링 스냅샷(job.phase_progress)이라 값이 뚝뚝 튄다 - 다음 값으로
      부드럽게 넘어가게 트랜지션을 건다 */
   transition: width 600ms ease;

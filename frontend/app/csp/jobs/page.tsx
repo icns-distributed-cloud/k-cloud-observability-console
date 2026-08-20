@@ -34,7 +34,7 @@ export default function JobListPage() {
                     </div>
                 </div>
 
-                <div style={{ display: "flex", gap: 16 }}>
+                <div style={{ display: "flex", gap: 20 }}>
                     <LegendItem color={JOB_COLORS.train} label="학습 작업" />
                     <LegendItem color={JOB_COLORS.infer} label="추론 작업" />
                 </div>
@@ -59,17 +59,17 @@ export default function JobListPage() {
 
 function LegendItem({ color, label }: { color: string; label: string }) {
     return (
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span
                 style={{
-                    width: 9,
-                    height: 9,
+                    width: 14,
+                    height: 14,
                     borderRadius: "50%",
                     background: color,
                     flexShrink: 0,
                 }}
             />
-            <span style={{ fontSize: 12.5, color: "var(--sub)" }}>{label}</span>
+            <span style={{ fontSize: 14, color: "var(--sub)" }}>{label}</span>
         </div>
     );
 }

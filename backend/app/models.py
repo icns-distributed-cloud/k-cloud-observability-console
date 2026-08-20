@@ -316,6 +316,9 @@ class JobMetricProfile(Base):
     curve_shape: Mapped[Optional[str]]
     total_count: Mapped[Optional[int]]
     featured: Mapped[bool]
+    # 개요 탭(진행 상황 요약)과 프로파일링 탭(연구용 성능 측정치)이 같은
+    # job_metric_profile 테이블을 나눠 쓴다 - false면 개요, true면 프로파일링.
+    profiling: Mapped[bool] = mapped_column(server_default="false")
 
     job: Mapped["Job"] = relationship(back_populates="metric_profiles")
 

@@ -59,6 +59,13 @@ FILLER_DURATION_RANGE_SEC = {"train": (15, 30), "infer": (5, 15)}
 
 # one metric-card template set per job.type, copied verbatim into job_metric_profile on submission
 METRIC_TEMPLATES: dict[str, list[dict]] = {
+    # profiling=False인 것들은 개요 탭(대표 그래프 하나 + 진행 상황) 몫, True는
+    # 프로파일링 탭(연구용 성능 측정치) 몫이다 - 학습은 원래 정확도/에포크만 있던
+    # 자리에 그대로 두고, 시스템 성능 지표(처리량/GPU 메모리/스텝 시간/누적 샘플)를
+    # 새로 추가해 프로파일링 탭에 채운다. 추론은 원래도 진행률 개념이 없어 개요에
+    # 있던 지표 전부가 사실 실측치였지만, 개요의 대표 그래프 자리는 비워두지 않고
+    # 처리량 하나만 남긴다(featured=True인 것 그대로) - 나머지 일곱 개만
+    # profiling=True로 옮긴다.
     "train": [
         {
             "seq": 1,
@@ -69,6 +76,7 @@ METRIC_TEMPLATES: dict[str, list[dict]] = {
             "curve_shape": "exp_approach",
             "total_count": None,
             "featured": True,
+            "profiling": False,
         },
         {
             "seq": 2,
@@ -79,6 +87,51 @@ METRIC_TEMPLATES: dict[str, list[dict]] = {
             "curve_shape": None,
             "total_count": 100,
             "featured": False,
+            "profiling": False,
+        },
+        {
+            "seq": 3,
+            "label": "처리량",
+            "unit": "samples/s",
+            "start_value": Decimal("180"),
+            "target_value": Decimal("420"),
+            "curve_shape": "exp_approach",
+            "total_count": None,
+            "featured": True,
+            "profiling": True,
+        },
+        {
+            "seq": 4,
+            "label": "GPU 메모리 사용률",
+            "unit": "%",
+            "start_value": None,
+            "target_value": Decimal("78"),
+            "curve_shape": None,
+            "total_count": None,
+            "featured": False,
+            "profiling": True,
+        },
+        {
+            "seq": 5,
+            "label": "스텝당 소요시간",
+            "unit": "ms",
+            "start_value": None,
+            "target_value": Decimal("340"),
+            "curve_shape": None,
+            "total_count": None,
+            "featured": False,
+            "profiling": True,
+        },
+        {
+            "seq": 6,
+            "label": "누적 처리 샘플 수",
+            "unit": None,
+            "start_value": None,
+            "target_value": None,
+            "curve_shape": None,
+            "total_count": 48000,
+            "featured": False,
+            "profiling": True,
         },
     ],
     "infer": [
@@ -91,6 +144,8 @@ METRIC_TEMPLATES: dict[str, list[dict]] = {
             "curve_shape": "exp_approach",
             "total_count": None,
             "featured": True,
+            # 개요의 대표 그래프("추론 현황") 몫 - 프로파일링과 안 겹치게 여기만.
+            "profiling": False,
         },
         {
             "seq": 2,
@@ -101,6 +156,7 @@ METRIC_TEMPLATES: dict[str, list[dict]] = {
             "curve_shape": None,
             "total_count": None,
             "featured": False,
+            "profiling": True,
         },
         {
             "seq": 3,
@@ -111,6 +167,7 @@ METRIC_TEMPLATES: dict[str, list[dict]] = {
             "curve_shape": None,
             "total_count": None,
             "featured": False,
+            "profiling": True,
         },
         {
             "seq": 4,
@@ -121,6 +178,7 @@ METRIC_TEMPLATES: dict[str, list[dict]] = {
             "curve_shape": None,
             "total_count": 12000,
             "featured": False,
+            "profiling": True,
         },
         {
             "seq": 5,
@@ -131,6 +189,7 @@ METRIC_TEMPLATES: dict[str, list[dict]] = {
             "curve_shape": "exp_approach",
             "total_count": None,
             "featured": False,
+            "profiling": True,
         },
         {
             "seq": 6,
@@ -141,6 +200,7 @@ METRIC_TEMPLATES: dict[str, list[dict]] = {
             "curve_shape": None,
             "total_count": None,
             "featured": False,
+            "profiling": True,
         },
         {
             "seq": 7,
@@ -151,6 +211,7 @@ METRIC_TEMPLATES: dict[str, list[dict]] = {
             "curve_shape": None,
             "total_count": None,
             "featured": False,
+            "profiling": True,
         },
         {
             "seq": 8,
@@ -161,6 +222,7 @@ METRIC_TEMPLATES: dict[str, list[dict]] = {
             "curve_shape": None,
             "total_count": None,
             "featured": False,
+            "profiling": True,
         },
     ],
 }
@@ -184,10 +246,9 @@ def _to_selected_tier(tier: models.ResourceTier | None) -> schemas.SelectedTierS
     )
 
 
-def _phase_progress(job: models.Job) -> float | None:
-    """0~1, 현재 단계(provisioning/finalizing/running) 안에서 얼마나 지났는지.
-    phase_deadline은 "이 단계가 언제 끝나는지"만 들고 있으니, 단계별 고정 길이를 빼면
-    단계 시작 시각이 나오고 거기서 경과 비율을 계산할 수 있다. queued/done이면 None.
+def _phase_window(job: models.Job) -> tuple[datetime, datetime] | None:
+    """(현재 단계 시작 시각, 종료 시각). phase_deadline은 "이 단계가 언제 끝나는지"만
+    들고 있으니, 단계별 고정 길이를 빼면 시작 시각이 나온다. queued/done이면 None.
     추론의 running도 전부 None - 실제 제출된 추론은 무기한 실행이라 애초에
     phase_deadline이 없고, 필러 추론은 고정 duration이 있어 값을 낼 수는 있지만
     그러면 "이 추론은 왜 진행률이 있고 저건 없지"처럼 일관성이 깨진다."""
@@ -204,12 +265,21 @@ def _phase_progress(job: models.Job) -> float | None:
     else:
         return None
 
-    phase_start = job.phase_deadline - timedelta(seconds=duration)
+    return job.phase_deadline - timedelta(seconds=duration), job.phase_deadline
+
+
+def _phase_progress(job: models.Job, window: tuple[datetime, datetime] | None) -> float | None:
+    """0~1, 현재 단계 안에서 얼마나 지났는지 (요청 시점 스냅샷). window가 None이면 None."""
+    if window is None:
+        return None
+    phase_start, phase_end = window
     elapsed = (clock.now() - phase_start).total_seconds()
+    duration = (phase_end - phase_start).total_seconds()
     return max(0.0, min(1.0, elapsed / duration))
 
 
 def _to_job_summary(job: models.Job) -> schemas.JobSummary:
+    phase_window = _phase_window(job)
     return schemas.JobSummary(
         id=job.id,
         model_id=job.model_id,
@@ -234,7 +304,9 @@ def _to_job_summary(job: models.Job) -> schemas.JobSummary:
             )
             for a in job.assignments
         ],
-        phase_progress=_phase_progress(job),
+        phase_progress=_phase_progress(job, phase_window),
+        phase_started_at=phase_window[0] if phase_window else None,
+        phase_ends_at=phase_window[1] if phase_window else None,
     )
 
 
@@ -421,9 +493,10 @@ def _seed_metric_profiles(db: Session, job: models.Job) -> None:
         db.add(models.JobMetricProfile(job_id=job.id, **template))
 
 
-def _seed_optimization_data(db: Session, job: models.Job) -> None:
-    # Only called from submit_job, not from the filler-job path - fillers are hidden
-    # from the default job list anyway, so nobody ever opens their 최적화 tab.
+def _seed_optimization_data(db: Session, job: models.Job, tier: models.ResourceTier) -> None:
+    # 필러/실제 제출 양쪽에서 호출한다 (예전엔 필러는 빠졌었는데, 필러도 최적화 탭이
+    # 있는 이상 항상 비어있는 게 더 이상해서 넣었다 - 객체 몇 개 db.add()하는 정도라
+    # 어차피 매 sweep 나가는 commit()에 얹히니 성능엔 안 보이는 수준).
     if job.type == "train":
         duration = DURATION_SEC["train"]
         db.add(
@@ -448,14 +521,19 @@ def _seed_optimization_data(db: Session, job: models.Job) -> None:
                 reward="+0.014",
             )
         )
-        db.add(
-            models.JobKqvBenchmark(
-                job_id=job.id,
-                kqv_gain_pct=Decimal("21.5"),
-                kqv_even_makespan_sec=Decimal("77040"),
-                kqv_opt_makespan_sec=Decimal("60480"),
+        # KQV(노드 성능비 기반 shard 배분)는 분산 학습(노드 여러 대에 걸친 tier)에서만
+        # 말이 되는 개념이다 - 단일 노드 tier(A100×1, A6000×1)는 배분할 노드가 하나뿐이라
+        # "균등 분배 대비 KQV 최적화"라는 비교 자체가 성립하지 않는다.
+        is_distributed = sum(r.node_count for r in tier.requirements) > 1
+        if is_distributed:
+            db.add(
+                models.JobKqvBenchmark(
+                    job_id=job.id,
+                    kqv_gain_pct=Decimal("21.5"),
+                    kqv_even_makespan_sec=Decimal("77040"),
+                    kqv_opt_makespan_sec=Decimal("60480"),
+                )
             )
-        )
     elif job.type == "infer":
         db.add(models.JobCacheProfile(job_id=job.id, latency_reduction_pct=Decimal("33.0")))
         db.add(
@@ -570,6 +648,7 @@ def _maintain_filler_jobs(db: Session, now: datetime) -> None:
             db.add(job)
             db.flush()
             _seed_metric_profiles(db, job)
+            _seed_optimization_data(db, job, tier)
             _log_event(db, type="ARRIVAL", now=now, job_id=job.id)
 
 
@@ -622,8 +701,11 @@ def sweep_and_backfill(db: Session) -> None:
         .all()
     )
     # node_id -> the correct instant it was vacated (its ex-occupant's deadline),
-    # not whenever this sweep happened to notice
+    # not whenever this sweep happened to notice. freed_by keeps the actual job object
+    # (not just its id) so the backfill loop below can read its started_at directly,
+    # without another query, when logging a reallocation.
     freed_at: dict[int, datetime] = {}
+    freed_by: dict[int, models.Job] = {}
     for job in finalizing_jobs:
         deadline = job.phase_deadline
         job.status = "done"
@@ -633,6 +715,7 @@ def sweep_and_backfill(db: Session) -> None:
             if assignment.to_t is None:
                 assignment.to_t = deadline
                 freed_at[assignment.node_id] = deadline
+                freed_by[assignment.node_id] = job
                 _log_event(
                     db,
                     type="FINISH",
@@ -673,6 +756,31 @@ def sweep_and_backfill(db: Session) -> None:
                 )
                 _admit(db, job, nodes, start_time, event_type="BACKFILL")
                 occupied.update(n.id for n in nodes)
+                # 무중단 재할당(최적화 탭) - 이 job이 받은 노드 중 "이번 sweep에" 다른
+                # job이 막 끝내며 넘겨준 노드가 있으면 그 실제 핸드오프를 기록으로
+                # 남긴다. donor/node/시점은 실제 데이터를 쓰지만, "무중단" 재할당이라는
+                # 이름 그대로 중단 시간은 0이어야 맞다(전엔 실수로 0~2초 랜덤을 줬었다) -
+                # 재개 지연도 정확히 잴 방법이 없고 시연에서 값 자체가 중요한 게 아니라
+                # 그냥 0으로 둔다.
+                for node in nodes:
+                    donor = freed_by.get(node.id)
+                    if donor is None:
+                        continue
+                    donor_offset = (
+                        int((freed_at[node.id] - donor.started_at).total_seconds())
+                        if donor.started_at is not None
+                        else 0
+                    )
+                    db.add(
+                        models.Reallocation(
+                            donor_job_id=donor.id,
+                            receiver_job_id=job.id,
+                            node_id=node.id,
+                            at_t_offset_sec=max(donor_offset, 0),
+                            downtime_sec=Decimal("0"),
+                            resume_delay_sec=Decimal("0"),
+                        )
+                    )
 
     db.commit()
 
@@ -796,6 +904,7 @@ def get_job_detail(db: Session, job_id: int) -> schemas.JobDetail | None:
             curve_shape=m.curve_shape,
             total_count=m.total_count,
             featured=m.featured,
+            profiling=m.profiling,
         )
         for m in sorted(job.metric_profiles, key=lambda m: m.seq)
     ]
@@ -973,7 +1082,7 @@ def submit_job(
     db.add(job)
     db.flush()
     _seed_metric_profiles(db, job)
-    _seed_optimization_data(db, job)
+    _seed_optimization_data(db, job, tier)
     _log_event(db, type="ARRIVAL", now=now, job_id=job.id)
 
     _lock_admission(db)

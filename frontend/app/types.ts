@@ -9,7 +9,7 @@ export type NodePurpose = 'train' | 'infer'
 export type PriorityPref = 'time' | 'cost' | 'balanced'
 export type CurveShape = 'exp_approach' | 'flat'
 export type LayerCharacteristic = 'compute_bound' | 'memory_bound' | 'balanced'
-export type EventType = 'ARRIVAL' | 'START' | 'BACKFILL' | 'FINISH'
+export type EventType = 'ARRIVAL' | 'QUEUE' | 'START' | 'BACKFILL' | 'FINISH'
 export type CacheTierName = 'VRAM' | 'DRAM' | 'SSD'
 export interface ModelItem {
     id: number
@@ -178,9 +178,14 @@ export interface JobSummary {
     dataset_name: string | null
     selected_tier: SelectedTierSummary | null
     assigned_nodes: AssignedNodeItem[]
-    /** 0~1, 현재 단계(provisioning/finalizing/running) 진행률. queued/done이거나
-     *  추론 running이면 null (실제 제출은 무기한 실행, 필러도 일관성을 위해 뺌) */
+    /** 0~1, 현재 단계(provisioning/finalizing/running) 진행률 (요청 시점 스냅샷).
+     *  queued/done이거나 추론 running이면 null (실제 제출은 무기한 실행, 필러도
+     *  일관성을 위해 뺌) */
     phase_progress: number | null
+    /** 현재 단계의 시작/종료 시각. null 여부는 phase_progress와 같이 간다 - 프론트에서
+     *  폴링 간격과 무관하게 지금 시각 기준으로 진행률을 직접 보간할 때 쓴다. */
+    phase_started_at: string | null
+    phase_ends_at: string | null
 }
 
 export interface JobDetail extends JobSummary {
@@ -200,6 +205,8 @@ export interface JobMetricProfileItem {
     curve_shape: CurveShape | null
     total_count: number | null
     featured: boolean
+    /** false=개요 탭(진행 상황 요약), true=프로파일링 탭(연구용 성능 측정치) */
+    profiling: boolean
 }
 
 export interface JobCacheSummary {

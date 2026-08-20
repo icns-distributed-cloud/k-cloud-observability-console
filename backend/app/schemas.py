@@ -180,10 +180,14 @@ class JobSummary(BaseModel):
     dataset_name: Optional[str]
     selected_tier: Optional[SelectedTierSummary]
     assigned_nodes: list[AssignedNodeItem]
-    # 0~1, 현재 단계(provisioning/finalizing/running) 안에서 얼마나 지났는지.
-    # queued/done이거나, 추론 running이면 None (진행률 개념 없음 - 실제 제출은 무기한
-    # 실행이고, 필러 추론은 duration이 있어도 일관성을 위해 마찬가지로 뺀다).
+    # 0~1, 현재 단계(provisioning/finalizing/running) 안에서 얼마나 지났는지 (요청 시점
+    # 스냅샷). queued/done이거나, 추론 running이면 None (진행률 개념 없음 - 실제 제출은
+    # 무기한 실행이고, 필러 추론은 duration이 있어도 일관성을 위해 마찬가지로 뺀다).
     phase_progress: Optional[float]
+    # 현재 단계의 시작/종료 시각. 프론트가 폴링 간격과 무관하게 매 프레임 progress를
+    # 직접 보간할 수 있도록 phase_progress와 별도로 내려준다 (둘 다 None 여부는 같이 간다).
+    phase_started_at: Optional[datetime]
+    phase_ends_at: Optional[datetime]
 
 
 # ---------- GET /api/v1/jobs/{job_id} ----------
@@ -197,6 +201,7 @@ class JobMetricProfileItem(BaseModel):
     curve_shape: Optional[str]
     total_count: Optional[int]
     featured: bool
+    profiling: bool
 
 
 class JobCacheTierItem(BaseModel):

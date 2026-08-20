@@ -28,6 +28,36 @@ export function phaseProgress(job: JobSummary): number {
     return job.phase_progress ?? 0
 }
 
+/** phase_started_at ~ phase_ends_at 구간을 nowMs 기준으로 보간한 진행률(0~1). 폴링
+ *  스냅샷(phase_progress)은 다음 fetchJobDetail이 올 때까지 값이 그대로 멈춰 있다가
+ *  한 번에 훌쩍 뛰어서(예: 10초 간격 폴링에 40초짜리 학습이면 25%씩 계단식으로 보임)
+ *  막대가 뚝뚝 끊겨 보인다 - 두 시각을 알면 렌더될 때마다(useTime의 매 틱마다) 그
+ *  사이값을 직접 계산할 수 있어 폴링 주기와 무관하게 부드럽게 움직인다. 두 시각이
+ *  없으면(queued/done/추론 running) 폴링 스냅샷으로 대체한다. */
+function livePhaseProgress(job: JobSummary, nowMs: number): number {
+    if (!job.phase_started_at || !job.phase_ends_at) return job.phase_progress ?? 0
+    const start = new Date(job.phase_started_at).getTime()
+    const end = new Date(job.phase_ends_at).getTime()
+    if (end <= start) return 1
+    return Math.max(0, Math.min(1, (nowMs - start) / (end - start)))
+}
+
+/** phaseProgress는 provisioning/running/finalizing 각 "지금 단계"의 진행률을 그대로
+ *  돌려준다 - 학습 상세 페이지의 정확도 그래프/진행률 바에 그대로 쓰면, 단계가 바뀔
+ *  때마다(대기→준비→실행→마무리) 0%로 리셋됐다가 다시 채워지는 것처럼 보인다. 실제
+ *  학습(정확도가 오르는 것)은 running 단계에서만 일어나므로, 그 앞뒤는 단조 증가만
+ *  보이게 고정한다 - 준비 중엔 아직 시작 전이니 0, 마무리 중엔 이미 running에서 다
+ *  끝난 뒤라 (running→finalizing 전환 때 뚝 떨어져 보이지 않도록) 1로 둔다. 추론은
+ *  이 구분이 필요 없어(진행률 개념 자체가 없음) phaseProgress를 그대로 돌려준다.
+ *  nowMs가 주어지면(보통 항상 주어짐, useTime이 아직 첫 틱 전일 때만 null) running
+ *  구간은 livePhaseProgress로 보간한다. */
+export function trainingProgress(job: JobSummary, nowMs: number | null): number {
+    if (job.type !== 'train') return phaseProgress(job)
+    if (job.status === 'provisioning' || job.status === 'queued') return 0
+    if (job.status === 'finalizing' || job.status === 'done') return 1
+    return nowMs === null ? (job.phase_progress ?? 0) : livePhaseProgress(job, nowMs)
+}
+
 /** 실제 추론은 완료 시점이 없어(무기한 실행) 처리량 곡선에 job 전체 진행률을 못 쓴다.
  *  짧은 웜업 구간(실제 서빙이 초반에 안정화되는 것과 같은 모양)만 갖고, 그 이후로는
  *  목표치에서 그대로 유지된다 (liveMetricSeries에서 사용). */
