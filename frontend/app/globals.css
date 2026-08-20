@@ -24,15 +24,14 @@
   --job-train: #0E8F5C;
   --job-infer: #C2620A;
 
-  /* 작업 상태 - 실행중(초록, --accent와 같은 색)을 기준으로 대기중은 연하게,
-     마무리중은 진하게: 생애주기가 진행될수록 색이 짙어지는 것처럼 보이게 한다.
-     처음엔 네 단계가 밝기 차이가 작아 서로 비슷해 보였다 - 파스텔 민트부터 거의
-     검정에 가까운 짙은 포레스트그린까지 단계 폭을 크게 벌렸다. 완료는 생애주기
-     진행이 아니라 "끝"이라 무채색으로 남겨두고, 실패는 별도 빨강. */
+  /* 작업 상태 - 원래는 실행중(초록)을 기준으로 대기중/마무리중을 밝기만 다른 초록
+     계열로 뒀는데, 단계가 서로 비슷해 보인다는 피드백을 받고 준비중=노랑,
+     마무리중=보라로 서로 다른 색상을 쓰기로 했다. 완료는 생애주기 진행이 아니라
+     "끝"이라 무채색으로 남겨두고, 실패는 별도 빨강. */
   --job-status-queued: #BEF0D4;
-  --job-status-provisioning: #22C55E;
+  --job-status-provisioning: #EAB308;
   --job-status-running: #0E8F5C;
-  --job-status-finalizing: #073D28;
+  --job-status-finalizing: #7C3AED;
   --job-status-done: #374151;
   --job-status-failed: #DC2626;
 
