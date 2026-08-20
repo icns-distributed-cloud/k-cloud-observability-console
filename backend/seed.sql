@@ -68,8 +68,21 @@ INSERT INTO cluster (region_id, name, status, is_live, cost_per_hour) VALUES
 -- it's what admission filters candidate nodes by. Everywhere else it's just realistic
 -- variety for the CSP infra pages. Live cluster pool: node ids 4-14, split so every
 -- resource_tier below has real matching inventory:
---   train: A100 x3 (4/5/7), H100 x2 (10/11), A6000 x1 (12), NPU/RNGD x1 (6)
---   infer: NPU/RNGD x1 (8), PIM/AiM x1 (9), B200 x2 (13/14)
+--   train: A100 x3 (4/5/7), H100 x3 (10/11 + 42 below), A6000 x2 (12 + 43 below),
+--          NPU/RNGD x2 (6 + 41 below)
+--   infer: NPU/RNGD x1 (8), PIM/AiM x1 (9), B200 x4 (13/14 + 39/40 below)
+-- train tier 1 (H100x2+NPUx1) and tier 3 (A6000x1) used to have exactly as many
+-- matching nodes as they need, so admission had zero real choice - every pick used
+-- the same fixed node(s), which made the scheduler look static/rigged rather than
+-- actually scheduling anything. Adding one extra NPU/H100/A6000 node each (41/42/43)
+-- gives both tiers a real candidate pool to choose from via the predicted-util/power
+-- ranking (see _pick_free_nodes_for_tier), without touching either tier's requirement
+-- definition.
+-- suwon-srv-12/13 (ids 39/40) and 14/15/16 (ids 41/42/43) are appended at the end of
+-- this INSERT (rather than in suwon-srv-* numeric order) purely so their id and every
+-- downstream id in the file don't shift - keeps every other node/accelerator/
+-- metric-profile id stable. Same reasoning applies to their accelerator/metric-profile
+-- rows further down.
 INSERT INTO node (cluster_id, name, purpose) VALUES
   (1, 'srv-01', 'train'),
   (1, 'srv-02', 'infer'),
@@ -108,7 +121,12 @@ INSERT INTO node (cluster_id, name, purpose) VALUES
   (9, 'sea1-node-c', 'train'),
   (10, 'eas-node-a', 'train'),
   (10, 'eas-node-b', 'infer'),
-  (10, 'eas-node-c', 'train');
+  (10, 'eas-node-c', 'train'),
+  (2, 'suwon-srv-12', 'infer'),
+  (2, 'suwon-srv-13', 'infer'),
+  (2, 'suwon-srv-14', 'train'),
+  (2, 'suwon-srv-15', 'train'),
+  (2, 'suwon-srv-16', 'train');
 
 -- id 1=NVIDIA A100, 2=NVIDIA H100, 3=Furiosa RNGD, 4=SK hynix AiM, 5=NVIDIA A6000,
 -- 6=NVIDIA B200, 7=NVIDIA L40S. accelerator.accelerator_model_id and
@@ -169,6 +187,23 @@ INSERT INTO accelerator (node_id, kind, accelerator_model_id, tflops, memory_gb,
   (31, 'NPU', 3, 256, 48, 'GDDR6', 180),
   (34, 'PIM', 4, 128, 32, 'HBM-PIM', 150),
   (37, 'GPU', 6, 2250, 192, 'HBM3e', 1000);
+
+-- suwon-srv-12/13 (node ids 39/40) - 2 more live-cluster B200 infer nodes, same spec
+-- as the existing pair (13/14). Appended here (own statement, after every other
+-- accelerator row) so these land on fresh trailing ids 40/41 instead of shifting the
+-- decorative block's ids 13-39 that accelerator_metric_profile below already pins by id.
+INSERT INTO accelerator (node_id, kind, accelerator_model_id, tflops, memory_gb, memory_type, tdp_w) VALUES
+  (39, 'GPU', 6, 2250, 192, 'HBM3e', 1000),
+  (40, 'GPU', 6, 2250, 192, 'HBM3e', 1000);
+
+-- suwon-srv-14/15/16 (node ids 41/42/43) - one extra NPU/H100/A6000 train node each,
+-- same spec as their existing sibling (node 6/10/12 respectively). Gives train tier 1
+-- and tier 3 a real candidate pool instead of exactly-one-fit (see comment above the
+-- node INSERT). Own statement/trailing ids for the same reason as the block above.
+INSERT INTO accelerator (node_id, kind, accelerator_model_id, tflops, memory_gb, memory_type, tdp_w) VALUES
+  (41, 'NPU', 3, 256, 48, 'GDDR6', 180),
+  (42, 'GPU', 2, 989, 80, 'HBM3', 700),
+  (43, 'GPU', 5, 155, 48, 'GDDR6', 300);
 
 -- ------------------------------------------------------------
 -- metric profiles: value(t) = baseline + amplitude * sin(2*pi*t / period_sec)
@@ -251,7 +286,15 @@ INSERT INTO node_metric_profile (node_id, metric_type, baseline, amplitude, peri
   (35, 'util', 9, 3, 41, 'pct'), (35, 'temp', 35, 2, 45, 'C'), (35, 'power', 79, 16, 36, 'W'),
   (36, 'util', 10, 3, 43, 'pct'), (36, 'temp', 36, 2, 47, 'C'), (36, 'power', 126, 25, 31, 'W'),
   (37, 'util', 7, 2, 45, 'pct'), (37, 'temp', 32, 2, 48, 'C'), (37, 'power', 172, 33, 28, 'W'),
-  (38, 'util', 8, 3, 42, 'pct'), (38, 'temp', 34, 2, 46, 'C'), (38, 'power', 65, 14, 39, 'W');
+  (38, 'util', 8, 3, 42, 'pct'), (38, 'temp', 34, 2, 46, 'C'), (38, 'power', 65, 14, 39, 'W'),
+  -- suwon-srv-12/13 (39/40) - same B200 live-cluster profile shape as 13/14 above.
+  (39, 'util', 60, 15, 31, 'pct'), (39, 'cpu', 39, 9, 30, 'pct'), (39, 'temp', 64, 5, 33, 'C'), (39, 'power', 1440, 258, 25, 'W'),
+  (40, 'util', 56, 13, 32, 'pct'), (40, 'cpu', 36, 9, 31, 'pct'), (40, 'temp', 62, 4, 34, 'C'), (40, 'power', 1410, 250, 26, 'W'),
+  -- suwon-srv-14/15/16 (41/42/43) - same profile shape as their sibling node (6/10/12)
+  -- so the extra candidate looks like a plausible twin, not an outlier.
+  (41, 'util', 35, 8, 44, 'pct'), (41, 'cpu', 23, 6, 42, 'pct'), (41, 'temp', 45, 3, 49, 'C'), (41, 'power', 155, 28, 36, 'W'),
+  (42, 'util', 55, 13, 39, 'pct'), (42, 'cpu', 36, 8, 37, 'pct'), (42, 'temp', 59, 4, 42, 'C'), (42, 'power', 940, 178, 35, 'W'),
+  (43, 'util', 44, 11, 43, 'pct'), (43, 'cpu', 29, 7, 41, 'pct'), (43, 'temp', 51, 3, 46, 'C'), (43, 'power', 285, 48, 41, 'W');
 
 -- accelerator_metric_profile: 'util' on every accelerator (kept light - 39 accelerators
 -- would be a lot of rows for full coverage), plus mem/power on accelerator 1 as a
@@ -297,7 +340,14 @@ INSERT INTO accelerator_metric_profile (accelerator_id, metric_type, baseline, a
   (36, 'util', 10, 3, 20, 'pct'),
   (37, 'util', 5, 2, 38, 'pct'),
   (38, 'util', 4, 2, 39, 'pct'),
-  (39, 'util', 9, 3, 21, 'pct');
+  (39, 'util', 9, 3, 21, 'pct'),
+  -- suwon-srv-12/13's B200s (accelerator ids 40/41, node ids 39/40) - live-cluster range.
+  (40, 'util', 52, 15, 30, 'pct'),
+  (41, 'util', 58, 17, 29, 'pct'),
+  -- suwon-srv-14/15/16's NPU/H100/A6000 (accelerator ids 42/43/44, node ids 41/42/43).
+  (42, 'util', 33, 9, 26, 'pct'),
+  (43, 'util', 53, 15, 22, 'pct'),
+  (44, 'util', 42, 12, 27, 'pct');
 
 -- distributed links: domestic pairs draw in Korea-mode view. (1, 5, true) is
 -- domestic(서울, cluster 1) <-> overseas(aws-use1-a, cluster 5) so it also shows on

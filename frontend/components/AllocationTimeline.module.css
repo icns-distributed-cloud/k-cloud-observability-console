@@ -46,3 +46,130 @@
     opacity: 0;
   }
 }
+
+/* 클러스터 GPU/DRAM/Disk 계층 다이어그램 (SwitchServe 논문 그림에서 착안, 노드별이
+ * 아니라 클러스터 전체 공용이라 타임라인 오른쪽에 한 번만 그린다). 구역 하나 = 티어
+ * 하나, 그 안의 칩들은 지금 그 티어에 있는 job들. */
+.hierarchyZone {
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: var(--panel-2);
+  min-height: 48px;
+}
+
+.hierarchyLabel {
+  font-size: 11px;
+  font-weight: 700;
+  font-family: 'IBM Plex Mono', monospace;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+
+.hierarchyChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.hierarchyEmpty {
+  font-size: 12px;
+  color: var(--sub);
+}
+
+.hierarchyChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 3px 7px;
+  border-radius: 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* 다음 폴링에서 이 job이 다른 티어로 넘어가면 칩이 통째로 사라지고 다른 구역에
+     새로 생기는 거라(구역이 서로 떨어진 상자라 위치를 자연스럽게 옮길 수 없다),
+     적어도 점 색은 바로 전 상태에서 부드럽게 바뀌는 것처럼 보이게 트랜지션을 건다. */
+  transition: background 400ms ease;
+}
+
+.hierarchyDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* 예측 기반 배치 표시 (학습 섹션 전용). 색은 예측 카드 패널(page.tsx의
+ * PREDICT_COLOR)과 맞춰야 "저 패널이 예측한 게 여기로 왔다"는 인상이 이어진다 -
+ * 두 파일이 각자 하드코딩하고 있으니 바꿀 땐 같이 바꿔야 한다. 라벨(무슨 job인지)이
+ * 위에서 그 노드 행까지 날아가고, 도착 직후 그 행 전체가 잠깐 테두리로 빛난다 -
+ * 라벨이 도착하는 그 순간(900ms)에 맞춰 optimizeRowGlow의 animation-delay를 걸어야
+ * "도착"과 "강조"가 이어져 보인다. */
+.optimizeLabel {
+  position: absolute;
+  top: -16px;
+  left: 4px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: #6366F1;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: 'IBM Plex Mono', monospace;
+  white-space: nowrap;
+  box-shadow: 0 0 8px 2px rgba(99, 102, 241, 0.55);
+  pointer-events: none;
+  z-index: 6;
+  animation: optimize-flash 900ms ease-out forwards;
+}
+
+@keyframes optimize-flash {
+  0% {
+    top: -16px;
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  20% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    top: var(--target-top);
+    opacity: 0;
+    transform: scale(0.9) translateY(-9px);
+  }
+}
+
+.optimizeRowGlow {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-radius: 6px;
+  background: rgba(99, 102, 241, 0.1);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.55) inset;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 1;
+  animation: optimize-landing 900ms ease-out forwards;
+  animation-delay: 820ms;
+}
+
+@keyframes optimize-landing {
+  0% {
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}

@@ -1,4 +1,5 @@
 import random
+import time
 from datetime import datetime, timedelta
 from decimal import Decimal
 
@@ -8,6 +9,7 @@ from sqlalchemy.orm import Query, Session, selectinload
 
 from app import clock, models, schemas
 from app.database import get_db
+from app.services.infra import _evaluate
 
 DURATION_SEC = {"train": 40, "infer": 15}
 # real job lifecycle either side of "running": nodes are assigned (and stay
@@ -44,7 +46,10 @@ def _lock_admission(db: Session) -> None:
 # so it can never be admitted and would just pile up in the queue forever.
 FILLER_USER_NAME = "csc-demo-filler"
 FILLER_EXCLUDED_TIER_IDS = {2, 4, 8}
-FILLER_TARGET_PER_TYPE = 4
+# infer's GPU pool (tier 7) is now 4 nodes deep vs train's single-node-per-tier caps,
+# so a shared target undersold how much concurrency infer can actually show - split
+# per type instead of bumping the shared value and over-filling train.
+FILLER_TARGET_PER_TYPE = {"train": 4, "infer": 6}
 # randomized per filler job (via job.duration_sec) instead of the fixed DURATION_SEC,
 # so the scheduler timeline doesn't show every bar at an identical length. Kept short
 # so fillers cycle through provisioning->running->finalizing->done quickly - more
@@ -239,10 +244,36 @@ def _load_live_cluster(db: Session) -> models.Cluster | None:
         .options(
             selectinload(models.Cluster.nodes).selectinload(models.Node.accelerators),
             selectinload(models.Cluster.nodes).selectinload(models.Node.assignments),
+            selectinload(models.Cluster.nodes).selectinload(models.Node.metric_profiles),
         )
         .filter(models.Cluster.is_live.is_(True))
         .first()
     )
+
+
+# 스케줄러 페이지의 "예측 기반 배치" 패널(frontend PREDICTION_LOOKAHEAD_SEC)과 맞춘
+# 값 - 둘이 어긋나면 화면에 뜬 1순위 후보와 실제로 배정되는 노드가 달라진다.
+_PREDICTION_LOOKAHEAD_SEC = 30
+
+
+def _predicted_util(node: models.Node) -> float:
+    # infra.py의 _evaluate(같은 baseline+amplitude*sin(...) 공식)를 그대로 재사용 -
+    # 프론트의 예측 패널도 같은 원리(실측 파형을 미래 시점에서 한 번 더 평가)로
+    # "예측 활용률"을 뽑는다. 노드에 util 프로파일이 없으면(있어야 정상) 0으로 다뤄
+    # 그 노드가 오히려 앞순위로 밀리지 않게 큰 값을 대신 준다.
+    predict_at = time.time() + _PREDICTION_LOOKAHEAD_SEC
+    for p in node.metric_profiles:
+        if p.metric_type == "util":
+            return _evaluate(p.baseline, p.amplitude, p.period_sec, now=predict_at)
+    return float("inf")
+
+
+def _predicted_power(node: models.Node) -> float:
+    predict_at = time.time() + _PREDICTION_LOOKAHEAD_SEC
+    for p in node.metric_profiles:
+        if p.metric_type == "power":
+            return _evaluate(p.baseline, p.amplitude, p.period_sec, now=predict_at)
+    return float("inf")
 
 
 def _occupied_node_ids(live_cluster: models.Cluster, now: datetime) -> set[int]:
@@ -290,10 +321,13 @@ def _pick_free_nodes_for_tier(
         )
         if len(candidates) < req.node_count:
             return None
-        # shuffled so which nodes get picked varies run to run instead of always the
-        # same first-N-by-id - purely cosmetic, doesn't change whether the tier can
-        # be satisfied (still gated by len(candidates) >= req.node_count above)
-        random.shuffle(candidates)
+        # 예측 활용률이 낮은(=여유 있는) 노드부터, 동률이면 예측 전력이 낮은 순 - 스케줄러
+        # 페이지의 "예측 기반 배치" 패널이 보여주는 순위와 같은 규칙이다. 예전엔
+        # random.shuffle로 아무 노드나 골랐는데, 그러면 화면에 뜬 1순위 후보가 실제
+        # 배정 노드와 종종 달라 보여서(순전히 장식이라는 문구를 달아야 했다) 둘을
+        # 맞췄다. 여전히 어느 노드를 고르든 tier 충족 여부는 안 바뀐다(위의 node_count
+        # 체크로 이미 결정됨) - 순서만 예측과 일치시키는 것뿐이다.
+        candidates.sort(key=lambda n: (_predicted_util(n), _predicted_power(n)))
         for node in candidates[: req.node_count]:
             picked.append(node)
             picked_ids.add(node.id)
@@ -462,6 +496,26 @@ def _filler_user_id(db: Session) -> int | None:
     return filler_user.id if filler_user is not None else None
 
 
+def _tier_capacity_weight(live_cluster: models.Cluster, tier: models.ResourceTier) -> int:
+    """how many instances of this tier the live cluster's node inventory can even run
+    at once, e.g. infer tier 7 (GPU x1) has 4 matching nodes -> weight 4, while tier 6
+    (NPU x1) has only 1 -> weight 1. Bottlenecked by the scarcest requirement, same as
+    _pick_free_nodes_for_tier's admission check but against ALL matching nodes, not
+    just currently-free ones. Used to weight random tier choice below - without this,
+    a scarce tier (1 node) and a plentiful one (4 nodes) were picked equally often,
+    so fillers piled up queued jobs on the scarce tier while the plentiful one sat idle."""
+    weight = None
+    for req in tier.requirements:
+        total = sum(
+            1
+            for node in live_cluster.nodes
+            if node.purpose == tier.job_type and _node_matches_requirement(node, req.kind, req.accelerator_model_id)
+        )
+        cap = total // req.node_count
+        weight = cap if weight is None else min(weight, cap)
+    return max(weight or 0, 1)
+
+
 def _maintain_filler_jobs(db: Session, now: datetime) -> None:
     filler_user_id = _filler_user_id(db)
     if filler_user_id is None:
@@ -470,6 +524,8 @@ def _maintain_filler_jobs(db: Session, now: datetime) -> None:
     model_ids = [m.id for m in db.query(models.Model.id).all()]
     if not model_ids:
         return
+
+    live_cluster = _load_live_cluster(db)
 
     tiers = (
         db.query(models.ResourceTier)
@@ -494,8 +550,12 @@ def _maintain_filler_jobs(db: Session, now: datetime) -> None:
         )
         # at most one per sweep per type, even if further below target - staggers
         # starts across polls instead of bursting several nodes on at once
-        if active_count < FILLER_TARGET_PER_TYPE:
-            tier = random.choice(type_tiers)
+        if active_count < FILLER_TARGET_PER_TYPE[job_type]:
+            if live_cluster is not None:
+                weights = [_tier_capacity_weight(live_cluster, t) for t in type_tiers]
+                tier = random.choices(type_tiers, weights=weights, k=1)[0]
+            else:
+                tier = random.choice(type_tiers)
             job = models.Job(
                 model_id=random.choice(model_ids),
                 user_id=filler_user_id,
@@ -622,6 +682,16 @@ def sweep_dependency(db: Session = Depends(get_db)) -> None:
 
 
 JOB_LIST_LIMIT = 30
+# infer fillers cycle much faster than train ones (FILLER_DURATION_RANGE_SEC infer
+# 5-15s vs train 15-30s, and infer's own filler target is higher too) - a shared
+# "top 30 most-recently-done" cap meant a burst of infer fillers finishing could push
+# every recently-done TRAIN job out of the window within well under a minute. That's
+# short enough to matter: the scheduler timeline shows ~2 minutes of history
+# (AllocationTimeline WINDOW_MS on the frontend), and a train bar whose Job fell out of
+# this list renders as an unlabeled gray "J{id}" bar instead of its model name/color -
+# looked like a bug because it visually was one. Capping per job_type instead of
+# sharing one bucket stops the faster type from crowding out the other.
+DASHBOARD_DONE_LIMIT_PER_TYPE = 30
 
 
 def list_jobs(
@@ -679,8 +749,17 @@ def list_jobs(
         # a real infer job now runs indefinitely, so a plain submitted_at-based limit
         # would eventually push a still-running job out of the window just because
         # enough fillers were created after it.
+        # Capped per job_type (not one shared bucket) - see DASHBOARD_DONE_LIMIT_PER_TYPE.
         active = base_query().filter(models.Job.status != "done").order_by(*order).all()
-        done = base_query().filter(models.Job.status == "done").order_by(*order).limit(JOB_LIST_LIMIT).all()
+        done = [
+            job
+            for job_type in ("train", "infer")
+            for job in base_query()
+            .filter(models.Job.status == "done", models.Job.type == job_type)
+            .order_by(*order)
+            .limit(DASHBOARD_DONE_LIMIT_PER_TYPE)
+            .all()
+        ]
         jobs = sorted(active + done, key=lambda j: (j.submitted_at, j.id), reverse=True)
 
     return [_to_job_summary(job) for job in jobs]
