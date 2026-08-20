@@ -548,33 +548,41 @@ function Section({
     <>
       <div style={{ fontSize: 21, fontWeight: 700, marginBottom: 12 }}>{title}</div>
 
-      {(commonMetrics.length > 0 || specialMetrics.length > 0) && (
-        <Card>
-          {commonMetrics.length > 0 && (
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              {commonMetrics.map((m) => (
-                <StatCard
-                  key={m.label}
-                  label={m.label}
-                  value={m.value.toFixed(1)}
-                  unit={m.unit}
-                  compact
-                  valueColor={metricColor}
-                />
-              ))}
-            </div>
-          )}
-          {commonMetrics.length > 0 && specialMetrics.length > 0 && (
-            <div style={{ height: 20 }} />
-          )}
-          <MetricRow metrics={specialMetrics} color={metricColor} />
-        </Card>
-      )}
-      <div style={{ height: 16 }} />
-
-      {prediction && <PredictionPanel prediction={prediction} />}
-
+      {/* 예전엔 지표/예측 패널/대기열+타임라인이 각자 따로 떠 있는 카드 3개였는데,
+          "학습 클러스터"라는 한 덩어리로 안 보인다는 피드백을 받고 카드 하나로
+          합쳤다 - 안에서는 구분선(divider)으로만 나눈다. */}
       <Card>
+        {(commonMetrics.length > 0 || specialMetrics.length > 0) && (
+          <>
+            {commonMetrics.length > 0 && (
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                {commonMetrics.map((m) => (
+                  <StatCard
+                    key={m.label}
+                    label={m.label}
+                    value={m.value.toFixed(1)}
+                    unit={m.unit}
+                    compact
+                    valueColor={metricColor}
+                  />
+                ))}
+              </div>
+            )}
+            {commonMetrics.length > 0 && specialMetrics.length > 0 && (
+              <div style={{ height: 20 }} />
+            )}
+            <MetricRow metrics={specialMetrics} color={metricColor} />
+            <div style={{ height: 1, background: "var(--line)", margin: "20px 0" }} />
+          </>
+        )}
+
+        {prediction && (
+          <>
+            <PredictionPanel prediction={prediction} />
+            <div style={{ height: 1, background: "var(--line)", margin: "20px 0" }} />
+          </>
+        )}
+
         <JobQueue jobs={queueJobs} nowMs={nowMs} onSelectJob={onSelectJob} />
         <div style={{ height: 1, background: "var(--line)", margin: "4px 0 16px" }} />
         {data ? (
@@ -606,68 +614,65 @@ function Section({
 function PredictionPanel({ prediction }: { prediction: PredictionStats }) {
   const tc = prediction.topCandidate;
   return (
-    <>
-      <Card>
-        <div style={{ fontSize: 12, fontWeight: 700, color: "var(--sub)", marginBottom: 12, letterSpacing: "0.02em" }}>
-          예측 기반 배치 (Resource Optimization)
-        </div>
+    <div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "var(--sub)", marginBottom: 12, letterSpacing: "0.02em" }}>
+        예측 기반 배치 (Resource Optimization)
+      </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <StatCard
-            label={tc ? `${tc.nodeName} 활용률 예측` : "예측 활용률"}
-            value={prediction.util !== null ? prediction.util.toFixed(1) : "–"}
-            unit={prediction.utilUnit}
-            compact
-            valueColor={PREDICT_COLOR}
-          />
-          <StatCard
-            label={tc ? `${tc.nodeName} 전력 예측` : "예측 전력"}
-            value={prediction.power !== null ? prediction.power.toFixed(0) : "–"}
-            unit={prediction.powerUnit}
-            compact
-            valueColor={PREDICT_COLOR}
-          />
-          <StatCard
-            label="클러스터 SLA 예측"
-            value={prediction.sla !== null ? prediction.sla.toFixed(1) : "–"}
-            unit={prediction.slaUnit}
-            compact
-          />
-        </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <StatCard
+          label={tc ? `${tc.nodeName} 활용률 예측` : "예측 활용률"}
+          value={prediction.util !== null ? prediction.util.toFixed(1) : "–"}
+          unit={prediction.utilUnit}
+          compact
+          valueColor={PREDICT_COLOR}
+        />
+        <StatCard
+          label={tc ? `${tc.nodeName} 전력 예측` : "예측 전력"}
+          value={prediction.power !== null ? prediction.power.toFixed(0) : "–"}
+          unit={prediction.powerUnit}
+          compact
+          valueColor={PREDICT_COLOR}
+        />
+        <StatCard
+          label="클러스터 SLA 예측"
+          value={prediction.sla !== null ? prediction.sla.toFixed(1) : "–"}
+          unit={prediction.slaUnit}
+          compact
+        />
+      </div>
 
-        {prediction.nextJob === null ? (
-          <div style={{ fontSize: 13, color: "var(--sub)", marginTop: 14 }}>대기 중인 학습 작업이 없습니다.</div>
-        ) : (
-          <div
+      {prediction.nextJob === null ? (
+        <div style={{ fontSize: 13, color: "var(--sub)", marginTop: 14 }}>대기 중인 학습 작업이 없습니다.</div>
+      ) : (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 14,
+            marginTop: 16,
+            padding: "12px 16px",
+            borderRadius: 10,
+            border: `1.5px solid ${PREDICT_COLOR}`,
+            background: "rgba(99, 102, 241, 0.06)",
+          }}
+        >
+          <span style={{ fontSize: 16, fontWeight: 700 }}>{prediction.nextJob.modelName}</span>
+          <span style={{ fontSize: 11, color: "var(--sub)" }}>{prediction.nextJob.tierMix}</span>
+          <span style={{ fontSize: 20, color: PREDICT_COLOR, marginLeft: "auto" }}>→</span>
+          <span
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 14,
-              marginTop: 16,
-              padding: "12px 16px",
-              borderRadius: 10,
-              border: `1.5px solid ${PREDICT_COLOR}`,
-              background: "rgba(99, 102, 241, 0.06)",
+              fontSize: 16,
+              fontWeight: 700,
+              fontFamily: "'IBM Plex Mono', monospace",
+              color: PREDICT_COLOR,
             }}
           >
-            <span style={{ fontSize: 16, fontWeight: 700 }}>{prediction.nextJob.modelName}</span>
-            <span style={{ fontSize: 11, color: "var(--sub)" }}>{prediction.nextJob.tierMix}</span>
-            <span style={{ fontSize: 20, color: PREDICT_COLOR, marginLeft: "auto" }}>→</span>
-            <span
-              style={{
-                fontSize: 16,
-                fontWeight: 700,
-                fontFamily: "'IBM Plex Mono', monospace",
-                color: PREDICT_COLOR,
-              }}
-            >
-              {tc ? tc.nodeName : "-"}
-            </span>
-          </div>
-        )}
-      </Card>
-      <div style={{ height: 16 }} />
-    </>
+            {tc ? tc.nodeName : "-"}
+          </span>
+        </div>
+      )}
+    </div>
   );
 }
 
