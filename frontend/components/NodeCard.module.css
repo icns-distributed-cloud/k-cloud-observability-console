@@ -5,12 +5,6 @@
   border-radius: 14px;
   padding: 16px;
   color: var(--ink);
-  cursor: pointer;
-  transition: border-color 0.15s;
-}
-
-.card:hover {
-  border-color: var(--accent);
 }
 
 .alertDot {
@@ -61,9 +55,34 @@
 }
 
 .util {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
   font-size: 14px;
   color: var(--sub);
   margin-top: 6px;
   font-family: 'IBM Plex Mono', monospace;
   font-weight: 700;
+}
+
+.more {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+  color: var(--accent);
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.more:hover {
+  background: color-mix(in srgb, var(--accent) 20%, var(--panel));
+  border-color: var(--accent);
 }

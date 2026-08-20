@@ -34,7 +34,6 @@ export default function NodeCard({
   return (
     <div
       className={styles.card}
-      onClick={onClick}
       style={hasAlert ? { borderColor: ALERT_COLORS[alertSeverity] } : undefined}
     >
       {hasAlert && (
@@ -61,7 +60,12 @@ export default function NodeCard({
 
       <ProgressBar value={util} color={jobColor} />
 
-      <div className={styles.util}>{Math.round(util * 100)}% util</div>
+      <div className={styles.util}>
+        <span>{Math.round(util * 100)}% util</span>
+        {/* hover 테두리만으론 마우스를 올려보기 전까지 클릭 가능한지 알 수 없다 -
+            항상 보이는 진입 표식을 둔다. 우상단은 alertDot이 쓰므로 아래 줄에. */}
+        <span className={styles.more} onClick={onClick}>상세 →</span>
+      </div>
     </div>
   )
 }
