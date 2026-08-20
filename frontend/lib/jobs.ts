@@ -27,11 +27,11 @@ export const JOB_STATUS_COLORS: Record<JobStatus, string> = {
   done: 'var(--job-status-done)',
 }
 
-/** 배지처럼 상태색을 배경으로 채우고 그 위에 글자를 얹는 곳에서 쓴다. 대기중이
- *  파스텔에 가까운 옅은 색이라, 다른 상태처럼 흰 글자를 쓰면 안 읽힌다. */
+/** 배지처럼 상태색을 배경으로 채우고 그 위에 글자를 얹는 곳에서 쓴다. 대기중(옅은
+ *  파스텔)·준비중(노랑)은 밝은 색이라 흰 글자를 쓰면 안 읽힌다 - 어두운 글자로. */
 export const JOB_STATUS_TEXT_COLORS: Record<JobStatus, string> = {
   queued: 'var(--ink)',
-  provisioning: '#FFFFFF',
+  provisioning: 'var(--ink)',
   running: '#FFFFFF',
   finalizing: '#FFFFFF',
   done: '#FFFFFF',
