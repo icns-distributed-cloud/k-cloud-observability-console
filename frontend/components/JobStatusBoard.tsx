@@ -137,7 +137,9 @@ export default function JobStatusBoard({ onSelect, onCountChange }: Props) {
   if (error) return <div style={{ padding: 24 }}>불러오기 실패: {error}</div>;
 
   const colW = stageWidth / STATUSES.length;
-  const cardW = colW - PAD_X * 2;
+  // 열 사이 간격을 넓게 벌려 그 자리에 긴 화살표를 놓는다
+  const GAP_X = 40;
+  const cardW = colW - GAP_X * 2;
   const columnX = (zi: number) => colW * (zi + 0.5);
   /** 열 폭에 칩이 가로로 몇 개 들어가는지 (예전 ROW_CAP=2 상수를 대체).
    *  분산 job은 이 개수까지 한 줄에 놓고 넘치면 다음 줄로 접는다. */
@@ -184,12 +186,13 @@ export default function JobStatusBoard({ onSelect, onCountChange }: Props) {
                 style={{
                   position: "absolute",
                   left: (columnX(zi) + columnX(zi + 1)) / 2,
-                  top: HEADER_H / 2,
+                  top: STAGE_HEIGHT / 2,          // 헤더 줄 -> 열 세로 중앙
                   transform: "translate(-50%, -50%)",
-                  width: PAD_X * 2,
-                  height: 14,
-                  background: "var(--line)",
-                  clipPath: "polygon(0 20%, 55% 20%, 55% 0, 100% 50%, 55% 100%, 55% 80%, 0 80%)",
+                  width: GAP_X * 2 - 12,          // 벌어진 간격을 거의 다 채운다
+                  height: 18,
+                  background: "var(--accent)",
+                  // 꼬리를 길게 빼고 머리를 짧게 -> 폭이 넓어져도 화살표로 읽힌다
+                  clipPath: "polygon(0 38%, 72% 38%, 72% 8%, 100% 50%, 72% 92%, 72% 62%, 0 62%)",
                 }}
               />
             ))}
