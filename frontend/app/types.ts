@@ -4,13 +4,14 @@ export type ClusterStatus = 'active' | 'standby'
 export type AcceleratorKind = 'GPU' | 'NPU' | 'PIM'
 export type AlertSeverity = 'physical' | 'sla'
 export type JobType = 'train' | 'infer'
-export type JobStatus = 'queued' | 'provisioning' | 'running' | 'finalizing' | 'done'
+export type JobStatus = 'queued' | 'provisioning' | 'running' | 'finalizing' | 'paused' | 'done'
 export type NodePurpose = 'train' | 'infer'
 export type PriorityPref = 'time' | 'cost' | 'balanced'
 export type CurveShape = 'exp_approach' | 'flat'
 export type LayerCharacteristic = 'compute_bound' | 'memory_bound' | 'balanced'
-export type EventType = 'ARRIVAL' | 'QUEUE' | 'START' | 'BACKFILL' | 'FINISH'
+export type EventType = 'ARRIVAL' | 'QUEUE' | 'START' | 'BACKFILL' | 'PAUSE' | 'RESUME' | 'TERMINATE' | 'FINISH'
 export type CacheTierName = 'VRAM' | 'DRAM' | 'SSD'
+
 export interface ModelItem {
     id: number
     name: string
@@ -311,3 +312,4 @@ export interface EventItem {
     payload: Record<string, unknown> | null
     occurred_at: string
 }
+

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import Breadcrumb from "@/components/Breadcrumb";
 import StatCard from "@/components/StatCard";
 import Card from "@/components/Card";
@@ -17,13 +17,14 @@ import {
     fetchModelLayers,
     fetchNodeDetail,
     fetchReallocations,
-    stopJob,
+    pauseJob,
+    resumeJob,
+    terminateJob,
 } from "@/lib/api";
-import { JOB_COLORS, JOB_STATUS_LABELS, PRIORITY_LABELS } from "@/lib/jobs";
+import { JOB_COLORS, JOB_STATUS_LABELS, JOB_STATUS_COLORS, PRIORITY_LABELS } from "@/lib/jobs";
 import {
     cumulativeCount,
     formatMetricValue,
-    isContinuous,
     liveMetricSeries,
     metricDisplay,
     metricSeries,
@@ -42,6 +43,7 @@ import type {
     HyperparamAdjustmentItem,
     JobDetail,
     JobKqvBenchmarkResponse,
+    JobSummary,
     JobMetricProfileItem,
     MetricProfilePoint,
     ModelLayersResponse,
@@ -86,7 +88,7 @@ interface JobDetailViewProps {
     showStop?: boolean;
 }
 
-export default function JobDetailView({ jobId, breadcrumbPrefix, showStop }: JobDetailViewProps) {
+export default function JobDetailView({ jobId, breadcrumbPrefix }: JobDetailViewProps) {
     const { nowSec } = useTime();
     const now = nowSec === null ? null : nowSec * 1000;
 
@@ -99,7 +101,14 @@ export default function JobDetailView({ jobId, breadcrumbPrefix, showStop }: Job
     const [events, setEvents] = useState<EventItem[]>([]);
     const [nodeDetails, setNodeDetails] = useState<NodeDetail[]>([]);
     const [error, setError] = useState<string | null>(null);
-    const [stopping, setStopping] = useState(false);
+    // pause/resume/terminate가 전부 JobSummary를 돌려주므로 처리를 하나로 묶는다
+    const [acting, setActing] = useState(false);
+    const runAction = (p: Promise<JobSummary>) => {
+        setActing(true);
+        p.then((j) => setJob((prev) => (prev ? { ...prev, ...j } : prev)))
+            .catch((e) => setError(String(e)))
+            .finally(() => setActing(false));
+    };
 
     useEffect(() => {
         Promise.all([
@@ -187,38 +196,70 @@ export default function JobDetailView({ jobId, breadcrumbPrefix, showStop }: Job
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", margin: "16px 0 20px" }}>
                 <div>
                     <div style={{ fontSize: 20, fontWeight: 700 }}>J-{job.id}</div>
-                    <div style={{ fontSize: 12.5, color: "var(--sub)", marginTop: 4 }}>
-                        {job.model_name} · {TYPE_LABELS[job.type] ?? job.type} ·{" "}
-                        {JOB_STATUS_LABELS[job.status] ?? job.status}
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+                        <span style={{ fontSize: 16, fontWeight: 700, color: "var(--ink)" }}>
+                            {job.model_name}
+                        </span>
+                        <span
+                            style={{
+                                padding: "3px 10px",
+                                borderRadius: 999,
+                                fontSize: 12.5,
+                                fontWeight: 700,
+                                color: JOB_COLORS[job.type],
+                                background: `color-mix(in srgb, ${JOB_COLORS[job.type]} 12%, var(--panel))`,
+                                border: `1px solid color-mix(in srgb, ${JOB_COLORS[job.type]} 30%, transparent)`,
+                            }}
+                        >
+                            {TYPE_LABELS[job.type] ?? job.type}
+                        </span>
+                        <span
+                            style={{
+                                padding: "3px 10px",
+                                borderRadius: 999,
+                                fontSize: 12.5,
+                                fontWeight: 700,
+                                color: JOB_STATUS_COLORS[job.status],
+                                background: `color-mix(in srgb, ${JOB_STATUS_COLORS[job.status]} 14%, var(--panel))`,
+                                border: `1px solid color-mix(in srgb, ${JOB_STATUS_COLORS[job.status]} 32%, transparent)`,
+                            }}
+                        >
+                            {JOB_STATUS_LABELS[job.status] ?? job.status}
+                        </span>
                     </div>
                 </div>
 
-                {showStop && isContinuous(job) && (
-                    <button
-                        disabled={stopping}
-                        onClick={() => {
-                            setStopping(true);
-                            stopJob(job.id)
-                                .then((j) => setJob((prev) => (prev ? { ...prev, ...j } : prev)))
-                                .catch((e) => setError(String(e)))
-                                .finally(() => setStopping(false));
-                        }}
-                        style={{
-                            border: "1px solid var(--line)",
-                            background: "transparent",
-                            color: "var(--sub)",
-                            borderRadius: 8,
-                            padding: "8px 14px",
-                            cursor: stopping ? "default" : "pointer",
-                            opacity: stopping ? 0.5 : 1,
-                            fontFamily: "inherit",
-                            fontSize: 12.5,
-                            fontWeight: 600,
-                            flexShrink: 0,
-                        }}
-                    >
-                        {stopping ? "중지 중…" : "중지"}
-                    </button>
+                {/* done이 아니면 종료는 항상 가능하고, 일시중지/재개는 상태에 따라 하나만 뜬다 */}
+                {job.status !== "done" && (
+                    <div style={{ display: "flex", gap: 10, flexShrink: 0 }}>
+                        {job.status === "paused" ? (
+                            <button
+                                disabled={acting}
+                                onClick={() => runAction(resumeJob(job.id))}
+                                style={actionBtnStyle(acting, "var(--accent)")}
+                            >
+                                {acting ? "재개 중…" : "재개"}
+                            </button>
+                        ) : (
+                            /* 일시중지는 running만 받는다(그 외엔 400) - 눌러서 에러를 보느니
+                               왜 못 누르는지 툴팁으로 알려주고 비활성화해둔다. */
+                            <button
+                                disabled={acting || job.status !== "running"}
+                                title={job.status === "running" ? undefined : "실행 중인 작업만 일시중지할 수 있습니다"}
+                                onClick={() => runAction(pauseJob(job.id))}
+                                style={actionBtnStyle(acting || job.status !== "running", "var(--alert-warning)")}
+                            >
+                                {acting ? "중지 중…" : "일시중지"}
+                            </button>
+                        )}
+                        <button
+                            disabled={acting}
+                            onClick={() => runAction(terminateJob(job.id))}
+                            style={actionBtnStyle(acting, "var(--alert-critical)")}
+                        >
+                            {acting ? "종료 중…" : "종료"}
+                        </button>
+                    </div>
                 )}
             </div>
 
@@ -630,6 +671,9 @@ const EVENT_TYPE_LABELS: Record<EventType, string> = {
     QUEUE: "대기열 유지",
     BACKFILL: "백필 배정",
     START: "즉시 배정",
+    PAUSE: "일시중지",
+    RESUME: "재개",
+    TERMINATE: "종료",
     FINISH: "노드 해제",
 };
 
@@ -657,6 +701,23 @@ function pickMetricSection(metrics: JobMetricProfileItem[], profiling: boolean) 
         .filter((m) => !m.featured && m.id !== counter?.id)
         .sort((a, b) => a.seq - b.seq);
     return { featured, counter, others };
+}
+
+/** 헤더 우측 액션 버튼(일시중지·재개·종료) 공통 스타일 */
+function actionBtnStyle(disabled: boolean, color?: string): CSSProperties {
+    return {
+        // 비활성일 땐 색을 빼고 회색으로 - 흐려진 빨강은 "고장난 버튼"처럼 보인다
+        border: `1px solid ${disabled || !color ? "var(--line)" : color}`,
+        background: disabled || !color ? "transparent" : `color-mix(in srgb, ${color} 10%, var(--panel))`,
+        color: disabled || !color ? "var(--sub)" : color,
+        borderRadius: 8,
+        padding: "11px 22px",
+        cursor: disabled ? "default" : "pointer",
+        opacity: disabled ? 0.45 : 1,
+        fontFamily: "inherit",
+        fontSize: 15,
+        fontWeight: 700,
+    };
 }
 
 function SectionHead({ title, desc }: { title: string; desc?: string }) {

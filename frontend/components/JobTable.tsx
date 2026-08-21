@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react"; import Tabs from "@/components/Tabs";
-import { fetchJobs, stopJob } from "@/lib/api";
+import { fetchJobs, terminateJob } from "@/lib/api";
 import { JOB_COLORS, JOB_STATUS_COLORS, JOB_STATUS_LABELS, JOB_STATUS_TEXT_COLORS, jobCost, tierMix } from "@/lib/jobs";
 import { elapsedLabel, hidesProgress, isContinuous, phaseProgress } from "@/lib/jobMetrics";
 import { useTime } from "@/lib/TimeContext";
@@ -357,11 +357,11 @@ export default function JobTable({ userId, showUser, showStop, onSelect, onCount
                                     <span
                                         style={{ width: W.action, flexShrink: 0, textAlign: "center" }}
                                     >
-                                        {continuous && (
+                                        {j.status !== "done" && (
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();   // 행 클릭(상세 이동)과 겹치지 않게
-                                                    stopJob(j.id)
+                                                    terminateJob(j.id)
                                                         .then(() => load())
                                                         .catch((err) => setError(String(err)));
                                                 }}
@@ -377,7 +377,7 @@ export default function JobTable({ userId, showUser, showStop, onSelect, onCount
                                                     fontWeight: 600,
                                                 }}
                                             >
-                                                중지
+                                                종료
                                             </button>
                                         )}
                                     </span>

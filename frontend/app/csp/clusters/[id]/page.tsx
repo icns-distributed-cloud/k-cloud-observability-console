@@ -83,7 +83,7 @@ export default function ClusterPage({ params }: { params: Promise<{ id: string }
     <main style={{ padding: "24px 28px" }}>
       <Breadcrumb
         segments={[
-          { label: "지도", onClick: () => router.push("/csp") },
+          { label: "가용영역", onClick: () => router.push("/csp") },
           { label: cluster.name },
         ]}
       />
