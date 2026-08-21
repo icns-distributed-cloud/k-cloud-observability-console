@@ -28,6 +28,19 @@ export interface WizardForm {
     tierId: number | null;
 }
 
+interface UploadedItem {
+    id: number;
+    name: string;
+}
+
+/** 업로드 항목에 붙일 임시 id. 실제 model/dataset id는 양수라 음수로 구분한다.
+ *  DB에 없는 값이므로 조회·제출에는 쓸 수 없고 화면 표시·선택용으로만 쓴다. */
+let uploadSeq = 0;
+const nextUploadId = () => {
+    uploadSeq += 1;
+    return -uploadSeq;
+};
+
 const INITIAL_FORM: WizardForm = {
     jobType: "train",
     modelId: null,
@@ -56,12 +69,46 @@ export default function JobWizardPage() {
     const [error, setError] = useState<string | null>(null);
     // 업로드한 파일명. 실제 파일은 읽지도 보내지도 않는다 - 화면 표시용 별칭일 뿐이고,
     // 내부적으로는 아래 select에서 고른 진짜 model_id/dataset_id를 그대로 쓴다.
-    const [uploadedModel, setUploadedModel] = useState<string | null>(null);
-    const [uploadedDataset, setUploadedDataset] = useState<string | null>(null);
+    const [uploadedModels, setUploadedModels] = useState<UploadedItem[]>([]);
+    const [uploadedDatasets, setUploadedDatasets] = useState<UploadedItem[]>([]);
+    // 제출 시점의 표시 이름을 스냅샷해 둔다 - 제출 직후 업로드 목록을 비우기 때문에
+    // 완료 화면에서 form을 다시 읽으면 이름이 사라진다.
+    const [submittedModel, setSubmittedModel] = useState<string | null>(null);
+    const [submittedDataset, setSubmittedDataset] = useState<string | null>(null);
 
-    // 화면에 보여줄 이름 - 업로드했으면 그 파일명, 아니면 선택한 모델명
     const modelLabel =
-        uploadedModel ?? models.find((m) => m.id === form.modelId)?.name ?? "모델";
+        uploadedModels.find((u) => u.id === form.modelId)?.name ??
+        models.find((m) => m.id === form.modelId)?.name ??
+        "모델";
+    const datasetLabel =
+        uploadedDatasets.find((u) => u.id === form.datasetId)?.name ??
+        datasets.find((d) => d.id === form.datasetId)?.name ??
+        null;
+
+    // 업로드 항목이 선택돼 있으면 실제 API에는 목록의 첫 번째 진짜 id를 대신 쓴다
+    const realModelId = form.modelId !== null && form.modelId >= 0 ? form.modelId : models[0]?.id ?? null;
+    const realDatasetId =
+        form.datasetId !== null && form.datasetId >= 0 ? form.datasetId : datasets[0]?.id ?? null;
+
+    const addUploadedModel = (name: string) => {
+        const item = { id: nextUploadId(), name };
+        setUploadedModels((l) => [...l, item]);
+        setForm((f) => ({ ...f, modelId: item.id }));   // 올리자마자 선택
+    };
+    const removeUploadedModel = (id: number) => {
+        setUploadedModels((l) => l.filter((u) => u.id !== id));
+        setForm((f) => (f.modelId === id ? { ...f, modelId: models[0]?.id ?? null } : f));
+    };
+    const addUploadedDataset = (name: string) => {
+        const item = { id: nextUploadId(), name };
+        setUploadedDatasets((l) => [...l, item]);
+        setForm((f) => ({ ...f, datasetId: item.id }));
+    };
+    const removeUploadedDataset = (id: number) => {
+        setUploadedDatasets((l) => l.filter((u) => u.id !== id));
+        setForm((f) => (f.datasetId === id ? { ...f, datasetId: datasets[0]?.id ?? null } : f));
+    };
+
     useEffect(() => {
         fetchModels()
             .then((m) => {
@@ -71,27 +118,36 @@ export default function JobWizardPage() {
             .catch((e) => setError(String(e)));
     }, []);
 
-    // 모델을 고르면 그 모델용 데이터셋만 다시 받아온다 (학습 작업에만 쓰인다)
     useEffect(() => {
-        if (form.modelId === null) return;
-        fetchDatasets(form.modelId)
+        if (realModelId === null) return;
+        fetchDatasets(realModelId)
             .then((d) => {
                 setDatasets(d);
-                setForm((f) => ({ ...f, datasetId: d.length > 0 ? d[0].id : null }));
+                // 업로드한 데이터셋을 고른 상태면 덮어쓰지 않는다
+                setForm((f) => ({
+                    ...f,
+                    datasetId:
+                        f.datasetId !== null && f.datasetId < 0
+                            ? f.datasetId
+                            : d.length > 0
+                                ? d[0].id
+                                : null,
+                }));
             })
             .catch(() => setDatasets([]));
-    }, [form.modelId]);
+    }, [realModelId]);
 
     const [layers, setLayers] = useState<ModelLayersResponse | null>(null);
 
     // 모델 분석 단계에 들어갈 때만 레이어를 받는다 (1단계에서 모델을 바꿀 수 있으므로)
     useEffect(() => {
-        if (step !== 1 || form.modelId === null) return;
+        // 업로드 모델은 DB에 레이어가 없으므로 첫 번째 실제 모델의 구조를 대신 보여준다
+        if (step !== 1 || realModelId === null) return;
         setLayers(null);
-        fetchModelLayers(form.modelId)
+        fetchModelLayers(realModelId)
             .then(setLayers)
             .catch(() => setLayers(null));
-    }, [step, form.modelId]);
+    }, [step, realModelId]);
 
     const [tiers, setTiers] = useState<ResourceTierItem[] | null>(null);
 
@@ -116,12 +172,12 @@ export default function JobWizardPage() {
     const [result, setResult] = useState<JobSummary | null>(null);
 
     const handleSubmit = async () => {
-        if (form.modelId === null || form.tierId === null) return;
+        if (realModelId === null || form.tierId === null) return;
         setSubmitting(true);
         setError(null);
         try {
             const base = {
-                model_id: form.modelId,
+                model_id: realModelId,
                 batch: form.batch,
                 priority_pref: form.priorityPref,
                 tier_id: form.tierId,
@@ -131,11 +187,17 @@ export default function JobWizardPage() {
                 form.jobType === "train"
                     ? await submitTrainJob({
                         ...base,
-                        ...(form.datasetId !== null && { dataset_id: form.datasetId }),
+                        ...(realDatasetId !== null && { dataset_id: realDatasetId }),
                     })
                     : await submitInferJob(base);
+            setSubmittedModel(modelLabel);
+            setSubmittedDataset(datasetLabel);
             setResult(job);
             setStep(3);
+            // 업로드 목록은 이번 제출에서만 유효하다 - 제출과 함께 비운다
+            setUploadedModels([]);
+            setUploadedDatasets([]);
+            setForm((f) => ({ ...f, modelId: models[0]?.id ?? null }));
         } catch (e) {
             setError(String(e));
         } finally {
@@ -184,12 +246,17 @@ export default function JobWizardPage() {
                                             {m.name} ({m.type})
                                         </option>
                                     ))}
+                                    {uploadedModels.map((u) => (
+                                        <option key={u.id} value={u.id}>
+                                            {u.name}
+                                        </option>
+                                    ))}
                                 </select>
-                                <UploadButton
+                                <UploadField
                                     label="모델 파일 업로드"
-                                    accept=".pt,.pth,.onnx,.safetensors,.bin"
-                                    value={uploadedModel}
-                                    onPick={setUploadedModel}
+                                    items={uploadedModels}
+                                    onAdd={addUploadedModel}
+                                    onRemove={removeUploadedModel}
                                 />
                             </Field>
 
@@ -200,7 +267,7 @@ export default function JobWizardPage() {
                                         value={form.datasetId ?? ""}
                                         onChange={(e) => patch({ datasetId: Number(e.target.value) })}
                                         style={inputStyle}
-                                        disabled={datasets.length === 0}
+                                        disabled={datasets.length === 0 && uploadedDatasets.length === 0}
                                     >
                                         {datasets.length === 0 && (
                                             <option value="">사용 가능한 데이터셋 없음</option>
@@ -210,12 +277,21 @@ export default function JobWizardPage() {
                                                 {d.name}
                                             </option>
                                         ))}
+                                        {uploadedDatasets.length > 0 && (
+                                            <optgroup label="업로드한 파일">
+                                                {uploadedDatasets.map((u) => (
+                                                    <option key={u.id} value={u.id}>
+                                                        {u.name}
+                                                    </option>
+                                                ))}
+                                            </optgroup>
+                                        )}
                                     </select>
-                                    <UploadButton
+                                    <UploadField
                                         label="데이터셋 업로드"
-                                        accept=".zip,.tar,.tar.gz,.csv,.parquet"
-                                        value={uploadedDataset}
-                                        onPick={setUploadedDataset}
+                                        items={uploadedDatasets}
+                                        onAdd={addUploadedDataset}
+                                        onRemove={removeUploadedDataset}
                                     />
                                 </Field>
                             )}
@@ -413,7 +489,7 @@ export default function JobWizardPage() {
                             </div>
 
                             <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>
-                                {uploadedModel ?? result.model_name}
+                                {submittedModel ?? result.model_name}
                             </div>
                             <div style={{ fontSize: 12.5, color: "var(--sub)", marginBottom: 18 }}>
                                 {admitted
@@ -430,7 +506,9 @@ export default function JobWizardPage() {
                                         {tierMix(result.selected_tier)})
                                     </div>
                                 )}
-                                {result.dataset_name && <div>데이터셋 · {result.dataset_name}</div>}
+                                {(submittedDataset ?? result.dataset_name) && (
+                                    <div>데이터셋 · {submittedDataset ?? result.dataset_name}</div>
+                                )}
                                 <div style={{ fontSize: 11.5, opacity: 0.75, marginTop: 4 }}>
                                     하이퍼파라미터(Batch size, Data shard length, Data loader
                                     worker 수, Learning rate)는 실행 중 자동 조정됩니다
@@ -458,8 +536,8 @@ export default function JobWizardPage() {
                                 // INITIAL_FORM.modelId(null) 그대로 두면 컴포넌트가 리마운트되지
                                 // 않는 한 채워주는 effect가 다시 안 돌아서 "다음" 버튼이 안 풀린다.
                                 setForm({ ...INITIAL_FORM, modelId: models[0]?.id ?? null });
-                                setUploadedModel(null);
-                                setUploadedDataset(null);
+                                setSubmittedModel(null);
+                                setSubmittedDataset(null);
                                 setStep(0);
                             }}
                             style={secondaryBtn}
@@ -517,37 +595,33 @@ const primaryBtn: React.CSSProperties = {
     fontWeight: 700,
 };
 
-/** 파일 선택 UI만 제공하고 파일 내용은 절대 읽지 않는다 - FileReader도 fetch도 없어서
- *  디스크에도 네트워크에도 아무것도 안 남는다. 브라우저의 <input type="file">은 파일을
- *  고르는 것만으로는 업로드하지 않으므로, 여기서 쓰는 건 File.name 문자열 하나뿐이다. */
-function UploadButton({
+/** 파일 선택 UI만 제공하고 내용은 절대 읽지 않는다 - FileReader도 fetch도 없어서
+ *  디스크에도 네트워크에도 아무것도 안 남는다. 쓰는 건 File.name 문자열 하나뿐이다.
+ *  accept를 지정하지 않아 모든 확장자를 고를 수 있다. */
+function UploadField({
     label,
-    accept,
-    value,
-    onPick,
+    items,
+    onAdd,
+    onRemove,
 }: {
     label: string;
-    accept: string;
-    value: string | null;
-    onPick: (name: string | null) => void;
+    items: UploadedItem[];
+    onAdd: (name: string) => void;
+    onRemove: (id: number) => void;
 }) {
     const inputRef = useRef<HTMLInputElement>(null);
-    // 인라인 style로는 :hover를 못 쓴다 - 버튼 하나뿐이라 CSS 모듈을 새로 만들기보다
-    // state로 처리한다 (이 파일 전체가 인라인 style 방식이라 그쪽에 맞춤).
     const [hover, setHover] = useState(false);
 
     return (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
+        <div style={{ marginTop: 8 }}>
             <input
                 ref={inputRef}
                 type="file"
-                accept={accept}
                 style={{ display: "none" }}
                 onChange={(e) => {
                     const name = e.target.files?.[0]?.name;
-                    if (name) onPick(name);
-                    // 같은 파일을 다시 골라도 onChange가 뜨도록 값을 비운다
-                    e.target.value = "";
+                    if (name) onAdd(name);
+                    e.target.value = "";   // 같은 파일을 다시 골라도 onChange가 뜨도록
                 }}
             />
             <button
@@ -555,9 +629,6 @@ function UploadButton({
                 onMouseEnter={() => setHover(true)}
                 onMouseLeave={() => setHover(false)}
                 style={{
-                    // 점선 테두리는 "여기에 파일"이라는 관용어라 색 없이도 성격이 드러난다.
-                    // 색을 안 쓰는 게 핵심 - 업로드 후 뜨는 파일명 칩(--accent 초록)이
-                    // 계속 주인공으로 남아서 "선택 전 무채색 -> 선택 후 초록" 대비가 산다.
                     border: `1.5px dashed ${hover ? "var(--accent)" : "var(--line)"}`,
                     background: "transparent",
                     borderRadius: 10,
@@ -567,38 +638,47 @@ function UploadButton({
                     fontSize: 12.5,
                     fontWeight: 700,
                     color: hover ? "var(--accent)" : "var(--sub)",
-                    flexShrink: 0,
                     transition: "border-color 0.15s, color 0.15s",
                 }}
             >
                 ↑ {label}
             </button>
 
-            {value && (
-                <span
-                    style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 6,
-                        minWidth: 0,
-                        fontSize: 12.5,
-                        fontWeight: 600,
-                        color: "var(--accent)",
-                    }}
-                >
-                    <span
-                        title={value}
-                        style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                    >
-                        {value}
-                    </span>
-                    <span
-                        onClick={() => onPick(null)}
-                        style={{ cursor: "pointer", color: "var(--sub)", flexShrink: 0 }}
-                    >
-                        ✕
-                    </span>
-                </span>
+            {items.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                    {items.map((it) => (
+                        <span
+                            key={it.id}
+                            style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 6,
+                                maxWidth: "100%",
+                                padding: "4px 10px",
+                                borderRadius: 999,
+                                border: "1px solid color-mix(in srgb, var(--accent) 30%, transparent)",
+                                background: "color-mix(in srgb, var(--accent) 10%, var(--panel))",
+                                color: "var(--accent)",
+                                fontSize: 12,
+                                fontWeight: 600,
+                            }}
+                        >
+                            <span
+                                title={it.name}
+                                style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                            >
+                                {it.name}
+                            </span>
+                            <span
+                                onClick={() => onRemove(it.id)}
+                                title="삭제"
+                                style={{ cursor: "pointer", color: "var(--sub)", flexShrink: 0 }}
+                            >
+                                ✕
+                            </span>
+                        </span>
+                    ))}
+                </div>
             )}
         </div>
     );
