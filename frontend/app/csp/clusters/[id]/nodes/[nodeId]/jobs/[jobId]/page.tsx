@@ -30,7 +30,7 @@ export default function JobPage({
     <JobDetailView
       jobId={Number(jobId)}
       breadcrumbPrefix={[
-        { label: "지도", onClick: () => router.push("/csp") },
+        { label: "가용영역", onClick: () => router.push("/csp") },
         { label: clusterName, onClick: () => router.push(`/csp/clusters/${clusterId}`) },
         { label: nodeName, onClick: () => router.push(`/csp/nodes/${nodeIdNum}`) },
       ]}
