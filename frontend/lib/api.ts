@@ -130,11 +130,22 @@ export function submitInferJob(body: InferJobRequest) {
   return post<JobSummary>('/jobs/infer', body)
 }
 
-/** 추론 작업 중단. 응답으로 finalizing 상태가 된 작업이 돌아온다 (곧바로 done이 아니라
- *  마무리 단계를 거친 뒤 다음 sweep에서 done으로 넘어가며 노드가 반납된다).
- *  infer가 아니거나 running이 아니면 400 */
-export function stopJob(jobId: number) {
-  return post<JobSummary>(`/jobs/${jobId}/stop`, {})
+/** 실행 중인 작업 일시중지. 노드는 즉시 반납되어 다른 작업이 쓸 수 있게 된다.
+ *  running이 아니면 400 */
+export function pauseJob(jobId: number) {
+  return post<JobSummary>(`/jobs/${jobId}/pause`, {})
+}
+
+/** 일시중지된 작업 재개. 빈 자리가 있으면 running, 없으면 queued로 돌아온다.
+ *  paused가 아니면 400 */
+export function resumeJob(jobId: number) {
+  return post<JobSummary>(`/jobs/${jobId}/resume`, {})
+}
+
+/** 작업 종료. running이면 finalizing을 거쳐 다음 sweep에서 done이 되고,
+ *  그 외(queued/provisioning/paused)는 바로 done. 이미 done이면 400 */
+export function terminateJob(jobId: number) {
+  return post<JobSummary>(`/jobs/${jobId}/terminate`, {})
 }
 
 export function fetchModels() {

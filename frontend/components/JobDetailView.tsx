@@ -17,13 +17,14 @@ import {
     fetchModelLayers,
     fetchNodeDetail,
     fetchReallocations,
-    stopJob,
+    pauseJob,
+    resumeJob,
+    terminateJob,
 } from "@/lib/api";
 import { JOB_COLORS, JOB_STATUS_LABELS, JOB_STATUS_COLORS, PRIORITY_LABELS } from "@/lib/jobs";
 import {
     cumulativeCount,
     formatMetricValue,
-    isContinuous,
     liveMetricSeries,
     metricDisplay,
     metricSeries,
@@ -42,6 +43,7 @@ import type {
     HyperparamAdjustmentItem,
     JobDetail,
     JobKqvBenchmarkResponse,
+    JobSummary,
     JobMetricProfileItem,
     MetricProfilePoint,
     ModelLayersResponse,
@@ -86,7 +88,7 @@ interface JobDetailViewProps {
     showStop?: boolean;
 }
 
-export default function JobDetailView({ jobId, breadcrumbPrefix, showStop }: JobDetailViewProps) {
+export default function JobDetailView({ jobId, breadcrumbPrefix }: JobDetailViewProps) {
     const { nowSec } = useTime();
     const now = nowSec === null ? null : nowSec * 1000;
 
@@ -99,7 +101,14 @@ export default function JobDetailView({ jobId, breadcrumbPrefix, showStop }: Job
     const [events, setEvents] = useState<EventItem[]>([]);
     const [nodeDetails, setNodeDetails] = useState<NodeDetail[]>([]);
     const [error, setError] = useState<string | null>(null);
-    const [stopping, setStopping] = useState(false);
+    // pause/resume/terminate가 전부 JobSummary를 돌려주므로 처리를 하나로 묶는다
+    const [acting, setActing] = useState(false);
+    const runAction = (p: Promise<JobSummary>) => {
+        setActing(true);
+        p.then((j) => setJob((prev) => (prev ? { ...prev, ...j } : prev)))
+            .catch((e) => setError(String(e)))
+            .finally(() => setActing(false));
+    };
 
     useEffect(() => {
         Promise.all([
@@ -220,33 +229,35 @@ export default function JobDetailView({ jobId, breadcrumbPrefix, showStop }: Job
                     </div>
                 </div>
 
-                {/* 아직 끝나지 않은 작업이면 중지/종료를 노출한다.
-                    - 중지: 백엔드가 추론+실행중만 허용(only infer jobs can be stopped)해서
-                      그 외에는 비활성. 제약이 풀리면 disabled 조건만 손보면 된다.
-                    - 종료: 대응 API가 아직 없어 자리만 잡아둔 상태. */}
+                {/* done이 아니면 종료는 항상 가능하고, 일시중지/재개는 상태에 따라 하나만 뜬다 */}
                 {job.status !== "done" && (
                     <div style={{ display: "flex", gap: 10, flexShrink: 0 }}>
-                        {/* 중지: 실행중 -> 대기중 (자원 반납 후 재배정 대기). 대응 API가
-                            아직 없어 자리만 잡아둔 상태. */}
-                        <button disabled title="준비 중" style={actionBtnStyle(true, "var(--alert-warning)")}>
-                            중지
-                        </button>
-                        {/* 종료: -> 마무리중. 기존 stopJob API가 하는 일이 바로 이것이다
-                            (이름만 stop이고 실제로는 finalizing으로 보낸다). 백엔드가
-                            추론+실행중만 허용해서 그 외에는 비활성. */}
+                        {job.status === "paused" ? (
+                            <button
+                                disabled={acting}
+                                onClick={() => runAction(resumeJob(job.id))}
+                                style={actionBtnStyle(acting, "var(--accent)")}
+                            >
+                                {acting ? "재개 중…" : "재개"}
+                            </button>
+                        ) : (
+                            /* 일시중지는 running만 받는다(그 외엔 400) - 눌러서 에러를 보느니
+                               왜 못 누르는지 툴팁으로 알려주고 비활성화해둔다. */
+                            <button
+                                disabled={acting || job.status !== "running"}
+                                title={job.status === "running" ? undefined : "실행 중인 작업만 일시중지할 수 있습니다"}
+                                onClick={() => runAction(pauseJob(job.id))}
+                                style={actionBtnStyle(acting || job.status !== "running", "var(--alert-warning)")}
+                            >
+                                {acting ? "중지 중…" : "일시중지"}
+                            </button>
+                        )}
                         <button
-                            disabled={stopping || !isContinuous(job)}
-                            title={isContinuous(job) ? undefined : "실행 중인 추론 작업만 종료할 수 있습니다"}
-                            onClick={() => {
-                                setStopping(true);
-                                stopJob(job.id)
-                                    .then((j) => setJob((prev) => (prev ? { ...prev, ...j } : prev)))
-                                    .catch((e) => setError(String(e)))
-                                    .finally(() => setStopping(false));
-                            }}
-                            style={actionBtnStyle(stopping || !isContinuous(job), "var(--alert-critical)")}
+                            disabled={acting}
+                            onClick={() => runAction(terminateJob(job.id))}
+                            style={actionBtnStyle(acting, "var(--alert-critical)")}
                         >
-                            {stopping ? "종료 중…" : "종료"}
+                            {acting ? "종료 중…" : "종료"}
                         </button>
                     </div>
                 )}
@@ -660,6 +671,9 @@ const EVENT_TYPE_LABELS: Record<EventType, string> = {
     QUEUE: "대기열 유지",
     BACKFILL: "백필 배정",
     START: "즉시 배정",
+    PAUSE: "일시중지",
+    RESUME: "재개",
+    TERMINATE: "종료",
     FINISH: "노드 해제",
 };
 
@@ -689,7 +703,7 @@ function pickMetricSection(metrics: JobMetricProfileItem[], profiling: boolean) 
     return { featured, counter, others };
 }
 
-/** 헤더 우측 액션 버튼(중지·종료) 공통 스타일 */
+/** 헤더 우측 액션 버튼(일시중지·재개·종료) 공통 스타일 */
 function actionBtnStyle(disabled: boolean, color?: string): CSSProperties {
     return {
         // 비활성일 땐 색을 빼고 회색으로 - 흐려진 빨강은 "고장난 버튼"처럼 보인다
