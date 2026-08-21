@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import Breadcrumb from "@/components/Breadcrumb";
 import StatCard from "@/components/StatCard";
 import Card from "@/components/Card";
@@ -19,7 +19,7 @@ import {
     fetchReallocations,
     stopJob,
 } from "@/lib/api";
-import { JOB_COLORS, JOB_STATUS_LABELS, PRIORITY_LABELS } from "@/lib/jobs";
+import { JOB_COLORS, JOB_STATUS_LABELS, JOB_STATUS_COLORS, PRIORITY_LABELS } from "@/lib/jobs";
 import {
     cumulativeCount,
     formatMetricValue,
@@ -187,38 +187,68 @@ export default function JobDetailView({ jobId, breadcrumbPrefix, showStop }: Job
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", margin: "16px 0 20px" }}>
                 <div>
                     <div style={{ fontSize: 20, fontWeight: 700 }}>J-{job.id}</div>
-                    <div style={{ fontSize: 12.5, color: "var(--sub)", marginTop: 4 }}>
-                        {job.model_name} · {TYPE_LABELS[job.type] ?? job.type} ·{" "}
-                        {JOB_STATUS_LABELS[job.status] ?? job.status}
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+                        <span style={{ fontSize: 16, fontWeight: 700, color: "var(--ink)" }}>
+                            {job.model_name}
+                        </span>
+                        <span
+                            style={{
+                                padding: "3px 10px",
+                                borderRadius: 999,
+                                fontSize: 12.5,
+                                fontWeight: 700,
+                                color: JOB_COLORS[job.type],
+                                background: `color-mix(in srgb, ${JOB_COLORS[job.type]} 12%, var(--panel))`,
+                                border: `1px solid color-mix(in srgb, ${JOB_COLORS[job.type]} 30%, transparent)`,
+                            }}
+                        >
+                            {TYPE_LABELS[job.type] ?? job.type}
+                        </span>
+                        <span
+                            style={{
+                                padding: "3px 10px",
+                                borderRadius: 999,
+                                fontSize: 12.5,
+                                fontWeight: 700,
+                                color: JOB_STATUS_COLORS[job.status],
+                                background: `color-mix(in srgb, ${JOB_STATUS_COLORS[job.status]} 14%, var(--panel))`,
+                                border: `1px solid color-mix(in srgb, ${JOB_STATUS_COLORS[job.status]} 32%, transparent)`,
+                            }}
+                        >
+                            {JOB_STATUS_LABELS[job.status] ?? job.status}
+                        </span>
                     </div>
                 </div>
 
-                {showStop && isContinuous(job) && (
-                    <button
-                        disabled={stopping}
-                        onClick={() => {
-                            setStopping(true);
-                            stopJob(job.id)
-                                .then((j) => setJob((prev) => (prev ? { ...prev, ...j } : prev)))
-                                .catch((e) => setError(String(e)))
-                                .finally(() => setStopping(false));
-                        }}
-                        style={{
-                            border: "1px solid var(--line)",
-                            background: "transparent",
-                            color: "var(--sub)",
-                            borderRadius: 8,
-                            padding: "8px 14px",
-                            cursor: stopping ? "default" : "pointer",
-                            opacity: stopping ? 0.5 : 1,
-                            fontFamily: "inherit",
-                            fontSize: 12.5,
-                            fontWeight: 600,
-                            flexShrink: 0,
-                        }}
-                    >
-                        {stopping ? "중지 중…" : "중지"}
-                    </button>
+                {/* 아직 끝나지 않은 작업이면 중지/종료를 노출한다.
+                    - 중지: 백엔드가 추론+실행중만 허용(only infer jobs can be stopped)해서
+                      그 외에는 비활성. 제약이 풀리면 disabled 조건만 손보면 된다.
+                    - 종료: 대응 API가 아직 없어 자리만 잡아둔 상태. */}
+                {job.status !== "done" && (
+                    <div style={{ display: "flex", gap: 10, flexShrink: 0 }}>
+                        {/* 중지: 실행중 -> 대기중 (자원 반납 후 재배정 대기). 대응 API가
+                            아직 없어 자리만 잡아둔 상태. */}
+                        <button disabled title="준비 중" style={actionBtnStyle(true, "var(--alert-warning)")}>
+                            중지
+                        </button>
+                        {/* 종료: -> 마무리중. 기존 stopJob API가 하는 일이 바로 이것이다
+                            (이름만 stop이고 실제로는 finalizing으로 보낸다). 백엔드가
+                            추론+실행중만 허용해서 그 외에는 비활성. */}
+                        <button
+                            disabled={stopping || !isContinuous(job)}
+                            title={isContinuous(job) ? undefined : "실행 중인 추론 작업만 종료할 수 있습니다"}
+                            onClick={() => {
+                                setStopping(true);
+                                stopJob(job.id)
+                                    .then((j) => setJob((prev) => (prev ? { ...prev, ...j } : prev)))
+                                    .catch((e) => setError(String(e)))
+                                    .finally(() => setStopping(false));
+                            }}
+                            style={actionBtnStyle(stopping || !isContinuous(job), "var(--alert-critical)")}
+                        >
+                            {stopping ? "종료 중…" : "종료"}
+                        </button>
+                    </div>
                 )}
             </div>
 
@@ -657,6 +687,23 @@ function pickMetricSection(metrics: JobMetricProfileItem[], profiling: boolean) 
         .filter((m) => !m.featured && m.id !== counter?.id)
         .sort((a, b) => a.seq - b.seq);
     return { featured, counter, others };
+}
+
+/** 헤더 우측 액션 버튼(중지·종료) 공통 스타일 */
+function actionBtnStyle(disabled: boolean, color?: string): CSSProperties {
+    return {
+        // 비활성일 땐 색을 빼고 회색으로 - 흐려진 빨강은 "고장난 버튼"처럼 보인다
+        border: `1px solid ${disabled || !color ? "var(--line)" : color}`,
+        background: disabled || !color ? "transparent" : `color-mix(in srgb, ${color} 10%, var(--panel))`,
+        color: disabled || !color ? "var(--sub)" : color,
+        borderRadius: 8,
+        padding: "11px 22px",
+        cursor: disabled ? "default" : "pointer",
+        opacity: disabled ? 0.45 : 1,
+        fontFamily: "inherit",
+        fontSize: 15,
+        fontWeight: 700,
+    };
 }
 
 function SectionHead({ title, desc }: { title: string; desc?: string }) {
