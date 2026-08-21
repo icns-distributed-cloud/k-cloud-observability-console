@@ -91,15 +91,30 @@ export default function JobWizardPage() {
         form.datasetId !== null && form.datasetId >= 0 ? form.datasetId : datasets[0]?.id ?? null;
 
     const addUploadedModel = (name: string) => {
+        // 이미 있는 이름이면 새로 추가하지 않고 그걸 선택만 한다.
+        // 실제 모델 목록과 업로드 목록 양쪽을 다 본다.
+        const existing =
+            models.find((m) => m.name === name) ?? uploadedModels.find((u) => u.name === name);
+        if (existing) {
+            setForm((f) => ({ ...f, modelId: existing.id }));
+            return;
+        }
         const item = { id: nextUploadId(), name };
         setUploadedModels((l) => [...l, item]);
-        setForm((f) => ({ ...f, modelId: item.id }));   // 올리자마자 선택
+        setForm((f) => ({ ...f, modelId: item.id }));
     };
+
     const removeUploadedModel = (id: number) => {
         setUploadedModels((l) => l.filter((u) => u.id !== id));
         setForm((f) => (f.modelId === id ? { ...f, modelId: models[0]?.id ?? null } : f));
     };
     const addUploadedDataset = (name: string) => {
+        const existing =
+            datasets.find((d) => d.name === name) ?? uploadedDatasets.find((u) => u.name === name);
+        if (existing) {
+            setForm((f) => ({ ...f, datasetId: existing.id }));
+            return;
+        }
         const item = { id: nextUploadId(), name };
         setUploadedDatasets((l) => [...l, item]);
         setForm((f) => ({ ...f, datasetId: item.id }));
