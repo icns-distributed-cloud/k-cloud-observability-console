@@ -24,9 +24,10 @@ FINALIZING_SEC = {"train": 8, "infer": 6}
 
 # Arbitrary constant key for a Postgres advisory lock guarding every
 # read-then-write job/assignment state change (submit_job's immediate admit,
-# sweep_and_backfill's backfill/finish loops, filler creation, stop_job).
-# Without it, concurrent requests (polling from multiple tabs, two submits at
-# once, a double-clicked stop) can each read the same pre-commit snapshot and
+# sweep_and_backfill's backfill/finish loops, filler creation, pause/resume/
+# terminate_job). Without it, concurrent requests (polling from multiple tabs,
+# two submits at once, a double-clicked stop) can each read the same pre-commit
+# snapshot and
 # double-admit the same job, double-book the same node, or double-log a
 # FINISH. Held for the rest of the transaction (pg_advisory_xact_lock),
 # released on commit/rollback - callers should acquire it before reading any
@@ -278,6 +279,22 @@ def _phase_progress(job: models.Job, window: tuple[datetime, datetime] | None) -
     return max(0.0, min(1.0, elapsed / duration))
 
 
+def _current_assignments(job: models.Job) -> list[models.Assignment]:
+    """job.assignments 중 "지금 배정" 배치만 골라낸다. 한 job은 보통 평생 admission을
+    한 번만 거치지만, resume은 같은 job을 다시 _admit해서 새 배치(새 from_t)를 만들고
+    이전 배치는 닫아만 둘 뿐 지우진 않는다(비용 계산 등에 이력이 필요) - 그래서 그냥
+    job.assignments를 다 돌면 pause 전 노드와 resume 후 노드가 같이 잡힌다. 한 _admit
+    호출 안에서는 여러 노드라도 from_t가 전부 같으므로, 가장 최근 from_t를 가진
+    배치만 남기면 배치 경계가 정확히 갈린다.
+    paused는 예외 - pause가 노드를 반납해도 그 배치 자체는(이력 보존을 위해) 안
+    지우니 "가장 최근 배치" 규칙만 따르면 이미 반납한 노드가 여전히 assigned로
+    보인다. 지금 진짜 아무것도 안 붙잡고 있으니 명시적으로 빈 목록을 준다."""
+    if job.status == "paused" or not job.assignments:
+        return []
+    latest_from_t = max(a.from_t for a in job.assignments)
+    return [a for a in job.assignments if a.from_t == latest_from_t]
+
+
 def _to_job_summary(job: models.Job) -> schemas.JobSummary:
     phase_window = _phase_window(job)
     return schemas.JobSummary(
@@ -302,7 +319,7 @@ def _to_job_summary(job: models.Job) -> schemas.JobSummary:
                 cluster_id=a.node.cluster.id,
                 cluster_name=a.node.cluster.name,
             )
-            for a in job.assignments
+            for a in _current_assignments(job)
         ],
         phase_progress=_phase_progress(job, phase_window),
         phase_started_at=phase_window[0] if phase_window else None,
@@ -673,8 +690,8 @@ def sweep_and_backfill(db: Session) -> None:
             duration = job.duration_sec
         elif job.type == "infer":
             # a real (non-filler) infer job - runs indefinitely, like a persistent
-            # serving workload, until stopped through a future explicit stop
-            # endpoint. Fillers always carry an explicit duration_sec, so they're
+            # serving workload, until paused/terminated through the explicit
+            # endpoints. Fillers always carry an explicit duration_sec, so they're
             # unaffected and keep cycling normally.
             duration = None
         else:
@@ -852,8 +869,8 @@ def list_jobs(
         jobs = query.all()
     else:
         # Cap only the done bucket - it's the one that grows without bound for as long
-        # as the server's up. Active jobs (queued/provisioning/running/finalizing) are
-        # naturally bounded by real cluster capacity and must never be capped by age:
+        # as the server's up. Active jobs (queued/provisioning/running/finalizing/paused)
+        # are naturally bounded by real cluster capacity and must never be capped by age:
         # a real infer job now runs indefinitely, so a plain submitted_at-based limit
         # would eventually push a still-running job out of the window just because
         # enough fillers were created after it.
@@ -1102,7 +1119,9 @@ def submit_job(
     return _to_job_summary(job)
 
 
-def stop_job(db: Session, job_id: int) -> schemas.JobSummary | None:
+def pause_job(db: Session, job_id: int) -> schemas.JobSummary | None:
+    """running -> paused. 노드는 즉시 반납한다(다음 sweep의 backfill이 바로 채울 수
+    있도록) - resume 때 다시 admission을 태우면 되니 붙잡고 있을 이유가 없다."""
     _lock_admission(db)
     job = (
         db.query(models.Job)
@@ -1112,17 +1131,112 @@ def stop_job(db: Session, job_id: int) -> schemas.JobSummary | None:
     )
     if job is None:
         return None
-    if job.type != "infer":
-        raise HTTPException(status_code=400, detail="only infer jobs can be stopped")
     if job.status != "running":
         raise HTTPException(status_code=400, detail="job is not running")
 
     now = clock.now()
-    # like a real stop: the serving process needs a moment to unwind/save state
-    # before the node is actually released. Node stays occupied - the next
-    # sweep's finalizing->done step frees it and logs FINISH.
-    job.status = "finalizing"
-    job.phase_deadline = now + timedelta(seconds=FINALIZING_SEC["infer"])
+    for assignment in job.assignments:
+        if assignment.to_t is None:
+            assignment.to_t = now
+            _log_event(
+                db,
+                type="PAUSE",
+                now=now,
+                job_id=job.id,
+                node_id=assignment.node_id,
+                cluster_id=assignment.node.cluster_id,
+            )
+    job.status = "paused"
+    job.phase_deadline = None
+
+    db.commit()
+    db.refresh(job)
+    return _to_job_summary(job)
+
+
+def resume_job(db: Session, job_id: int) -> schemas.JobSummary | None:
+    """paused -> running(바로 자리가 있으면) 또는 queued(없으면, 다음 backfill을
+    기다림 - submit_job의 즉시-admission-시도 패턴과 동일). fillers는
+    sweep_and_backfill에서 항상 real job 뒤로 밀리므로(FILLER_TARGET_PER_TYPE 주변
+    주석 참고) queued로 내려가도 filler 때문에 무한정 밀리진 않는다."""
+    _lock_admission(db)
+    job = (
+        db.query(models.Job)
+        .options(
+            selectinload(models.Job.selected_tier)
+            .selectinload(models.ResourceTier.requirements)
+            .selectinload(models.ResourceTierRequirement.accelerator_model)
+        )
+        .filter(models.Job.id == job_id)
+        .first()
+    )
+    if job is None:
+        return None
+    if job.status != "paused":
+        raise HTTPException(status_code=400, detail="job is not paused")
+
+    now = clock.now()
+    _log_event(db, type="RESUME", now=now, job_id=job.id)
+
+    live_cluster = _load_live_cluster(db)
+    nodes = None
+    if live_cluster is not None and job.selected_tier is not None:
+        occupied = _occupied_node_ids(live_cluster, now)
+        nodes = _pick_free_nodes_for_tier(live_cluster, job.selected_tier, occupied)
+        if nodes is not None:
+            _admit(db, job, nodes, now, event_type="START")
+
+    if nodes is None:
+        job.status = "queued"
+        _log_event(db, type="QUEUE", now=now, job_id=job.id)
+
+    db.commit()
+    db.refresh(job)
+    return _to_job_summary(job)
+
+
+def terminate_job(db: Session, job_id: int) -> schemas.JobSummary | None:
+    """어느 상태에서든 즉시 종료(=삭제 취급) - running만 예외로, 실제 중지처럼
+    노드를 정리할 잠깐의 시간을 준다(기존 finalizing 경로 그대로 재사용, 다음
+    sweep이 done으로 넘기고 FINISH를 남긴다). 그 외(queued/provisioning/paused)는
+    당장 정리할 상태가 없거나 있어도 감쌀 이유가 없으니 바로 done."""
+    _lock_admission(db)
+    job = (
+        db.query(models.Job)
+        .options(selectinload(models.Job.assignments).selectinload(models.Assignment.node))
+        .filter(models.Job.id == job_id)
+        .first()
+    )
+    if job is None:
+        return None
+    if job.status == "done":
+        raise HTTPException(status_code=400, detail="job is already done")
+
+    now = clock.now()
+
+    if job.status == "running":
+        _log_event(db, type="TERMINATE", now=now, job_id=job.id)
+        job.status = "finalizing"
+        job.phase_deadline = now + timedelta(seconds=FINALIZING_SEC[job.type])
+        db.commit()
+        db.refresh(job)
+        return _to_job_summary(job)
+
+    _log_event(db, type="TERMINATE", now=now, job_id=job.id)
+    for assignment in job.assignments:
+        if assignment.to_t is None:
+            assignment.to_t = now
+            _log_event(
+                db,
+                type="FINISH",
+                now=now,
+                job_id=job.id,
+                node_id=assignment.node_id,
+                cluster_id=assignment.node.cluster_id,
+            )
+    job.status = "done"
+    job.finished_at = now
+    job.phase_deadline = None
 
     db.commit()
     db.refresh(job)

@@ -112,11 +112,31 @@ def submit_infer_job(
     )
 
 
-@router.post("/jobs/{job_id}/stop", response_model=schemas.JobSummary)
-def stop_job(
+@router.post("/jobs/{job_id}/pause", response_model=schemas.JobSummary)
+def pause_job(
     job_id: int, db: Session = Depends(get_db), _: None = Depends(jobs_service.sweep_dependency)
 ) -> schemas.JobSummary:
-    result = jobs_service.stop_job(db, job_id)
+    result = jobs_service.pause_job(db, job_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="job not found")
+    return result
+
+
+@router.post("/jobs/{job_id}/resume", response_model=schemas.JobSummary)
+def resume_job(
+    job_id: int, db: Session = Depends(get_db), _: None = Depends(jobs_service.sweep_dependency)
+) -> schemas.JobSummary:
+    result = jobs_service.resume_job(db, job_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="job not found")
+    return result
+
+
+@router.post("/jobs/{job_id}/terminate", response_model=schemas.JobSummary)
+def terminate_job(
+    job_id: int, db: Session = Depends(get_db), _: None = Depends(jobs_service.sweep_dependency)
+) -> schemas.JobSummary:
+    result = jobs_service.terminate_job(db, job_id)
     if result is None:
         raise HTTPException(status_code=404, detail="job not found")
     return result
