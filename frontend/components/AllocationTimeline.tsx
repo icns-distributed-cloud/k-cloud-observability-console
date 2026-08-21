@@ -162,6 +162,9 @@ export default function AllocationTimeline({ data, onSelectJob, onSelectNode, sh
                     {showActiveModel && (
                       <span
                         title={activeBar?.job?.model_name}
+                        onClick={
+                          activeBar?.job ? () => onSelectJob?.(activeBar.job!.id) : undefined
+                        }
                         style={{
                           width: MODEL_COL_W,
                           flexShrink: 0,
@@ -170,7 +173,11 @@ export default function AllocationTimeline({ data, onSelectJob, onSelectNode, sh
                           height: 24,
                           padding: "0 10px",
                           borderRadius: 6,
-                          border: "1px solid var(--line)",
+                          // 서빙 중인 모델은 클릭하면 그 작업 상세로 간다 - 빈 칸(서빙
+                          // 중인 게 없는 노드)은 클릭 대상이 아니므로 테두리도 그대로 둔다.
+                          border: activeBar?.job
+                            ? "1px solid color-mix(in srgb, var(--job-infer) 32%, transparent)"
+                            : "1px solid var(--line)",
                           background: activeBar?.job
                             ? "color-mix(in srgb, var(--job-infer) 12%, var(--panel-2))"
                             : "var(--panel-2)",
@@ -180,6 +187,7 @@ export default function AllocationTimeline({ data, onSelectJob, onSelectNode, sh
                           whiteSpace: "nowrap",
                           overflow: "hidden",
                           textOverflow: "ellipsis",
+                          cursor: activeBar?.job ? "pointer" : undefined,
                         }}
                       >
                         {activeBar?.job?.model_name ?? ""}
