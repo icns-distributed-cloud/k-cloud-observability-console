@@ -30,18 +30,4 @@
   }
 }
 
-/* 위치 이동(left/top)과는 별개 요소에서 계속 살짝 떠다니게 해서, 폴링 사이에도
- * 화면이 완전히 정지해 보이지 않도록 한다. */
-.float {
-  animation: float 3.2s ease-in-out infinite;
-}
 
-@keyframes float {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-5px);
-  }
-}
