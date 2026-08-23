@@ -31,6 +31,11 @@ export type MetricType =
     | 'util' | 'cpu' | 'mem' | 'temp'
     | 'throughput' | 'jct' | 'goodput'
     | 'ttft' | 'tpot' | 'slo_violation'
+    // 로컬 스케줄링 탭 전용 (추론 노드만) - 워크로드 백로그 + 메모리 계층별 KV캐시/모델가중치
+    | 'prefill_backlog' | 'decode_backlog'
+    | 'kv_vram' | 'model_vram'
+    | 'kv_dram' | 'model_dram'
+    | 'kv_disk' | 'model_disk'
 
 
 // ========== Infra ==========
