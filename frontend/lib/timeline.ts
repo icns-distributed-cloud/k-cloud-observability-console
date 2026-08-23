@@ -38,7 +38,7 @@ export interface TimelineData {
 /** 눈금은 구간 시작 기준 경과가 아니라 실제 벽시계 시각으로 표시.
  *  데모용 작업이 15~40초라 표시 구간이 1분 남짓으로 좁아지는데,
  *  그때 시:분만 찍으면 눈금이 전부 같아 보이므로 초까지 표시한다. */
-function formatTick(ms: number, withSeconds = false): string {
+export function formatTick(ms: number, withSeconds = false): string {
   return new Date(ms).toLocaleTimeString('ko-KR', {
     hour12: false,
     hour: '2-digit',

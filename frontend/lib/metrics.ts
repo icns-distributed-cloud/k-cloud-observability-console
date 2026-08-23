@@ -1,4 +1,4 @@
-import type { MetricProfilePoint } from '@/app/types'
+import type { MetricProfilePoint, MetricType } from '@/app/types'
 
 /**
  * 파형 프로파일로부터 시계열 값을 생성한다.
@@ -108,6 +108,15 @@ export function cumulativeThisHour(ratePerHour: number, nowSec: number): number 
   hourStart.setMinutes(0, 0, 0)
   const hoursElapsed = (now.getTime() - hourStart.getTime()) / 3_600_000
   return Math.round(ratePerHour * hoursElapsed)
+}
+
+/** profiles 중 특정 metric_type 하나를 찾는다. 모든 노드가 모든 metric_type을
+ *  갖진 않으므로(예: 유휴 노드는 cpu가 없을 수 있음) 없으면 undefined. */
+export function findMetricProfile(
+  profiles: MetricProfilePoint[],
+  metricType: MetricType
+): MetricProfilePoint | undefined {
+  return profiles.find((p) => p.metric_type === metricType)
 }
 
 /** 여러 노드의 같은 metric_type 프로파일을 각자 시계열로 만든 뒤 지점별로 평균낸다.

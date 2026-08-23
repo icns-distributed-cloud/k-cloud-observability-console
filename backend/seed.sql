@@ -246,11 +246,13 @@ INSERT INTO cluster_metric_profile (cluster_id, metric_type, baseline, amplitude
 -- other node here NEVER receives a real job (admission only ever targets the live
 -- cluster) - they'd sit idle forever, so their util/power baselines are deliberately
 -- low (idle draw, not load) instead of matching the same 30-60% range.
--- cpu는 4-14(라이브)만 채운다 - GPU util보다 낮은, 그럴듯한 비율(대략 0.6~0.7배)로.
--- 다른 노드들엔 원래도 cpu가 없었다(스케줄러 페이지 지표에만 필요해서 여기서 추가).
+-- cpu는 4-14(라이브)엔 GPU util보다 낮은, 그럴듯한 비율(대략 0.6~0.7배)로 채운다.
+-- 유휴 추론 노드(2,16,19,22,25,28,31,34,37)도 같은 비율로 채운다 - 로컬 스케줄링
+-- 탭이 이 노드들에도 뜨는데 CPU KPI 카드가 비어 보이면 안 되기 때문. 나머지
+-- (유휴 학습 노드들)엔 원래도 cpu가 없었고 지금도 그대로 없다.
 INSERT INTO node_metric_profile (node_id, metric_type, baseline, amplitude, period_sec, unit) VALUES
   (1, 'util', 8, 3, 45, 'pct'), (1, 'cpu', 6, 2, 40, 'pct'), (1, 'mem', 12, 3, 55, 'pct'), (1, 'temp', 34, 2, 50, 'C'), (1, 'power', 75, 15, 42, 'W'),
-  (2, 'util', 6, 2, 45, 'pct'), (2, 'temp', 32, 2, 50, 'C'), (2, 'power', 30, 8, 45, 'W'),
+  (2, 'util', 6, 2, 45, 'pct'), (2, 'cpu', 4, 1, 43, 'pct'), (2, 'temp', 32, 2, 50, 'C'), (2, 'power', 30, 8, 45, 'W'),
   (3, 'util', 10, 3, 45, 'pct'), (3, 'temp', 36, 2, 50, 'C'), (3, 'power', 120, 25, 40, 'W'),
   (4, 'util', 55, 12, 40, 'pct'), (4, 'cpu', 35, 8, 38, 'pct'), (4, 'temp', 52, 4, 50, 'C'), (4, 'power', 560, 130, 42, 'W'),
   (5, 'util', 42, 10, 45, 'pct'), (5, 'cpu', 28, 6, 43, 'pct'), (5, 'temp', 47, 3, 50, 'C'), (5, 'power', 300, 55, 46, 'W'),
@@ -264,28 +266,28 @@ INSERT INTO node_metric_profile (node_id, metric_type, baseline, amplitude, peri
   (13, 'util', 62, 15, 30, 'pct'), (13, 'cpu', 40, 10, 29, 'pct'), (13, 'temp', 65, 5, 32, 'C'), (13, 'power', 1450, 260, 24, 'W'),
   (14, 'util', 57, 14, 31, 'pct'), (14, 'cpu', 37, 9, 30, 'pct'), (14, 'temp', 63, 5, 33, 'C'), (14, 'power', 1420, 255, 25, 'W'),
   (15, 'util', 9, 3, 45, 'pct'), (15, 'temp', 35, 2, 48, 'C'), (15, 'power', 65, 15, 38, 'W'),
-  (16, 'util', 5, 2, 47, 'pct'), (16, 'temp', 30, 2, 49, 'C'), (16, 'power', 22, 6, 39, 'W'),
+  (16, 'util', 5, 2, 47, 'pct'), (16, 'cpu', 3, 1, 45, 'pct'), (16, 'temp', 30, 2, 49, 'C'), (16, 'power', 22, 6, 39, 'W'),
   (17, 'util', 8, 3, 46, 'pct'), (17, 'temp', 34, 2, 48, 'C'), (17, 'power', 78, 16, 37, 'W'),
   (18, 'util', 11, 3, 41, 'pct'), (18, 'temp', 37, 2, 43, 'C'), (18, 'power', 130, 26, 33, 'W'),
-  (19, 'util', 7, 2, 44, 'pct'), (19, 'temp', 33, 2, 46, 'C'), (19, 'power', 180, 35, 27, 'W'),
+  (19, 'util', 7, 2, 44, 'pct'), (19, 'cpu', 5, 1, 42, 'pct'), (19, 'temp', 33, 2, 46, 'C'), (19, 'power', 180, 35, 27, 'W'),
   (20, 'util', 9, 3, 46, 'pct'), (20, 'temp', 35, 2, 47, 'C'), (20, 'power', 68, 14, 40, 'W'),
   (21, 'util', 10, 3, 36, 'pct'), (21, 'temp', 36, 2, 38, 'C'), (21, 'power', 82, 17, 36, 'W'),
-  (22, 'util', 6, 2, 40, 'pct'), (22, 'temp', 31, 2, 44, 'C'), (22, 'power', 28, 7, 37, 'W'),
+  (22, 'util', 6, 2, 40, 'pct'), (22, 'cpu', 4, 1, 38, 'pct'), (22, 'temp', 31, 2, 44, 'C'), (22, 'power', 28, 7, 37, 'W'),
   (23, 'util', 12, 3, 38, 'pct'), (23, 'temp', 38, 2, 39, 'C'), (23, 'power', 135, 27, 31, 'W'),
   (24, 'util', 8, 3, 43, 'pct'), (24, 'temp', 34, 2, 46, 'C'), (24, 'power', 70, 15, 38, 'W'),
-  (25, 'util', 5, 2, 45, 'pct'), (25, 'temp', 30, 2, 48, 'C'), (25, 'power', 24, 6, 40, 'W'),
+  (25, 'util', 5, 2, 45, 'pct'), (25, 'cpu', 3, 1, 43, 'pct'), (25, 'temp', 30, 2, 48, 'C'), (25, 'power', 24, 6, 40, 'W'),
   (26, 'util', 9, 3, 41, 'pct'), (26, 'temp', 35, 2, 45, 'C'), (26, 'power', 80, 16, 35, 'W'),
   (27, 'util', 11, 3, 44, 'pct'), (27, 'temp', 37, 2, 47, 'C'), (27, 'power', 128, 25, 30, 'W'),
-  (28, 'util', 7, 2, 45, 'pct'), (28, 'temp', 33, 2, 48, 'C'), (28, 'power', 175, 34, 28, 'W'),
+  (28, 'util', 7, 2, 45, 'pct'), (28, 'cpu', 5, 1, 43, 'pct'), (28, 'temp', 33, 2, 48, 'C'), (28, 'power', 175, 34, 28, 'W'),
   (29, 'util', 9, 3, 43, 'pct'), (29, 'temp', 34, 2, 46, 'C'), (29, 'power', 66, 14, 39, 'W'),
   (30, 'util', 10, 3, 37, 'pct'), (30, 'temp', 36, 2, 40, 'C'), (30, 'power', 84, 17, 36, 'W'),
-  (31, 'util', 6, 2, 42, 'pct'), (31, 'temp', 31, 2, 45, 'C'), (31, 'power', 27, 7, 38, 'W'),
+  (31, 'util', 6, 2, 42, 'pct'), (31, 'cpu', 4, 1, 40, 'pct'), (31, 'temp', 31, 2, 45, 'C'), (31, 'power', 27, 7, 38, 'W'),
   (32, 'util', 11, 3, 40, 'pct'), (32, 'temp', 37, 2, 40, 'C'), (32, 'power', 132, 26, 31, 'W'),
   (33, 'util', 8, 3, 44, 'pct'), (33, 'temp', 34, 2, 47, 'C'), (33, 'power', 67, 14, 38, 'W'),
-  (34, 'util', 5, 2, 46, 'pct'), (34, 'temp', 30, 2, 49, 'C'), (34, 'power', 23, 6, 41, 'W'),
+  (34, 'util', 5, 2, 46, 'pct'), (34, 'cpu', 3, 1, 44, 'pct'), (34, 'temp', 30, 2, 49, 'C'), (34, 'power', 23, 6, 41, 'W'),
   (35, 'util', 9, 3, 41, 'pct'), (35, 'temp', 35, 2, 45, 'C'), (35, 'power', 79, 16, 36, 'W'),
   (36, 'util', 10, 3, 43, 'pct'), (36, 'temp', 36, 2, 47, 'C'), (36, 'power', 126, 25, 31, 'W'),
-  (37, 'util', 7, 2, 45, 'pct'), (37, 'temp', 32, 2, 48, 'C'), (37, 'power', 172, 33, 28, 'W'),
+  (37, 'util', 7, 2, 45, 'pct'), (37, 'cpu', 5, 1, 43, 'pct'), (37, 'temp', 32, 2, 48, 'C'), (37, 'power', 172, 33, 28, 'W'),
   (38, 'util', 8, 3, 42, 'pct'), (38, 'temp', 34, 2, 46, 'C'), (38, 'power', 65, 14, 39, 'W'),
   -- suwon-srv-12/13 (39/40) - same B200 live-cluster profile shape as 13/14 above.
   (39, 'util', 60, 15, 31, 'pct'), (39, 'cpu', 39, 9, 30, 'pct'), (39, 'temp', 64, 5, 33, 'C'), (39, 'power', 1440, 258, 25, 'W'),
@@ -295,6 +297,104 @@ INSERT INTO node_metric_profile (node_id, metric_type, baseline, amplitude, peri
   (41, 'util', 35, 8, 44, 'pct'), (41, 'cpu', 23, 6, 42, 'pct'), (41, 'temp', 45, 3, 49, 'C'), (41, 'power', 155, 28, 36, 'W'),
   (42, 'util', 55, 13, 39, 'pct'), (42, 'cpu', 36, 8, 37, 'pct'), (42, 'temp', 59, 4, 42, 'C'), (42, 'power', 940, 178, 35, 'W'),
   (43, 'util', 44, 11, 43, 'pct'), (43, 'cpu', 29, 7, 41, 'pct'), (43, 'temp', 51, 3, 46, 'C'), (43, 'power', 285, 48, 41, 'W');
+
+-- ------------------------------------------------------------
+-- 로컬 스케줄링 탭 전용 8개 metric_type - 추론 노드(purpose='infer')에만 채운다.
+-- prefill_backlog/decode_backlog: 워크로드 백로그 - KPI 카드 2개와 스케줄링
+-- 타임라인 1·2행("Normalized Backlog Queue"/"SM Utilization") 양쪽 다 같은
+-- 두 값을 그대로 재사용한다(목업 자체가 두 행의 곡선이 시각적으로 동일해서
+-- 굳이 따로 만들지 않는다).
+-- kv_vram/model_vram, kv_dram/model_dram, kv_disk/model_disk: 메모리 계층별
+-- KV캐시 vs 모델가중치 사용률 - 타임라인 3~5행.
+-- 전부 unit='pct'(0~100). period_sec은 util/temp(30~90대)와 비슷한 27~53대로
+-- 잡았다 - 프론트가 이 타임라인을 AllocationTimeline과 같은 2분(120초) 슬라이딩
+-- 창으로 그리는데, 처음엔 (30분 창 기준으로) 400~800대를 썼다가 실제로 보니
+-- 2분 창 대비 너무 길어서 거의 안 움직이는 것처럼 보였다 - 창 길이에 맞춰 축소.
+-- 모든 쌍에서 baseline이 amplitude보다 확실히 커서(대부분 2배 이상) 최저치도
+-- 0 근처로 안 내려간다 - 구간에 따라 한쪽 시리즈만 남고 다른 쪽이 사라지는
+-- 것처럼 보이면 안 되기 때문(두 워크로드/리소스가 항상 같이 흐르는 것으로 보여야
+-- 함, 로컬 스케줄링 탭 설계 시 확정).
+-- 라이브 클러스터 추론 노드(8,9,13,14,39,40)는 다른 지표들과 같은 비율로 값과
+-- 변동폭을 크게, 유휴 추론 노드(2,16,19,22,25,28,31,34,37)는 대략 1/3 수준으로
+-- 낮고 변동폭도 작게 잡았다(idle-vs-live 관례 동일 적용).
+-- ------------------------------------------------------------
+INSERT INTO node_metric_profile (node_id, metric_type, baseline, amplitude, period_sec, unit) VALUES
+  -- live cluster infer nodes
+  (8,  'prefill_backlog', 28, 10, 32, 'pct'), (8,  'decode_backlog', 15, 6, 35, 'pct'),
+  (8,  'kv_vram', 46, 13, 33, 'pct'), (8,  'model_vram', 25, 5, 45, 'pct'),
+  (8,  'kv_dram', 19, 7, 31, 'pct'), (8,  'model_dram', 12, 4, 41, 'pct'),
+  (8,  'kv_disk', 7, 3, 37, 'pct'), (8,  'model_disk', 5, 2, 51, 'pct'),
+
+  (9,  'prefill_backlog', 26, 9, 31, 'pct'), (9,  'decode_backlog', 14, 5, 34, 'pct'),
+  (9,  'kv_vram', 44, 12, 33, 'pct'), (9,  'model_vram', 24, 5, 45, 'pct'),
+  (9,  'kv_dram', 18, 6, 30, 'pct'), (9,  'model_dram', 11, 4, 41, 'pct'),
+  (9,  'kv_disk', 6, 2, 37, 'pct'), (9,  'model_disk', 4, 1, 50, 'pct'),
+
+  (13, 'prefill_backlog', 38, 15, 36, 'pct'), (13, 'decode_backlog', 20, 9, 39, 'pct'),
+  (13, 'kv_vram', 58, 16, 37, 'pct'), (13, 'model_vram', 31, 6, 48, 'pct'),
+  (13, 'kv_dram', 26, 10, 34, 'pct'), (13, 'model_dram', 17, 5, 44, 'pct'),
+  (13, 'kv_disk', 11, 4, 40, 'pct'), (13, 'model_disk', 8, 3, 53, 'pct'),
+
+  (14, 'prefill_backlog', 36, 14, 35, 'pct'), (14, 'decode_backlog', 19, 8, 39, 'pct'),
+  (14, 'kv_vram', 56, 15, 37, 'pct'), (14, 'model_vram', 30, 6, 47, 'pct'),
+  (14, 'kv_dram', 25, 9, 33, 'pct'), (14, 'model_dram', 16, 5, 43, 'pct'),
+  (14, 'kv_disk', 10, 4, 39, 'pct'), (14, 'model_disk', 8, 3, 53, 'pct'),
+
+  (39, 'prefill_backlog', 37, 14, 36, 'pct'), (39, 'decode_backlog', 19, 8, 39, 'pct'),
+  (39, 'kv_vram', 57, 16, 37, 'pct'), (39, 'model_vram', 31, 6, 48, 'pct'),
+  (39, 'kv_dram', 25, 9, 34, 'pct'), (39, 'model_dram', 16, 5, 44, 'pct'),
+  (39, 'kv_disk', 11, 4, 40, 'pct'), (39, 'model_disk', 8, 3, 53, 'pct'),
+
+  (40, 'prefill_backlog', 35, 13, 35, 'pct'), (40, 'decode_backlog', 18, 8, 38, 'pct'),
+  (40, 'kv_vram', 55, 15, 36, 'pct'), (40, 'model_vram', 29, 5, 47, 'pct'),
+  (40, 'kv_dram', 24, 9, 33, 'pct'), (40, 'model_dram', 15, 4, 43, 'pct'),
+  (40, 'kv_disk', 10, 4, 39, 'pct'), (40, 'model_disk', 7, 2, 52, 'pct'),
+
+  -- idle infer nodes (~1/3 of live-node values, same idle-vs-live ratio as util/temp/power)
+  (2,  'prefill_backlog', 9, 3, 29, 'pct'), (2,  'decode_backlog', 5, 2, 31, 'pct'),
+  (2,  'kv_vram', 15, 4, 29, 'pct'), (2,  'model_vram', 8, 2, 40, 'pct'),
+  (2,  'kv_dram', 6, 2, 28, 'pct'), (2,  'model_dram', 4, 1, 39, 'pct'),
+  (2,  'kv_disk', 2, 1, 35, 'pct'), (2,  'model_disk', 2, 1, 47, 'pct'),
+
+  (16, 'prefill_backlog', 8, 3, 28, 'pct'), (16, 'decode_backlog', 4, 1, 31, 'pct'),
+  (16, 'kv_vram', 14, 4, 29, 'pct'), (16, 'model_vram', 7, 2, 39, 'pct'),
+  (16, 'kv_dram', 5, 2, 27, 'pct'), (16, 'model_dram', 3, 1, 38, 'pct'),
+  (16, 'kv_disk', 2, 1, 34, 'pct'), (16, 'model_disk', 1, 1, 46, 'pct'),
+
+  (19, 'prefill_backlog', 10, 3, 29, 'pct'), (19, 'decode_backlog', 5, 2, 32, 'pct'),
+  (19, 'kv_vram', 16, 4, 30, 'pct'), (19, 'model_vram', 9, 2, 41, 'pct'),
+  (19, 'kv_dram', 7, 2, 29, 'pct'), (19, 'model_dram', 4, 1, 39, 'pct'),
+  (19, 'kv_disk', 3, 1, 35, 'pct'), (19, 'model_disk', 2, 1, 47, 'pct'),
+
+  (22, 'prefill_backlog', 9, 3, 28, 'pct'), (22, 'decode_backlog', 4, 1, 31, 'pct'),
+  (22, 'kv_vram', 14, 4, 29, 'pct'), (22, 'model_vram', 8, 2, 40, 'pct'),
+  (22, 'kv_dram', 6, 2, 28, 'pct'), (22, 'model_dram', 3, 1, 38, 'pct'),
+  (22, 'kv_disk', 2, 1, 34, 'pct'), (22, 'model_disk', 1, 1, 46, 'pct'),
+
+  (25, 'prefill_backlog', 8, 2, 28, 'pct'), (25, 'decode_backlog', 4, 1, 30, 'pct'),
+  (25, 'kv_vram', 13, 3, 28, 'pct'), (25, 'model_vram', 7, 2, 39, 'pct'),
+  (25, 'kv_dram', 5, 2, 27, 'pct'), (25, 'model_dram', 3, 1, 38, 'pct'),
+  (25, 'kv_disk', 2, 1, 34, 'pct'), (25, 'model_disk', 1, 1, 46, 'pct'),
+
+  (28, 'prefill_backlog', 10, 3, 30, 'pct'), (28, 'decode_backlog', 5, 2, 32, 'pct'),
+  (28, 'kv_vram', 16, 4, 30, 'pct'), (28, 'model_vram', 9, 2, 41, 'pct'),
+  (28, 'kv_dram', 7, 2, 29, 'pct'), (28, 'model_dram', 4, 1, 40, 'pct'),
+  (28, 'kv_disk', 3, 1, 36, 'pct'), (28, 'model_disk', 2, 1, 48, 'pct'),
+
+  (31, 'prefill_backlog', 9, 3, 28, 'pct'), (31, 'decode_backlog', 4, 1, 31, 'pct'),
+  (31, 'kv_vram', 14, 3, 29, 'pct'), (31, 'model_vram', 8, 2, 39, 'pct'),
+  (31, 'kv_dram', 6, 2, 27, 'pct'), (31, 'model_dram', 3, 1, 38, 'pct'),
+  (31, 'kv_disk', 2, 1, 34, 'pct'), (31, 'model_disk', 1, 1, 46, 'pct'),
+
+  (34, 'prefill_backlog', 8, 2, 27, 'pct'), (34, 'decode_backlog', 4, 1, 30, 'pct'),
+  (34, 'kv_vram', 13, 3, 28, 'pct'), (34, 'model_vram', 7, 2, 39, 'pct'),
+  (34, 'kv_dram', 5, 2, 27, 'pct'), (34, 'model_dram', 3, 1, 37, 'pct'),
+  (34, 'kv_disk', 2, 1, 33, 'pct'), (34, 'model_disk', 1, 1, 45, 'pct'),
+
+  (37, 'prefill_backlog', 10, 3, 29, 'pct'), (37, 'decode_backlog', 5, 2, 32, 'pct'),
+  (37, 'kv_vram', 15, 4, 30, 'pct'), (37, 'model_vram', 8, 2, 40, 'pct'),
+  (37, 'kv_dram', 6, 2, 28, 'pct'), (37, 'model_dram', 4, 1, 39, 'pct'),
+  (37, 'kv_disk', 2, 1, 35, 'pct'), (37, 'model_disk', 1, 1, 47, 'pct');
 
 -- accelerator_metric_profile: 'util' on every accelerator (kept light - 39 accelerators
 -- would be a lot of rows for full coverage), plus mem/power on accelerator 1 as a
