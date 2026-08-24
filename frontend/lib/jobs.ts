@@ -12,6 +12,7 @@ export const JOB_STATUS_LABELS: Record<string, string> = {
   provisioning: '준비중',
   running: '실행중',
   finalizing: '마무리중',
+  paused: '일시중지',
   done: '완료',
 }
 
@@ -24,6 +25,9 @@ export const JOB_STATUS_COLORS: Record<JobStatus, string> = {
   provisioning: 'var(--job-status-provisioning)',
   running: 'var(--job-status-running)',
   finalizing: 'var(--job-status-finalizing)',
+  // 일시중지는 생애주기 진행이 아니라 "멈춤"이라 회색 계열 - 완료(진회색)보다 옅게 둬서
+  // 끝난 게 아니라 재개할 수 있는 상태라는 걸 구분한다.
+  paused: '#9CA3AF',
   done: 'var(--job-status-done)',
 }
 
@@ -34,6 +38,7 @@ export const JOB_STATUS_TEXT_COLORS: Record<JobStatus, string> = {
   provisioning: 'var(--ink)',
   running: '#FFFFFF',
   finalizing: '#FFFFFF',
+  paused: '#FFFFFF',
   done: '#FFFFFF',
 }
 

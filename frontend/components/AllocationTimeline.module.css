@@ -173,3 +173,20 @@
     opacity: 0;
   }
 }
+
+/* 노드 이름이 클릭 가능하다는 걸 hover 전에도 알 수 있게 - 밑줄만으론 눈에 안 띈다는
+   피드백을 받고 옅은 초록 박스로 바꿨다. 클러스터 현황/노드 카드의 상세 버튼과 같은
+   시각 언어. */
+/* 색은 --node-link-color로 주입받는다 - 학습은 --accent, 추론은 --job-infer */
+.nodeLink {
+  border: 1px solid color-mix(in srgb, var(--node-link-color) 28%, transparent);
+  background: color-mix(in srgb, var(--node-link-color) 9%, var(--panel));
+  color: var(--node-link-color);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.nodeLink:hover {
+  background: color-mix(in srgb, var(--node-link-color) 20%, var(--panel));
+  border-color: var(--node-link-color);
+}

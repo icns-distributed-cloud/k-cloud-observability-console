@@ -11,7 +11,7 @@ export default function JobFromListPage({ params }: { params: Promise<{ id: stri
     <JobDetailView
       jobId={Number(id)}
       breadcrumbPrefix={[
-        { label: "지도", onClick: () => router.push("/csp") },
+        { label: "가용영역", onClick: () => router.push("/csp") },
         { label: "작업 목록", onClick: () => router.push("/csp/jobs") },
       ]}
     />

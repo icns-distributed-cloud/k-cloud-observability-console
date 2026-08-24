@@ -468,7 +468,7 @@ export default function SchedulerPage() {
     <main style={{ padding: "24px 28px" }}>
       <Breadcrumb
         segments={[
-          { label: "지도", onClick: () => router.push("/csp") },
+          { label: "가용영역", onClick: () => router.push("/csp") },
           { label: "스케줄러" },
         ]}
       />
@@ -495,6 +495,7 @@ export default function SchedulerPage() {
             prediction={trainPrediction}
             admittedFlashes={visibleTrainFlashes}
             onSelectJob={(id) => router.push(`/csp/jobs/${id}`)}
+            onSelectNode={(id) => router.push(`/csp/nodes/${id}`)}
           />
           <div style={{ height: 28 }} />
           <Section
@@ -506,6 +507,7 @@ export default function SchedulerPage() {
             specialMetrics={inferSpecialMetrics}
             showActiveModel
             onSelectJob={(id) => router.push(`/csp/jobs/${id}`)}
+            onSelectNode={(id) => router.push(`/csp/nodes/${id}`)}
           />
         </>
       )}
@@ -524,6 +526,7 @@ function Section({
   prediction,
   admittedFlashes,
   onSelectJob,
+  onSelectNode,
 }: {
   title: string;
   queueJobs: JobSummary[];
@@ -538,6 +541,7 @@ function Section({
   /** 학습 섹션 전용: 방금 예측 기반으로 배치된 job들 */
   admittedFlashes?: AdmittedFlash[];
   onSelectJob: (jobId: number) => void;
+  onSelectNode: (nodeId: number) => void;
 }) {
   // showActiveModel은 사실상 "이게 추론 섹션이냐"와 같은 값이라 따로 prop을 안 늘리고
   // 재사용한다. 학습 섹션은 손 안 대고(기존 그대로 무채색 숫자·초록 그래프), 추론
@@ -589,6 +593,7 @@ function Section({
           <AllocationTimeline
             data={data}
             onSelectJob={onSelectJob}
+            onSelectNode={onSelectNode}
             showActiveModel={showActiveModel}
             admittedFlashes={admittedFlashes}
           />

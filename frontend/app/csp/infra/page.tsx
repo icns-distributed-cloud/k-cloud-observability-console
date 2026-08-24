@@ -39,7 +39,7 @@ export default function InfraPage() {
     <main style={{ padding: "24px 28px" }}>
       <Breadcrumb
         segments={[
-          { label: "지도", onClick: () => router.push("/csp") },
+          { label: "가용영역", onClick: () => router.push("/csp") },
           { label: "클러스터 현황" },
         ]}
       />

@@ -61,7 +61,7 @@ export default function TopBar() {
           />
         ) : (
           <>
-            <NavLink label="지도" href="/csp" active={pathname === "/csp"} onClick={router.push} />
+            <NavLink label="가용영역" href="/csp" active={pathname === "/csp"} onClick={router.push} />
             <NavLink
               label="클러스터 현황"
               href="/csp/infra"
