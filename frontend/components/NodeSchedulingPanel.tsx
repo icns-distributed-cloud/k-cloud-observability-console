@@ -1,7 +1,7 @@
 "use client";
 import Card from "@/components/Card";
 import SchedulingTimeline from "@/components/SchedulingTimeline";
-import { computeDominanceBands, buildTimeAxisTicks } from "@/lib/schedulingBands";
+import { buildTimeAxisTicks } from "@/lib/schedulingBands";
 import { formatTick } from "@/lib/timeline";
 import { generateMetricSeries, findMetricProfile } from "@/lib/metrics";
 import { COLOR_PREFILL, COLOR_DECODE, COLOR_KV, COLOR_MODEL } from "@/lib/schedulingColors";
@@ -36,12 +36,6 @@ export default function NodeSchedulingPanel({ node }: NodeSchedulingPanelProps) 
     const prefillLine = timelineSeries("prefill_backlog");
     const decodeLine = timelineSeries("decode_backlog");
 
-    const bands = computeDominanceBands(
-        prefillLine,
-        decodeLine,
-        (n) => `Prefill ${String.fromCharCode(64 + n)}`,
-        (n) => `D${n}`
-    );
     // 2분짜리 짧은 창이라 분 단위(HH:mm)만 찍으면 눈금 여러 개가 같은 라벨로
     // 겹쳐 보인다 - AllocationTimeline이 짧은 창에서 초 단위를 켜는 것과 같은 이유.
     const ticks = buildTimeAxisTicks(toSec - TIMELINE_SPAN_SEC, toSec, (ms) => formatTick(ms, true), 6);
@@ -57,7 +51,6 @@ export default function NodeSchedulingPanel({ node }: NodeSchedulingPanelProps) 
                 modelDram={{ label: "Model", color: COLOR_MODEL, values: timelineSeries("model_dram") }}
                 kvDisk={{ label: "KV", color: COLOR_KV, values: timelineSeries("kv_disk") }}
                 modelDisk={{ label: "Model", color: COLOR_MODEL, values: timelineSeries("model_disk") }}
-                bands={bands}
                 ticks={ticks}
             />
         </Card>

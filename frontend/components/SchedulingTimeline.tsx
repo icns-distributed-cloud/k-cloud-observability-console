@@ -1,5 +1,3 @@
-import type { DominanceBand } from "@/lib/schedulingBands";
-
 export interface TimelineSeriesSpec {
     label: string;
     color: string;
@@ -15,8 +13,6 @@ interface SchedulingTimelineProps {
     modelDram: TimelineSeriesSpec;
     kvDisk: TimelineSeriesSpec;
     modelDisk: TimelineSeriesSpec;
-    /** prefill/decode 두 시리즈로 미리 계산한 우세 구간 라벨 - 1·2행에만 표시 */
-    bands: DominanceBand[];
     ticks: { pos: number; label: string }[];
 }
 
@@ -24,6 +20,13 @@ const LABEL_W = 116;
 const GUTTER = 34;
 const CHART_H = 76;
 const MONO = "'IBM Plex Mono', monospace";
+
+const ROW_BOX: React.CSSProperties = {
+    border: "1px solid var(--line)",
+    borderRadius: 10,
+    padding: "10px 14px",
+    marginBottom: 10,
+};
 
 export default function SchedulingTimeline({
     prefill,
@@ -34,40 +37,32 @@ export default function SchedulingTimeline({
     modelDram,
     kvDisk,
     modelDisk,
-    bands,
     ticks,
 }: SchedulingTimelineProps) {
     return (
         <div>
             <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>스케줄링 타임라인</div>
 
-            {/* 범례 */}
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 20, marginBottom: 14, fontSize: 12.5 }}>
-                <LegendGroup title="워크로드" items={[prefill, decode]} />
-                <LegendGroup title="리소스" items={[kvVram, modelVram]} />
-                <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--sub)" }}>
-                    <span style={{ width: 16, borderTop: "1.5px dashed var(--alert-warning)" }} />
-                    임계치
-                </div>
+            {/* 워크로드(Prefill/Decode) 그룹 - Normalized Backlog Queue, SM Utilization */}
+            <LegendGroup title="워크로드" items={[prefill, decode]} />
+            <div style={ROW_BOX}>
+                <TimelineChartRow rowLabel={["Normalized", "Backlog Queue"]} seriesA={prefill} seriesB={decode} />
+            </div>
+            <div style={{ ...ROW_BOX, marginBottom: 18 }}>
+                <TimelineChartRow rowLabel={["SM", "Utilization"]} seriesA={prefill} seriesB={decode} />
             </div>
 
-            <TimelineChartRow
-                rowLabel={["Normalized", "Backlog Queue"]}
-                seriesA={prefill}
-                seriesB={decode}
-                thresholdPct={70}
-                bands={bands}
-            />
-            <TimelineChartRow
-                rowLabel={["SM", "Utilization"]}
-                seriesA={prefill}
-                seriesB={decode}
-                thresholdPct={70}
-                bands={bands}
-            />
-            <TimelineChartRow rowLabel={["VRAM", "Usage"]} seriesA={kvVram} seriesB={modelVram} thresholdPct={85} />
-            <TimelineChartRow rowLabel={["DRAM", "Usage"]} seriesA={kvDram} seriesB={modelDram} thresholdPct={85} />
-            <TimelineChartRow rowLabel={["Disk", "Usage"]} seriesA={kvDisk} seriesB={modelDisk} thresholdPct={90} />
+            {/* 리소스(KV/Model) 그룹 - VRAM/DRAM/Disk Usage */}
+            <LegendGroup title="리소스" items={[kvVram, modelVram]} />
+            <div style={ROW_BOX}>
+                <TimelineChartRow rowLabel={["VRAM", "Usage"]} seriesA={kvVram} seriesB={modelVram} />
+            </div>
+            <div style={ROW_BOX}>
+                <TimelineChartRow rowLabel={["DRAM", "Usage"]} seriesA={kvDram} seriesB={modelDram} />
+            </div>
+            <div style={ROW_BOX}>
+                <TimelineChartRow rowLabel={["Disk", "Usage"]} seriesA={kvDisk} seriesB={modelDisk} />
+            </div>
 
             {/* 공유 시간축 눈금 */}
             <div style={{ display: "flex", marginTop: 4 }}>
@@ -98,7 +93,7 @@ export default function SchedulingTimeline({
 
 function LegendGroup({ title, items }: { title: string; items: TimelineSeriesSpec[] }) {
     return (
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, fontSize: 12.5 }}>
             <span style={{ color: "var(--sub)", fontWeight: 700 }}>{title}</span>
             {items.map((it) => (
                 <span key={it.label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
@@ -130,20 +125,16 @@ interface TimelineChartRowProps {
     rowLabel: [string, string];
     seriesA: TimelineSeriesSpec;
     seriesB: TimelineSeriesSpec;
-    thresholdPct?: number;
-    /** 1·2행에만 준다 - 우세 구간 라벨(D1/Prefill A 등). 두 시리즈 자체는 이 prop이
-     *  있든 없든 항상 같이 그려진다(한쪽만 보이는 렌더링 모드는 없음). */
-    bands?: DominanceBand[];
 }
 
-function TimelineChartRow({ rowLabel, seriesA, seriesB, thresholdPct, bands }: TimelineChartRowProps) {
+function TimelineChartRow({ rowLabel, seriesA, seriesB }: TimelineChartRowProps) {
     const a = buildAreaPath(seriesA.values);
     const b = buildAreaPath(seriesB.values);
     const gidA = `sched-row-${seriesA.label.replace(/\W/g, "")}-a`;
     const gidB = `sched-row-${seriesB.label.replace(/\W/g, "")}-b`;
 
     return (
-        <div style={{ display: "flex", marginBottom: 14 }}>
+        <div style={{ display: "flex" }}>
             <div
                 style={{
                     width: LABEL_W,
@@ -190,18 +181,6 @@ function TimelineChartRow({ rowLabel, seriesA, seriesB, thresholdPct, bands }: T
                     </div>
                 ))}
 
-                {thresholdPct !== undefined && (
-                    <div
-                        style={{
-                            position: "absolute",
-                            left: GUTTER,
-                            right: 0,
-                            top: `${100 - thresholdPct}%`,
-                            borderTop: "1.5px dashed var(--alert-warning)",
-                        }}
-                    />
-                )}
-
                 <div style={{ position: "absolute", top: 0, bottom: 0, left: GUTTER, right: 0 }}>
                     <svg
                         viewBox="0 0 100 100"
@@ -226,30 +205,6 @@ function TimelineChartRow({ rowLabel, seriesA, seriesB, thresholdPct, bands }: T
                         <path d={a.line} fill="none" stroke={seriesA.color} strokeWidth={1.6} vectorEffect="non-scaling-stroke" />
                         <path d={b.line} fill="none" stroke={seriesB.color} strokeWidth={1.6} vectorEffect="non-scaling-stroke" />
                     </svg>
-
-                    {bands &&
-                        bands.map((band, i) => (
-                            <div
-                                key={i}
-                                title={band.label}
-                                style={{
-                                    position: "absolute",
-                                    left: `${band.startFrac * 100}%`,
-                                    width: `${Math.max(0, band.endFrac - band.startFrac) * 100}%`,
-                                    top: 4,
-                                    fontSize: 10.5,
-                                    fontWeight: 700,
-                                    color: band.dominant === "a" ? seriesA.color : seriesB.color,
-                                    textAlign: "center",
-                                    overflow: "hidden",
-                                    whiteSpace: "nowrap",
-                                    textOverflow: "ellipsis",
-                                    pointerEvents: "none",
-                                }}
-                            >
-                                {band.label}
-                            </div>
-                        ))}
                 </div>
 
                 <button
