@@ -62,7 +62,7 @@
   font-size: 14px;
   color: var(--sub);
   margin-top: 6px;
-  font-family: 'IBM Plex Mono', monospace;
+  /* font-family: 'Pretendard', monospace; */
   font-weight: 700;
 }
 
@@ -75,7 +75,7 @@
   border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
   background: color-mix(in srgb, var(--accent) 10%, var(--panel));
   color: var(--accent);
-  font-family: system-ui, sans-serif;
+  /* font-family: system-ui, sans-serif; */
   font-size: 12px;
   white-space: nowrap;
   cursor: pointer;

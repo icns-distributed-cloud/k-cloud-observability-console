@@ -108,7 +108,7 @@ export default function ClusterPage({ params }: { params: Promise<{ id: string }
           textTransform: "uppercase",
           color: "var(--sub)",
           marginBottom: 12,
-          fontFamily: "'IBM Plex Mono', monospace",
+          fontFamily: "'Pretendard', monospace",
         }}
       >
         노드

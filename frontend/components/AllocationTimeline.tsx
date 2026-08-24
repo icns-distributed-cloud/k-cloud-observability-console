@@ -151,7 +151,7 @@ export default function AllocationTimeline({ data, onSelectJob, onSelectNode, sh
                           borderRadius: 6,
                           fontSize: 15,
                           fontWeight: 700,
-                          fontFamily: "'IBM Plex Mono', monospace",
+                          fontFamily: "'Pretendard', monospace",
                           whiteSpace: "nowrap",
                         } as CSSProperties}
                       >
@@ -323,7 +323,7 @@ export default function AllocationTimeline({ data, onSelectJob, onSelectNode, sh
                       fontSize: 13,
                       fontWeight: 600,
                       color: "var(--sub)",
-                      fontFamily: "'IBM Plex Mono', monospace",
+                      fontFamily: "'Pretendard', monospace",
                     }}
                   >
                     {t.label}

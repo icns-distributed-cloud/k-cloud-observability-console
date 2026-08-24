@@ -75,7 +75,7 @@ function RoleCard({
           fontWeight: 700,
           letterSpacing: "0.08em",
           color: "var(--accent)",
-          fontFamily: "'IBM Plex Mono', monospace",
+          fontFamily: "'Pretendard', monospace",
           marginBottom: 10,
         }}
       >

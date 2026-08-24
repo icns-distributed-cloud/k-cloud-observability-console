@@ -13,7 +13,7 @@
 }
 
 .value {
-  font-family: 'IBM Plex Mono', monospace;
+  /* font-family: 'Pretendard', monospace; */
 }
 
 .svg {
@@ -28,5 +28,5 @@
   height: 64px;
   font-size: 30px;
   font-weight: 700;
-  font-family: 'IBM Plex Mono', monospace;
+  /* font-family: 'Pretendard', monospace; */
 }

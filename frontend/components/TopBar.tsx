@@ -42,7 +42,7 @@ export default function TopBar() {
             style={{
               fontSize: 14,
               color: "var(--sub)",
-              fontFamily: "'IBM Plex Mono', monospace",
+              fontFamily: "'Pretendard', monospace",
               letterSpacing: "0.04em",
             }}
           >
@@ -90,7 +90,7 @@ export default function TopBar() {
             marginLeft: "auto",
             fontSize: 12.5,
             color: "var(--sub)",
-            fontFamily: "'IBM Plex Mono', monospace",
+            fontFamily: "'Pretendard', monospace",
           }}
         >
           U-{CURRENT_USER_ID}

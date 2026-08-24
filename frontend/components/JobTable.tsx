@@ -132,18 +132,18 @@ export default function JobTable({ userId, showUser, showStop, onSelect, onCount
                             background: "var(--panel-2)",
                         }}
                     >
-                        <Head w={W.id}>JOB ID</Head>
-                        {showUser && <Head w={W.user}>USER</Head>}
-                        <Head w={W.model}>MODEL</Head>
+                        <Head w={W.id}>작업 ID</Head>
+                        {showUser && <Head w={W.user}>사용자 ID</Head>}
+                        <Head w={W.model}>모델명</Head>
                         <Head w={W.status} align="center">
-                            STATUS
+                            상태
                         </Head>
-                        <Head>PROGRESS</Head>
-                        <Head w={W.elapsed}>ELAPSED</Head>
-                        <Head w={W.resource}>RESOURCE</Head>
-                        <Head w={W.nodes}>NODES</Head>
+                        <Head>진행률</Head>
+                        <Head w={W.elapsed}>경과 시간</Head>
+                        <Head w={W.resource}>자원</Head>
+                        <Head w={W.nodes}>노드</Head>
                         <Head w={W.cost} align="right">
-                            COST
+                            비용
                         </Head>
                         {showStop && <Head w={W.action}>{null}</Head>}
                     </div>
@@ -176,7 +176,7 @@ export default function JobTable({ userId, showUser, showStop, onSelect, onCount
                                         flexShrink: 0,
                                         fontSize: 14,
                                         fontWeight: 700,
-                                        fontFamily: "'IBM Plex Mono', monospace",
+                                        fontFamily: "'Pretendard', monospace",
                                     }}
                                 >
                                     J-{j.id}
@@ -189,7 +189,7 @@ export default function JobTable({ userId, showUser, showStop, onSelect, onCount
                                             flexShrink: 0,
                                             fontSize: 12.5,
                                             color: "var(--sub)",
-                                            fontFamily: "'IBM Plex Mono', monospace",
+                                            fontFamily: "'Pretendard', monospace",
                                         }}
                                     >
                                         U-{j.user_id}
@@ -271,7 +271,7 @@ export default function JobTable({ userId, showUser, showStop, onSelect, onCount
                                                 style={{
                                                     fontSize: 12.5,
                                                     color: "var(--sub)",
-                                                    fontFamily: "'IBM Plex Mono', monospace",
+                                                    fontFamily: "'Pretendard', monospace",
                                                     flexShrink: 0,
                                                     width: 38,
                                                     textAlign: "right",
@@ -289,7 +289,7 @@ export default function JobTable({ userId, showUser, showStop, onSelect, onCount
                                         flexShrink: 0,
                                         fontSize: 12.5,
                                         color: "var(--sub)",
-                                        fontFamily: "'IBM Plex Mono', monospace",
+                                        fontFamily: "'Pretendard', monospace",
                                     }}
                                 >
                                     {nowSec === null ? "" : elapsedLabel(j, nowSec * 1000)}
@@ -301,7 +301,7 @@ export default function JobTable({ userId, showUser, showStop, onSelect, onCount
                                         flexShrink: 0,
                                         fontSize: 12.5,
                                         color: "var(--sub)",
-                                        fontFamily: "'IBM Plex Mono', monospace",
+                                        fontFamily: "'Pretendard', monospace",
                                     }}
                                 >
                                     {mix || "—"}
@@ -323,7 +323,7 @@ export default function JobTable({ userId, showUser, showStop, onSelect, onCount
                                                 style={{
                                                     fontSize: 12,
                                                     fontWeight: 600,
-                                                    fontFamily: "'IBM Plex Mono', monospace",
+                                                    fontFamily: "'Pretendard', monospace",
                                                     background: "var(--panel-2)",
                                                     border: "1px solid var(--line)",
                                                     borderRadius: 5,
@@ -346,7 +346,7 @@ export default function JobTable({ userId, showUser, showStop, onSelect, onCount
                                         flexShrink: 0,
                                         textAlign: "right",
                                         fontSize: 13,
-                                        fontFamily: "'IBM Plex Mono', monospace",
+                                        fontFamily: "'Pretendard', monospace",
                                     }}
                                 >
                                     {/* 온프레미스(단가 0)나 Tier 미지정 작업은 인프라 화면과 같이 "—" */}
@@ -401,7 +401,7 @@ export default function JobTable({ userId, showUser, showStop, onSelect, onCount
                     <PagerButton onClick={goPrev} disabled={pageIndex === 0}>
                         이전 페이지
                     </PagerButton>
-                    <span style={{ fontSize: 12.5, color: "var(--sub)", fontFamily: "'IBM Plex Mono', monospace" }}>
+                    <span style={{ fontSize: 12.5, color: "var(--sub)", fontFamily: "'Pretendard', monospace" }}>
                         {pageIndex + 1}
                     </span>
                     <PagerButton onClick={goNext} disabled={!hasMore}>
@@ -463,7 +463,7 @@ function Head({
                 fontWeight: 700,
                 letterSpacing: "0.05em",
                 color: "var(--sub)",
-                fontFamily: "'IBM Plex Mono', monospace",
+                fontFamily: "'Pretendard', monospace",
             }}
         >
             {children}

@@ -157,7 +157,7 @@ export default function ModelGraph({ layers, edges }: ModelGraphProps) {
                     style={{
                       fontSize: 10.5,
                       color: "var(--sub)",
-                      fontFamily: "'IBM Plex Mono', monospace",
+                      fontFamily: "'Pretendard', monospace",
                     }}
                   >
                     {Number(l.gflops)} GFLOPs · {CHARACTERISTIC_LABELS[l.characteristic] ?? l.characteristic}
@@ -166,7 +166,7 @@ export default function ModelGraph({ layers, edges }: ModelGraphProps) {
                     style={{
                       fontSize: 10.5,
                       color: "var(--sub)",
-                      fontFamily: "'IBM Plex Mono', monospace",
+                      fontFamily: "'Pretendard', monospace",
                       marginTop: 2,
                     }}
                   >

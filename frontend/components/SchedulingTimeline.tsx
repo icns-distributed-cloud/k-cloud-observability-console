@@ -19,7 +19,7 @@ interface SchedulingTimelineProps {
 const LABEL_W = 116;
 const GUTTER = 34;
 const CHART_H = 76;
-const MONO = "'IBM Plex Mono', monospace";
+const MONO = "'Pretendard', monospace";
 
 const ROW_BOX: React.CSSProperties = {
     border: "1px solid var(--line)",

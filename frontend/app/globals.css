@@ -1,3 +1,5 @@
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css");
+
 :root {
   /* 기본 */
   --bg: #F7FAF8;
@@ -24,10 +26,7 @@
   --job-train: #0E8F5C;
   --job-infer: #C2620A;
 
-  /* 작업 상태 - 원래는 실행중(초록)을 기준으로 대기중/마무리중을 밝기만 다른 초록
-     계열로 뒀는데, 단계가 서로 비슷해 보인다는 피드백을 받고 준비중=노랑,
-     마무리중=보라로 서로 다른 색상을 쓰기로 했다. 완료는 생애주기 진행이 아니라
-     "끝"이라 무채색으로 남겨두고, 실패는 별도 빨강. */
+  /* 작업 상태 */
   --job-status-queued: #BEF0D4;
   --job-status-provisioning: #EAB308;
   --job-status-running: #0E8F5C;
@@ -54,16 +53,19 @@
   --new-job-glow: rgba(225, 29, 72, 0.3);
 }
 
-* {
+*, *::before, *::after,
+button, input, select, textarea {
   box-sizing: border-box;
+  font-family: "Pretendard Variable", Pretendard, system-ui, -apple-system, sans-serif;
 }
 
 body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
-  font-family: system-ui, sans-serif;
-  font-size: 18px;
+  font-family: "Pretendard Variable", Pretendard, system-ui, -apple-system, sans-serif;
+  font-size: 22px;
   font-weight: 650;
   line-height: 1.7;
+  zoom: 1.1;
 }

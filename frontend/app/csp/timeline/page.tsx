@@ -669,7 +669,7 @@ function PredictionPanel({ prediction }: { prediction: PredictionStats }) {
             style={{
               fontSize: 16,
               fontWeight: 700,
-              fontFamily: "'IBM Plex Mono', monospace",
+              fontFamily: "'Pretendard', monospace",
               color: PREDICT_COLOR,
             }}
           >

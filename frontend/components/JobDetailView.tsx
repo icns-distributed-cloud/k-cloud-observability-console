@@ -59,7 +59,7 @@ const SECTION_LABEL: React.CSSProperties = {
     textTransform: "uppercase",
     color: "var(--sub)",
     marginBottom: 12,
-    fontFamily: "'IBM Plex Mono', monospace",
+    fontFamily: "'Pretendard', monospace",
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -407,7 +407,7 @@ export default function JobDetailView({ jobId, breadcrumbPrefix }: JobDetailView
                                             marginBottom: n.accelerators.length > 0 ? 12 : 0,
                                         }}
                                     >
-                                        <span style={{ fontWeight: 700, fontFamily: "'IBM Plex Mono', monospace" }}>
+                                        <span style={{ fontWeight: 700, fontFamily: "'Pretendard', monospace" }}>
                                             {n.name}
                                         </span>
                                         <span style={{ fontSize: 12, color: "var(--sub)" }}>
@@ -431,7 +431,7 @@ export default function JobDetailView({ jobId, breadcrumbPrefix }: JobDetailView
                                                         {a.model_name}
                                                         {a.count > 1 ? ` ×${a.count}` : ""}
                                                     </div>
-                                                    <div style={{ color: "var(--sub)", fontFamily: "'IBM Plex Mono', monospace" }}>
+                                                    <div style={{ color: "var(--sub)", fontFamily: "'Pretendard', monospace" }}>
                                                         {a.tflops} TFLOPS · {a.memory_gb}GB {a.memory_type ?? ""} · {a.tdp_w}W
                                                     </div>
                                                 </div>
@@ -473,7 +473,7 @@ export default function JobDetailView({ jobId, breadcrumbPrefix }: JobDetailView
                                         fontSize: 12.5,
                                     }}
                                 >
-                                    <span style={{ color: "var(--sub)", fontFamily: "'IBM Plex Mono', monospace", minWidth: 74 }}>
+                                    <span style={{ color: "var(--sub)", fontFamily: "'Pretendard', monospace", minWidth: 74 }}>
                                         {formatEventTime(e.occurred_at)}
                                     </span>
                                     <span style={{ fontWeight: 700, color, minWidth: 84 }}>
@@ -508,13 +508,13 @@ export default function JobDetailView({ jobId, breadcrumbPrefix }: JobDetailView
                                 <div style={{ display: "flex", gap: 32, fontSize: 12.5 }}>
                                     <div>
                                         <div style={{ color: "var(--sub)", marginBottom: 4 }}>균등 분배</div>
-                                        <div style={{ fontFamily: "'IBM Plex Mono', monospace" }}>
+                                        <div style={{ fontFamily: "'Pretendard', monospace" }}>
                                             추정 makespan {formatMakespan(kqv.kqv_even_makespan_sec)}
                                         </div>
                                     </div>
                                     <div>
                                         <div style={{ color: "var(--sub)", marginBottom: 4 }}>KQV 최적화</div>
-                                        <div style={{ fontFamily: "'IBM Plex Mono', monospace", color }}>
+                                        <div style={{ fontFamily: "'Pretendard', monospace", color }}>
                                             추정 makespan {formatMakespan(kqv.kqv_opt_makespan_sec)}
                                         </div>
                                     </div>
@@ -554,7 +554,7 @@ export default function JobDetailView({ jobId, breadcrumbPrefix }: JobDetailView
                                         >
                                             <span style={{ fontWeight: 700 }}>{t.tier_name}</span>
                                             <span
-                                                style={{ color: "var(--sub)", fontFamily: "'IBM Plex Mono', monospace" }}
+                                                style={{ color: "var(--sub)", fontFamily: "'Pretendard', monospace" }}
                                             >
                                                 {Number(t.fill_pct).toFixed(0)}% · {Number(t.latency_ms)}ms
                                             </span>
@@ -592,7 +592,7 @@ export default function JobDetailView({ jobId, breadcrumbPrefix }: JobDetailView
                                         <span
                                             style={{
                                                 color: "var(--sub)",
-                                                fontFamily: "'IBM Plex Mono', monospace",
+                                                fontFamily: "'Pretendard', monospace",
                                                 display: "flex",
                                                 flexWrap: "wrap",
                                                 gap: 6,
@@ -610,7 +610,7 @@ export default function JobDetailView({ jobId, breadcrumbPrefix }: JobDetailView
                                                 style={{
                                                     marginLeft: "auto",
                                                     color: "var(--positive)",
-                                                    fontFamily: "'IBM Plex Mono', monospace",
+                                                    fontFamily: "'Pretendard', monospace",
                                                     flexShrink: 0,
                                                 }}
                                             >
@@ -759,7 +759,7 @@ function SectionHead({ title, desc }: { title: string; desc?: string }) {
                     letterSpacing: "0.08em",
                     textTransform: "uppercase",
                     color: "var(--sub)",
-                    fontFamily: "'IBM Plex Mono', monospace",
+                    fontFamily: "'Pretendard', monospace",
                 }}
             >
                 {title}

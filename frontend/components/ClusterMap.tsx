@@ -289,7 +289,7 @@ export default function ClusterMap({ regions, links, onSelectCluster }: ClusterM
                       fill="#FFFFFF"
                       fontSize={12}
                       fontWeight={800}
-                      fontFamily="'IBM Plex Mono', monospace"
+                      fontFamily="'Pretendard', monospace"
                       style={{ pointerEvents: "none" }}
                     >
                       {r.clusters.length}
@@ -358,7 +358,7 @@ export default function ClusterMap({ regions, links, onSelectCluster }: ClusterM
               padding: "4px 6px 8px",
               fontSize: 11.5,
               color: "var(--sub)",
-              fontFamily: "'IBM Plex Mono', monospace",
+              fontFamily: "'Pretendard', monospace",
             }}
           >
             {picker.region.name}
@@ -460,7 +460,7 @@ const badgeStyle: React.CSSProperties = {
   letterSpacing: ".08em",
   textTransform: "uppercase",
   color: "var(--sub)",
-  fontFamily: "'IBM Plex Mono', monospace",
+  fontFamily: "'Pretendard', monospace",
   background: "var(--overlay)",
   padding: "5px 10px",
   borderRadius: 8,
