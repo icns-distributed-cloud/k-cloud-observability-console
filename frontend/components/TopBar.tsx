@@ -2,6 +2,7 @@
 import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
 import { CURRENT_USER_ID } from "@/lib/auth";
+import AlertBell from "@/components/AlertBell";
 
 export default function TopBar() {
   const router = useRouter();
@@ -96,6 +97,8 @@ export default function TopBar() {
           U-{CURRENT_USER_ID}
         </div>
       )}
+
+      {!isCsc && <AlertBell />}
     </header>
   );
 }
