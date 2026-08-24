@@ -294,9 +294,16 @@ class ModelLayerEdgeItem(BaseModel):
     to_layer_id: int
 
 
+class ModelMemoryProfileItem(BaseModel):
+    peak_mb: Decimal
+    trough_mb: Decimal
+    reserved_mb: Decimal
+
+
 class ModelLayersResponse(BaseModel):
     layers: list[ModelLayerItem]
     edges: list[ModelLayerEdgeItem]
+    memory_profile: Optional[ModelMemoryProfileItem]
 
 
 # ---------- GET /api/v1/nodes/{node_id} ----------
