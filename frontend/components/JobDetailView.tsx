@@ -6,6 +6,7 @@ import Card from "@/components/Card";
 import Tabs from "@/components/Tabs";
 import ProgressBar from "@/components/ProgressBar";
 import MetricChart from "@/components/MetricChart";
+import GpuMemoryChart from "@/components/GpuMemoryChart";
 import ModelGraph from "@/components/ModelGraph";
 import Sparkline from "@/components/Sparkline";
 import { averageMetricSeries } from "@/lib/metrics";
@@ -650,7 +651,22 @@ export default function JobDetailView({ jobId, breadcrumbPrefix }: JobDetailView
                         </div>
                     )}
 
-                    {profilingMetrics.featured && now && (
+                    {/* 학습은 "성능 프로파일"(처리량) 그래프 대신 GPU 메모리 사용량 예측
+                        그래프를 보여준다 - 실제 실행 데이터가 아니라 모델 구조 기반
+                        정적 예측치라 job 진행률(now)과 무관하고, 그래서 여기 프로파일링
+                        탭(실행 전에도 알 수 있는 정보)에 둔다. 추론은 기존 그대로. */}
+                    {job.type === "train" && modelLayers?.memory_profile && (
+                        <Card>
+                            <GpuMemoryChart
+                                peakMb={Number(modelLayers.memory_profile.peak_mb)}
+                                troughMb={Number(modelLayers.memory_profile.trough_mb)}
+                                reservedMb={Number(modelLayers.memory_profile.reserved_mb)}
+                                seed={job.model_id}
+                            />
+                        </Card>
+                    )}
+
+                    {job.type === "infer" && profilingMetrics.featured && now && (
                         <Card>
                             <MetricChart
                                 title={`${TYPE_LABELS[job.type] ?? job.type} 성능 프로파일`}
@@ -662,13 +678,11 @@ export default function JobDetailView({ jobId, breadcrumbPrefix }: JobDetailView
                                 }
                                 unit={profilingMetrics.featured.unit}
                                 values={profilingLiveSeries ?? metricSeries(profilingMetrics.featured, progress, 30)}
-                                progress={job.type === "infer" ? 1 : progress}
+                                progress={1}
                                 color={color}
                                 footerLeft={
                                     profilingMetrics.counter
-                                        ? job.type === "infer"
-                                            ? `${profilingMetrics.counter.label} ${cumulativeCount(Number(profilingMetrics.featured.target_value ?? 0), job, now)}`
-                                            : `${profilingMetrics.counter.label} ${Math.round(progress * profilingMetrics.counter.total_count!)} / ${profilingMetrics.counter.total_count}`
+                                        ? `${profilingMetrics.counter.label} ${cumulativeCount(Number(profilingMetrics.featured.target_value ?? 0), job, now)}`
                                         : undefined
                                 }
                             />

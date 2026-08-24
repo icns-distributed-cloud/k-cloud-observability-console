@@ -30,6 +30,12 @@ def get_model_layers(db: Session, model_id: int) -> schemas.ModelLayersResponse 
         else []
     )
 
+    memory_profile = (
+        db.query(models.ModelMemoryProfile)
+        .filter(models.ModelMemoryProfile.model_id == model_id)
+        .first()
+    )
+
     return schemas.ModelLayersResponse(
         layers=[
             schemas.ModelLayerItem(
@@ -49,4 +55,13 @@ def get_model_layers(db: Session, model_id: int) -> schemas.ModelLayersResponse 
             )
             for edge in edges
         ],
+        memory_profile=(
+            schemas.ModelMemoryProfileItem(
+                peak_mb=memory_profile.peak_mb,
+                trough_mb=memory_profile.trough_mb,
+                reserved_mb=memory_profile.reserved_mb,
+            )
+            if memory_profile is not None
+            else None
+        ),
     )

@@ -288,9 +288,18 @@ export interface ModelLayerEdgeItem {
     to_layer_id: number
 }
 
+/** PyTorch Profiler Memory View 참고한 GPU 메모리 사용량 예측치 - 모델 구조 기반
+ *  정적 값(실행 로그 아님), 학습 job 프로파일링 탭 전용 */
+export interface ModelMemoryProfile {
+    peak_mb: string
+    trough_mb: string
+    reserved_mb: string
+}
+
 export interface ModelLayersResponse {
     layers: ModelLayerItem[]
     edges: ModelLayerEdgeItem[]
+    memory_profile: ModelMemoryProfile | null
 }
 
 export interface DatasetItem {

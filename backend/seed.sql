@@ -17,7 +17,7 @@ TRUNCATE
   provider, region, cluster, node, accelerator_model, accelerator,
   cluster_metric_profile, node_metric_profile, accelerator_metric_profile,
   cluster_distributed_link, node_alert,
-  model, model_layer, model_layer_edge, dataset,
+  model, model_layer, model_layer_edge, model_memory_profile, dataset,
   "user", job, assignment, event,
   job_metric_profile, job_cache_profile, job_cache_tier,
   hyperparam_adjustment, job_kqv_benchmark, reallocation,
@@ -490,6 +490,25 @@ INSERT INTO model (name, type) VALUES
   ('Stable-Diffusion-v2', 'cv'),
   ('Whisper-base', 'audio'),
   ('CLIP-ViT', 'multimodal');
+
+-- GPU 메모리 사용량 예측치 (PyTorch Profiler Memory View 참고) - 학습 job 상세의
+-- 프로파일링 탭 전용, 실행 로그가 아니라 모델 구조만 보고 뽑은 정적인 값이라
+-- job이 아니라 model에 붙는다. reserved_mb는 항상 peak_mb보다 여유 있게 커서
+-- (실제 CUDA 캐싱 allocator가 예약해두는 풀이 실사용량보다 넉넉한 것과 동일한
+-- 이유) Reserved 수평선이 Allocated 돔의 정점보다 항상 위에 그려진다.
+INSERT INTO model_memory_profile (model_id, peak_mb, trough_mb, reserved_mb) VALUES
+  (1, 4500, 2200, 5500),    -- BERT-base
+  (2, 5000, 2400, 6100),    -- GPT-2
+  (3, 9000, 4200, 10600),   -- RoBERTa-large
+  (4, 6000, 2800, 7200),    -- T5-base
+  (5, 42000, 24000, 48000), -- LLaMA-7B
+  (6, 3200, 1500, 3900),    -- ResNet-50
+  (7, 4800, 2300, 5700),    -- ViT-Base
+  (8, 3600, 1700, 4300),    -- YOLOv8
+  (9, 4000, 1900, 4800),    -- EfficientNet-B4
+  (10, 14000, 7000, 16500), -- Stable-Diffusion-v2
+  (11, 3800, 1800, 4500),   -- Whisper-base
+  (12, 5500, 2600, 6600);   -- CLIP-ViT
 
 -- id ranges (RESTART IDENTITY above means this is exact): 1 BERT-base 1-11,
 -- 2 GPT-2 12-23, 3 RoBERTa-large 24-32, 4 T5-base 33-47, 5 LLaMA-7B 48-57,
