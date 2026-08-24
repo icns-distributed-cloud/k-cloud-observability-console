@@ -162,9 +162,6 @@ export default function GpuMemoryChart({ peakMb, troughMb, reservedMb, seed }: G
                 </span>
             </div>
 
-            <div style={{ textAlign: "center", fontSize: 11.5, color: "var(--sub)", marginTop: 8 }}>
-                실제 실행 로그가 아니라 모델 구조 기반 예측치입니다
-            </div>
         </div>
     );
 }
