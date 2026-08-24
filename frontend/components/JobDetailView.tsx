@@ -30,10 +30,10 @@ import {
     trainingProgress,
 } from "@/lib/jobMetrics";
 import {
+    chainAdjustments,
     formatMakespan,
-    formatOffsetTime,
-    sortAdjustments,
     summarizeReallocations,
+    visibleAdjustments,
 } from "@/lib/jobOptimize";
 import { useTime } from "@/lib/TimeContext";
 import type {
@@ -161,6 +161,9 @@ export default function JobDetailView({ jobId, breadcrumbPrefix, showStop }: Job
     const overviewLiveSeries = liveSeriesFor(overview.featured);
     const profilingLiveSeries = liveSeriesFor(profilingMetrics.featured);
     const realloc = summarizeReallocations(reallocs);
+    // 백엔드가 DART 조정 체인을 job 생성 시점에 전부 미리 시드해두므로, 지금까지
+    // 지난 것만 걸러서 보여줘야 실제로 하나씩 이어지는 것처럼 보인다.
+    const visibleAdj = now !== null ? visibleAdjustments(adjustments, job, now) : [];
 
     // 배정 노드의 지표를 metric_type별로 묶는다. 분산 작업이면 노드가 여러 개라
     // 지점별 평균을 낸다 (스케줄러 페이지가 학습/추론 풀 평균 낼 때 쓰는 것과 같은 함수).
@@ -524,11 +527,14 @@ export default function JobDetailView({ jobId, breadcrumbPrefix, showStop }: Job
 
                     {adjustments.length > 0 && (
                         <>
-                            <SectionHead title="하이퍼파라미터 (DART)" desc="보상 신호 기반 조정 이력" />
+                            <SectionHead
+                                title="하이퍼파라미터 (DART)"
+                                desc="보상 신호 기반 조정 이력"
+                            />
                             <Card>
-                                {sortAdjustments(adjustments).map((a, i) => (
+                                {chainAdjustments(adjustments, visibleAdj).map((c, i) => (
                                     <div
-                                        key={a.id}
+                                        key={c.paramName}
                                         style={{
                                             display: "flex",
                                             alignItems: "center",
@@ -538,28 +544,37 @@ export default function JobDetailView({ jobId, breadcrumbPrefix, showStop }: Job
                                             fontSize: 12.5,
                                         }}
                                     >
+                                        <span style={{ fontWeight: 700, minWidth: 130, flexShrink: 0 }}>
+                                            {c.paramName}
+                                        </span>
                                         <span
                                             style={{
                                                 color: "var(--sub)",
                                                 fontFamily: "'IBM Plex Mono', monospace",
-                                                minWidth: 64,
+                                                display: "flex",
+                                                flexWrap: "wrap",
+                                                gap: 6,
                                             }}
                                         >
-                                            {formatOffsetTime(job.started_at, a.t_offset_sec)}
+                                            {c.values.map((v, vi) => (
+                                                <span key={vi}>
+                                                    {vi > 0 && "→ "}
+                                                    {v}
+                                                </span>
+                                            ))}
                                         </span>
-                                        <span style={{ fontWeight: 700, minWidth: 90 }}>{a.param_name}</span>
-                                        <span style={{ color: "var(--sub)" }}>
-                                            {a.from_value} → {a.to_value}
-                                        </span>
-                                        <span
-                                            style={{
-                                                marginLeft: "auto",
-                                                color: "var(--positive)",
-                                                fontFamily: "'IBM Plex Mono', monospace",
-                                            }}
-                                        >
-                                            {a.reward}
-                                        </span>
+                                        {c.latestReward && (
+                                            <span
+                                                style={{
+                                                    marginLeft: "auto",
+                                                    color: "var(--positive)",
+                                                    fontFamily: "'IBM Plex Mono', monospace",
+                                                    flexShrink: 0,
+                                                }}
+                                            >
+                                                {c.latestReward}
+                                            </span>
+                                        )}
                                     </div>
                                 ))}
                             </Card>
