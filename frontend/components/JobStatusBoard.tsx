@@ -18,9 +18,14 @@ const STAGE_HEIGHT = 560;
  *  CHIP_H를 바꾸면 이 값도 같이 봐야 한다. */
 const DONE_CAP = 12;
 const STATUSES: JobStatus[] = ["queued", "provisioning", "running", "finalizing", "done"];
-const CHIP_W = 78;
+/** 칩 폭 상한 - 열이 넓으면 이 이상으로는 안 키운다 */
+const CHIP_W_MAX = 78;
+/** 칩 폭 하한 - 여기까지 줄여도 안 들어가면 그때는 줄바꿈을 허용한다 */
+const CHIP_W_MIN = 52;
+/** 한 줄에 놓고 싶은 분산 노드 수. 3노드 job이 삼각형으로 접히지 않게 하는 기준값 */
+const ROW_TARGET = 3;
 const CHIP_H = 26;
-const LINK_W = 12;
+const LINK_W = 8;
 const ROW_GAP = 6;
 /** 열 제목이 차지하는 높이 - 칩은 이 아래에서부터 쌓인다 */
 const HEADER_H = 40;
@@ -138,12 +143,19 @@ export default function JobStatusBoard({ onSelect, onCountChange }: Props) {
 
   const colW = stageWidth / STATUSES.length;
   // 열 사이 간격을 넓게 벌려 그 자리에 긴 화살표를 놓는다
-  const GAP_X = 40;
+  const GAP_X = 24;
   const cardW = colW - GAP_X * 2;
   const columnX = (zi: number) => colW * (zi + 0.5);
+  /** 칩 폭을 고정하지 않고 열 폭에서 역산한다 - 고정 px로 두면 body의 zoom이나
+   *  창 크기에 따라 rowCap이 3에서 2로 떨어지면서 3노드 job이 2+1로 접히고,
+   *  아래 닫는 선 때문에 삼각형으로 보인다. */
+  const chipW = Math.max(
+    CHIP_W_MIN,
+    Math.min(CHIP_W_MAX, (cardW - (ROW_TARGET - 1) * LINK_W) / ROW_TARGET)
+  );
   /** 열 폭에 칩이 가로로 몇 개 들어가는지 (예전 ROW_CAP=2 상수를 대체).
    *  분산 job은 이 개수까지 한 줄에 놓고 넘치면 다음 줄로 접는다. */
-  const rowCap = Math.max(1, Math.floor((cardW + LINK_W) / (CHIP_W + LINK_W)));
+  const rowCap = Math.max(1, Math.floor((cardW + LINK_W) / (chipW + LINK_W)));
 
   const byStatus = new Map<JobStatus, JobSummary[]>(STATUSES.map((s) => [s, []]));
   for (const job of [...rendered].sort(byOldestFirst)) {
@@ -249,18 +261,18 @@ export default function JobStatusBoard({ onSelect, onCountChange }: Props) {
               // 한 줄에 rowCap개까지, 넘어가면 다음 줄로 접는다.
               // 마지막 줄에 자리가 덜 차면 가운데 정렬한다.
               const perRow = Math.min(pillCount, rowCap);
-              const groupWidth = perRow * CHIP_W + (perRow - 1) * LINK_W;
+              const groupWidth = perRow * chipW + (perRow - 1) * LINK_W;
               const groupHeight = pos.h;   // 레이아웃에서 계산한 값을 그대로 쓴다
               const centers: { x: number; y: number }[] = [];
               for (let i = 0; i < pillCount; i++) {
                 const row = Math.floor(i / rowCap);
                 const col = i % rowCap;
                 const itemsInRow = Math.min(rowCap, pillCount - row * rowCap);
-                const rowWidth = itemsInRow * CHIP_W + (itemsInRow - 1) * LINK_W;
+                const rowWidth = itemsInRow * chipW + (itemsInRow - 1) * LINK_W;
                 const rowLeft = (groupWidth - rowWidth) / 2;
-                const left = rowLeft + col * (CHIP_W + LINK_W);
+                const left = rowLeft + col * (chipW + LINK_W);
                 const top = row * (CHIP_H + ROW_GAP);
-                centers.push({ x: left + CHIP_W / 2, y: top + CHIP_H / 2 });
+                centers.push({ x: left + chipW / 2, y: top + CHIP_H / 2 });
               }
 
               const pill = (key: Key, title: string, left: number, top: number) => (
@@ -271,7 +283,7 @@ export default function JobStatusBoard({ onSelect, onCountChange }: Props) {
                     position: "absolute",
                     left,
                     top,
-                    width: CHIP_W,
+                    width: chipW,
                     height: CHIP_H,
                     borderRadius: 13,
                     background: JOB_COLORS[job.type],
@@ -344,7 +356,7 @@ export default function JobStatusBoard({ onSelect, onCountChange }: Props) {
                   ? `J-${job.id} · ${job.model_name} · ${node.node_name} (${i + 1}/${pillCount})`
                   : `J-${job.id} · ${job.model_name}`;
                 const c = centers[i];
-                pills.push(pill(`pill-${i}`, title, c.x - CHIP_W / 2, c.y - CHIP_H / 2));
+                pills.push(pill(`pill-${i}`, title, c.x - chipW / 2, c.y - CHIP_H / 2));
               }
 
               return (
@@ -388,7 +400,7 @@ export default function JobStatusBoard({ onSelect, onCountChange }: Props) {
                           opacity={0.6}
                         />
                       ))}
-                      {pillCount >= 3 && (
+                      {Math.ceil(pillCount / rowCap) > 1 && (
                         // 마지막 칩을 첫 칩으로 되돌려 닫는다 - 3개면 삼각형, 그 이상이면
                         // 마지막 줄 끝과 첫 줄 시작을 잇는 선 하나가 더 생겨서 전체가 하나의
                         // 닫힌 그룹으로 보인다.
