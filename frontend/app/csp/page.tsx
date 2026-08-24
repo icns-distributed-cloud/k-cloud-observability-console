@@ -49,7 +49,7 @@ export default function Home() {
             textTransform: "uppercase",
             color: "var(--sub)",
             marginBottom: 12,
-            fontFamily: "'IBM Plex Mono', monospace",
+            fontFamily: "'Pretendard', monospace",
           }}
         >
           자원 계층
@@ -81,7 +81,7 @@ export default function Home() {
                   style={{
                     fontSize: 11,
                     color: "var(--sub)",
-                    fontFamily: "'IBM Plex Mono', monospace",
+                    fontFamily: "'Pretendard', monospace",
                     marginBottom: 6,
                   }}
                 >
@@ -133,7 +133,7 @@ export default function Home() {
                         marginLeft: "auto",
                         fontSize: 11,
                         color: "var(--sub)",
-                        fontFamily: "'IBM Plex Mono', monospace",
+                        fontFamily: "'Pretendard', monospace",
                       }}
                     >
                       {c.node_count}노드

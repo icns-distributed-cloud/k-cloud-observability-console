@@ -16,7 +16,7 @@
   justify-content: center;
   font-size: 10px;
   font-weight: 700;
-  font-family: 'IBM Plex Mono', monospace;
+  /* font-family: 'Pretendard', monospace; */
   color: #FFFFFF;
   white-space: nowrap;
   /* 흰색 점만으로는 밝은 배경 위에서 거의 안 보였다 - 칩 색(초록/주황)과도, 밝은
@@ -61,7 +61,7 @@
 .hierarchyLabel {
   font-size: 11px;
   font-weight: 700;
-  font-family: 'IBM Plex Mono', monospace;
+  /* font-family: 'Pretendard', monospace; */
   letter-spacing: 0.04em;
   margin-bottom: 6px;
 }
@@ -120,7 +120,7 @@
   color: #fff;
   font-size: 10px;
   font-weight: 700;
-  font-family: 'IBM Plex Mono', monospace;
+  /* font-family: 'Pretendard', monospace; */
   white-space: nowrap;
   box-shadow: 0 0 8px 2px rgba(99, 102, 241, 0.55);
   pointer-events: none;

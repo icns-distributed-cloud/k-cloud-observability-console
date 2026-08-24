@@ -189,7 +189,7 @@ function Th({
         letterSpacing: "0.06em",
         textTransform: "uppercase",
         color: "var(--sub)",
-        fontFamily: "'IBM Plex Mono', monospace",
+        fontFamily: "'Pretendard', monospace",
       }}
     >
       {children}
@@ -214,7 +214,7 @@ function Td({
         textAlign: align,
         padding: "12px 16px",
         color: muted ? "var(--sub)" : "var(--ink)",
-        fontFamily: mono ? "'IBM Plex Mono', monospace" : "inherit",
+        fontFamily: mono ? "'Pretendard', monospace" : "inherit",
       }}
     >
       {children}

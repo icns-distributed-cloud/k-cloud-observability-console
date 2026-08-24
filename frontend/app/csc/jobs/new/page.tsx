@@ -449,7 +449,7 @@ export default function JobWizardPage() {
                                                                 background: "var(--accent)",
                                                                 borderRadius: 4,
                                                                 padding: "2px 6px",
-                                                                fontFamily: "'IBM Plex Mono', monospace",
+                                                                fontFamily: "'Pretendard', monospace",
                                                             }}
                                                         >
                                                             추천
@@ -463,7 +463,7 @@ export default function JobWizardPage() {
                                                             color: t.available
                                                                 ? "var(--active)"
                                                                 : "var(--alert-warning)",
-                                                            fontFamily: "'IBM Plex Mono', monospace",
+                                                            fontFamily: "'Pretendard', monospace",
                                                         }}
                                                     >
                                                         {t.available ? "즉시 가용" : "대기 예상"}
@@ -476,7 +476,7 @@ export default function JobWizardPage() {
                                                         gap: 20,
                                                         fontSize: 12.5,
                                                         color: "var(--sub)",
-                                                        fontFamily: "'IBM Plex Mono', monospace",
+                                                        fontFamily: "'Pretendard', monospace",
                                                     }}
                                                 >
                                                     <span>{tierMix(t)}</span>
@@ -496,7 +496,7 @@ export default function JobWizardPage() {
                                     fontWeight: 700,
                                     letterSpacing: "0.08em",
                                     color: admitted ? "var(--active)" : "var(--alert-warning)",
-                                    fontFamily: "'IBM Plex Mono', monospace",
+                                    fontFamily: "'Pretendard', monospace",
                                     marginBottom: 10,
                                 }}
                             >
@@ -709,7 +709,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
                     letterSpacing: "0.06em",
                     color: "var(--sub)",
                     marginBottom: 8,
-                    fontFamily: "'IBM Plex Mono', monospace",
+                    fontFamily: "'Pretendard', monospace",
                 }}
             >
                 {label}

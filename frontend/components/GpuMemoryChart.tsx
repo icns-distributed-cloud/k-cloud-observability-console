@@ -9,7 +9,7 @@ interface GpuMemoryChartProps {
     seed: number;
 }
 
-const MONO = "'IBM Plex Mono', monospace";
+const MONO = "'Pretendard', monospace";
 const PLOT_H = 220;
 const GUTTER = 56;
 const X_AXIS_H = 22;

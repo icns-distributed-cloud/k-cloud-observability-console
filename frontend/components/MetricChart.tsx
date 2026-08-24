@@ -17,7 +17,7 @@ interface MetricChartProps {
     xLabel?: string
 }
 
-const MONO = "'IBM Plex Mono', monospace"
+const MONO = "'Pretendard', monospace"
 const PLOT_H = 200
 const GUTTER = 44
 

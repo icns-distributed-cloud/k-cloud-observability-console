@@ -227,7 +227,7 @@ export default function JobStatusBoard({ onSelect, onCountChange }: Props) {
                       fontSize: 14,
                       fontWeight: 700,
                       whiteSpace: "nowrap",
-                      fontFamily: "'IBM Plex Mono', monospace",
+                      fontFamily: "'Pretendard', monospace",
                     }}
                   >
                     {JOB_STATUS_LABELS[status]}{" "}

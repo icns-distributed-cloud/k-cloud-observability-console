@@ -26,7 +26,7 @@ const SECTION_LABEL: React.CSSProperties = {
   textTransform: "uppercase",
   color: "var(--sub)",
   marginBottom: 12,
-  fontFamily: "'IBM Plex Mono', monospace",
+  fontFamily: "'Pretendard', monospace",
 };
 
 const METRIC_LABELS: Record<string, string> = {
@@ -219,7 +219,7 @@ export default function NodePage({ params }: { params: Promise<{ id: string }> }
             <KindGlyph kind={acc.kind} size={14} />
             <span style={{ fontWeight: 700, fontSize: 19 }}>{acc.model_name}</span>
             <span
-              style={{ fontSize: 15, color: "var(--sub)", fontFamily: "'IBM Plex Mono', monospace" }}
+              style={{ fontSize: 15, color: "var(--sub)", fontFamily: "'Pretendard', monospace" }}
             >
               ×{acc.count}
             </span>
@@ -228,7 +228,7 @@ export default function NodePage({ params }: { params: Promise<{ id: string }> }
                 marginLeft: "auto",
                 fontSize: 15,
                 color: "var(--sub)",
-                fontFamily: "'IBM Plex Mono', monospace",
+                fontFamily: "'Pretendard', monospace",
               }}
             >
               {acc.tflops} TFLOPS · {acc.memory_gb}GB {acc.memory_type ?? ""} · {acc.tdp_w}W

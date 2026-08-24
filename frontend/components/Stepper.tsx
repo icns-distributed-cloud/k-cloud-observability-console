@@ -25,7 +25,7 @@ export default function Stepper({ steps, current }: StepperProps) {
                                     justifyContent: "center",
                                     fontSize: 12,
                                     fontWeight: 700,
-                                    fontFamily: "'IBM Plex Mono', monospace",
+                                    fontFamily: "'Pretendard', monospace",
                                     flexShrink: 0,
                                     background: active || done ? "var(--accent)" : "var(--panel-2)",
                                     color: active || done ? "#fff" : "var(--sub)",
