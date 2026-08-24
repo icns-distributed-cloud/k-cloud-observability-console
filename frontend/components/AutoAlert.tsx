@@ -53,7 +53,7 @@ export default function SlaAlert() {
 
           setTimeout(() => {
             setAlerts((prev) => prev.filter((item) => item.id !== id));
-          }, 4000);
+          }, 5000);
         })
         .catch(() => {});
     }, 10000);
