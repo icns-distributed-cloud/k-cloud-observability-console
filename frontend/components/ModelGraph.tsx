@@ -33,11 +33,19 @@ export default function ModelGraph({ layers, edges }: ModelGraphProps) {
 
     const measure = () => {
       const containerRect = container.getBoundingClientRect();
+      // getBoundingClientRect()는 CSS zoom(또는 브라우저 자체 확대/축소)이 걸리면
+      // "화면에 실제로 보이는" 픽셀 값을 돌려주는데, 아래 svgSize는 scrollWidth/
+      // scrollHeight(zoom이 반영 안 된 레이아웃 픽셀)로 잡는다 - 두 좌표계가 서로
+      // 배율만큼 어긋나서 zoom이 1이 아니면 화살표가 엉뚱한 곳에 그려진다.
+      // container의 실측 너비를 레이아웃 너비로 나누면 그 배율(zoomRatio)이 나오니,
+      // 각 박스 위치도 같은 배율로 나눠서 scrollWidth/scrollHeight와 같은
+      // "레이아웃 픽셀" 좌표계로 맞춘다.
+      const zoomRatio = containerRect.width / container.offsetWidth || 1;
       const anchor = (el: HTMLDivElement, side: "top" | "bottom") => {
         const r = el.getBoundingClientRect();
         return {
-          x: r.left + r.width / 2 - containerRect.left,
-          y: (side === "top" ? r.top : r.bottom) - containerRect.top,
+          x: (r.left + r.width / 2 - containerRect.left) / zoomRatio,
+          y: ((side === "top" ? r.top : r.bottom) - containerRect.top) / zoomRatio,
         };
       };
 
