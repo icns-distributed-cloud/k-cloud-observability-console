@@ -515,29 +515,50 @@ def _seed_optimization_data(db: Session, job: models.Job, tier: models.ResourceT
     # 있는 이상 항상 비어있는 게 더 이상해서 넣었다 - 객체 몇 개 db.add()하는 정도라
     # 어차피 매 sweep 나가는 commit()에 얹히니 성능엔 안 보이는 수준).
     if job.type == "train":
-        duration = DURATION_SEC["train"]
-        db.add(
-            models.HyperparamAdjustment(
-                job_id=job.id,
-                seq=1,
-                t_offset_sec=int(duration * 0.3),
-                param_name="배치 크기",
-                from_value="512",
-                to_value="640",
-                reward="+0.021",
+        duration = job.duration_sec if job.duration_sec is not None else DURATION_SEC["train"]
+        # DART가 보상 신호를 보고 실행 중 계속 조정하는 4개 하이퍼파라미터의 변화
+        # 이력을 "a -> b -> c -> ..." 체인으로 미리 시드해둔다 - 다른 그래프들과
+        # 같은 원칙으로 job 생성 시점에 한 번에 확정하는 더미 데이터지만,
+        # visibleAdjustments(프론트)가 job.started_at 기준 경과 시간과
+        # t_offset_sec을 비교해 아직 안 지난 항목은 숨기므로, 페이지를 열어두면
+        # 이 체인이 실제로 하나씩 나타나는 것처럼 보인다.
+        #
+        # 배치 크기는 실제 DART 논문처럼 "클수록 좋다"는 신호가 강해서 초반에 한
+        # 번 크게 올린 뒤로는 거의 안 바뀐다. 러닝레이트는 반대로 탐색-활용을
+        # 오가며 자주, 값이 오르내리는 방향까지 바뀐다. 데이터 shard 길이/데이터
+        # 로더 워커 수는 그 중간 정도로 가끔 조정된다.
+        #
+        # t_offset_sec = PROVISIONING_SEC + duration(=running 단계 길이)의 비율.
+        # started_at은 provisioning 진입 시각이라, provisioning 길이를 안 더하면
+        # 초반 이벤트(예: 5% 지점)가 아직 학습 시작 전(준비 중)에 일어난 것처럼
+        # 보일 수 있다 - 전부 실제 running 구간 안에 들어오게 오프셋을 더한다.
+        provisioning = PROVISIONING_SEC["train"]
+        chain = [
+            (0.05, "배치 크기", "64", "128", "+0.027"),
+            (0.10, "러닝레이트", "1e-3", "6e-4", "+0.015"),
+            (0.17, "데이터 로더 워커 수", "4", "8", "+0.009"),
+            (0.23, "러닝레이트", "6e-4", "8e-4", "+0.006"),
+            (0.32, "데이터 shard 길이", "4-way", "6-way", "+0.014"),
+            (0.40, "러닝레이트", "8e-4", "4e-4", "+0.021"),
+            (0.47, "데이터 로더 워커 수", "8", "6", "+0.004"),
+            (0.55, "러닝레이트", "4e-4", "5e-4", "+0.003"),
+            (0.63, "데이터 shard 길이", "6-way", "8-way", "+0.008"),
+            (0.70, "러닝레이트", "5e-4", "3e-4", "+0.019"),
+            (0.80, "데이터 로더 워커 수", "6", "8", "+0.005"),
+            (0.90, "러닝레이트", "3e-4", "4e-4", "+0.002"),
+        ]
+        for seq, (frac, name, from_v, to_v, reward) in enumerate(chain, start=1):
+            db.add(
+                models.HyperparamAdjustment(
+                    job_id=job.id,
+                    seq=seq,
+                    t_offset_sec=provisioning + round(frac * duration),
+                    param_name=name,
+                    from_value=from_v,
+                    to_value=to_v,
+                    reward=reward,
+                )
             )
-        )
-        db.add(
-            models.HyperparamAdjustment(
-                job_id=job.id,
-                seq=2,
-                t_offset_sec=int(duration * 0.7),
-                param_name="데이터 shard",
-                from_value="4-way",
-                to_value="6-way",
-                reward="+0.014",
-            )
-        )
         # KQV(노드 성능비 기반 shard 배분)는 분산 학습(노드 여러 대에 걸친 tier)에서만
         # 말이 되는 개념이다 - 단일 노드 tier(A100×1, A6000×1)는 배분할 노드가 하나뿐이라
         # "균등 분배 대비 KQV 최적화"라는 비교 자체가 성립하지 않는다.
