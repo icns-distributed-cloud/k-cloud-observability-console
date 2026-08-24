@@ -92,13 +92,10 @@ export default function ClusterPage({ params }: { params: Promise<{ id: string }
         <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.01em" }}>
           {cluster.name}
         </div>
-        <div style={{ fontSize: 12.5, color: "var(--sub)", marginTop: 4 }}>
-          {cluster.status === "active" ? "가동중" : "대기"}
-        </div>
       </div>
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
-        <StatCard label="상태" value={cluster.status.toUpperCase()} />
+        <StatCard label="상태" value={cluster.status === "active" ? "가동중" : "대기"} />
         <StatCard label="노드 수" value={cluster.nodes.length} />
         <StatCard label="평균 활용률" value={Math.round(cluster.avg_util)} unit="%" />
       </div>
