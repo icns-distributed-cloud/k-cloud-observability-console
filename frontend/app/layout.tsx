@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import TopBar from "@/components/TopBar";
+import SlaAlert from "@/components/AutoAlert";
 import { TimeProvider } from "@/lib/TimeContext";
 
 export const metadata: Metadata = {
@@ -20,6 +21,7 @@ export default function RootLayout({
         <TimeProvider>
           <TopBar />
           {children}
+        <SlaAlert />
         </TimeProvider>
       </body>
     </html>
