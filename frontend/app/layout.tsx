@@ -3,6 +3,7 @@ import "./globals.css";
 import TopBar from "@/components/TopBar";
 import SlaAlert from "@/components/AutoAlert";
 import { TimeProvider } from "@/lib/TimeContext";
+import { AlertProvider } from "@/lib/AlertContext";
 
 export const metadata: Metadata = {
   title: "K-Cloud Insight",
@@ -19,9 +20,11 @@ export default function RootLayout({
     <html lang="ko">
       <body>
         <TimeProvider>
-          <TopBar />
-          {children}
-        <SlaAlert />
+          <AlertProvider>
+            <TopBar />
+            {children}
+            <SlaAlert />
+          </AlertProvider>
         </TimeProvider>
       </body>
     </html>
