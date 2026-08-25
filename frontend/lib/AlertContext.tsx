@@ -100,7 +100,7 @@ export function AlertProvider({ children }: { children: ReactNode }) {
           }, 5000);
         })
         .catch(() => {});
-    }, 10000);
+    }, 20000);
 
     return () => clearInterval(interval);
   }, [isCsc]);
