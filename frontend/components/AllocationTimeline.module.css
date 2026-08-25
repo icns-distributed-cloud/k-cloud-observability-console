@@ -1,0 +1,192 @@
+/* 요청 하나가 트랙 오른쪽("지금")에서 나타나 트랙 왼쪽 끝까지 날아가 사라지는 애니메이션.
+ * animation-duration은 인라인 스타일로 처리량마다 다르게 준다 (여기선 모양/이동 궤적만).
+ * 폴링 주기나 2분짜리 타임라인 스크롤과 무관하게 브라우저 자체 애니메이션 타이머로
+ * 돌아서, 실제로는 그 둘보다 훨씬 빠른 리듬으로 계속 날아든다.
+ * left를 트랙(이 span의 가장 가까운 position:relative 조상) 기준 0~100%로 애니메이션
+ * 하는 거라, 딱 트랙 폭 안에서만 움직이고 그 왼쪽의 모델명 칸까지는 못 넘어간다. */
+.pulse {
+  position: absolute;
+  top: 50%;
+  width: 54px;
+  height: 18px;
+  margin-top: -9px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  /* font-family: 'Pretendard', monospace; */
+  color: #FFFFFF;
+  white-space: nowrap;
+  /* 흰색 점만으로는 밝은 배경 위에서 거의 안 보였다 - 칩 색(초록/주황)과도, 밝은
+     트랙과도 확실히 대비되는 채도 높은 색 + 테두리로 바꾼다. */
+  background: #F59E0B;
+  box-shadow: 0 0 0 2px #FFFFFF, 0 0 6px 1px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+  z-index: 5;
+  animation-name: fly-in;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+@keyframes fly-in {
+  0% {
+    left: calc(100% - 54px);
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    left: 0;
+    opacity: 0;
+  }
+}
+
+/* 클러스터 GPU/DRAM/Disk 계층 다이어그램 (SwitchServe 논문 그림에서 착안, 노드별이
+ * 아니라 클러스터 전체 공용이라 타임라인 오른쪽에 한 번만 그린다). 구역 하나 = 티어
+ * 하나, 그 안의 칩들은 지금 그 티어에 있는 job들. */
+.hierarchyZone {
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: var(--panel-2);
+  min-height: 48px;
+}
+
+.hierarchyLabel {
+  font-size: 11px;
+  font-weight: 700;
+  /* font-family: 'Pretendard', monospace; */
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+
+.hierarchyChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.hierarchyEmpty {
+  font-size: 12px;
+  color: var(--sub);
+}
+
+.hierarchyChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 3px 7px;
+  border-radius: 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* 다음 폴링에서 이 job이 다른 티어로 넘어가면 칩이 통째로 사라지고 다른 구역에
+     새로 생기는 거라(구역이 서로 떨어진 상자라 위치를 자연스럽게 옮길 수 없다),
+     적어도 점 색은 바로 전 상태에서 부드럽게 바뀌는 것처럼 보이게 트랜지션을 건다. */
+  transition: background 400ms ease;
+}
+
+.hierarchyDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* 예측 기반 배치 표시 (학습 섹션 전용). 색은 예측 카드 패널(page.tsx의
+ * PREDICT_COLOR)과 맞춰야 "저 패널이 예측한 게 여기로 왔다"는 인상이 이어진다 -
+ * 두 파일이 각자 하드코딩하고 있으니 바꿀 땐 같이 바꿔야 한다. 라벨(무슨 job인지)이
+ * 위에서 그 노드 행까지 날아가고, 도착 직후 그 행 전체가 잠깐 테두리로 빛난다 -
+ * 라벨이 도착하는 그 순간(900ms)에 맞춰 optimizeRowGlow의 animation-delay를 걸어야
+ * "도착"과 "강조"가 이어져 보인다. */
+.optimizeLabel {
+  position: absolute;
+  top: -16px;
+  left: 4px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: #6366F1;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  /* font-family: 'Pretendard', monospace; */
+  white-space: nowrap;
+  box-shadow: 0 0 8px 2px rgba(99, 102, 241, 0.55);
+  pointer-events: none;
+  z-index: 6;
+  animation: optimize-flash 900ms ease-out forwards;
+}
+
+@keyframes optimize-flash {
+  0% {
+    top: -16px;
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  20% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    top: var(--target-top);
+    opacity: 0;
+    transform: scale(0.9) translateY(-9px);
+  }
+}
+
+.optimizeRowGlow {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-radius: 6px;
+  background: rgba(99, 102, 241, 0.1);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.55) inset;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 1;
+  animation: optimize-landing 900ms ease-out forwards;
+  animation-delay: 820ms;
+}
+
+@keyframes optimize-landing {
+  0% {
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* 노드 이름이 클릭 가능하다는 걸 hover 전에도 알 수 있게 - 밑줄만으론 눈에 안 띈다는
+   피드백을 받고 옅은 초록 박스로 바꿨다. 클러스터 현황/노드 카드의 상세 버튼과 같은
+   시각 언어. */
+/* 색은 --node-link-color로 주입받는다 - 학습은 --accent, 추론은 --job-infer */
+.nodeLink {
+  border: 1px solid color-mix(in srgb, var(--node-link-color) 28%, transparent);
+  background: color-mix(in srgb, var(--node-link-color) 9%, var(--panel));
+  color: var(--node-link-color);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.nodeLink:hover {
+  background: color-mix(in srgb, var(--node-link-color) 20%, var(--panel));
+  border-color: var(--node-link-color);
+}

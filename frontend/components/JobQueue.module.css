@@ -1,0 +1,33 @@
+.card {
+  animation: enter 260ms ease-out;
+}
+
+/* 대기열은 제출 순(오래된 게 왼쪽=앞, 새 job은 오른쪽 끝=입구)으로 정렬되므로,
+   새 카드는 오른쪽에서 밀려 들어오는 방향으로 애니메이션한다. */
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: translateX(18px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+/* 나중에 오는 규칙이 이겨야 하므로 .card 다음에 둔다 (같은 animation 속성 덮어쓰기) */
+.leaving {
+  animation: leave 320ms ease-in forwards;
+  pointer-events: none;
+}
+
+@keyframes leave {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(18px) scale(0.85);
+  }
+}

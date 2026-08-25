@@ -45,7 +45,7 @@ export default function ClusterPage({ params }: { params: Promise<{ id: string }
       fetchClusterDetail(clusterId),
       fetchClusterMetrics(clusterId),
       fetchClusterAssignments(clusterId),
-      fetchJobs({ includeFillers: true }),
+      fetchJobs(),
     ])
       .then(([c, m, assignments, jobs]) => {
         setCluster(c);
@@ -83,7 +83,7 @@ export default function ClusterPage({ params }: { params: Promise<{ id: string }
     <main style={{ padding: "24px 28px" }}>
       <Breadcrumb
         segments={[
-          { label: "지도", onClick: () => router.push("/csp") },
+          { label: "가용영역", onClick: () => router.push("/csp") },
           { label: cluster.name },
         ]}
       />
@@ -92,13 +92,10 @@ export default function ClusterPage({ params }: { params: Promise<{ id: string }
         <div style={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.01em" }}>
           {cluster.name}
         </div>
-        <div style={{ fontSize: 12.5, color: "var(--sub)", marginTop: 4 }}>
-          {cluster.status === "active" ? "가동중" : "대기"}
-        </div>
       </div>
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
-        <StatCard label="상태" value={cluster.status.toUpperCase()} />
+        <StatCard label="상태" value={cluster.status === "active" ? "가동중" : "대기"} />
         <StatCard label="노드 수" value={cluster.nodes.length} />
         <StatCard label="평균 활용률" value={Math.round(cluster.avg_util)} unit="%" />
       </div>
@@ -111,7 +108,7 @@ export default function ClusterPage({ params }: { params: Promise<{ id: string }
           textTransform: "uppercase",
           color: "var(--sub)",
           marginBottom: 12,
-          fontFamily: "'IBM Plex Mono', monospace",
+          fontFamily: "'Pretendard', monospace",
         }}
       >
         노드

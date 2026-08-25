@@ -1,11 +1,16 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import TopBar from "@/components/TopBar";
+import SlaAlert from "@/components/AutoAlert";
 import { TimeProvider } from "@/lib/TimeContext";
+import { AlertProvider } from "@/lib/AlertContext";
 
 export const metadata: Metadata = {
-  title: "K-Cloud Observability Console",
+  title: "K-Cloud Insight",
   description: "K-Cloud CSC/CSP research platform",
+  icons: {
+    icon: "/logo.png",
+  },
 };
 
 export default function RootLayout({
@@ -15,8 +20,11 @@ export default function RootLayout({
     <html lang="ko">
       <body>
         <TimeProvider>
-          <TopBar />
-          {children}
+          <AlertProvider>
+            <TopBar />
+            {children}
+            <SlaAlert />
+          </AlertProvider>
         </TimeProvider>
       </body>
     </html>

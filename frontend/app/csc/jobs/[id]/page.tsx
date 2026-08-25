@@ -10,6 +10,7 @@ export default function MyJobDetailPage({ params }: { params: Promise<{ id: stri
     <JobDetailView
       jobId={Number(id)}
       breadcrumbPrefix={[{ label: "내 작업", onClick: () => router.push("/csc/jobs") }]}
+      showStop
     />
   );
 }

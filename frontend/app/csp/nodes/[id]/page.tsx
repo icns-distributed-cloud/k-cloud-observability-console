@@ -3,13 +3,15 @@ import { use, useEffect, useState } from "react";
 import Breadcrumb from "@/components/Breadcrumb";
 import StatCard from "@/components/StatCard";
 import KindGlyph from "@/components/KindGlyph";
+import NodeSchedulingPanel from "@/components/NodeSchedulingPanel";
 import { fetchClusterAssignments, fetchClusterDetail, fetchJobs, fetchNodeDetail } from "@/lib/api";
 import { JOB_COLORS, JOB_STATUS_LABELS, mapNodeJobs } from "@/lib/jobs";
-import type { JobSummary, NodeDetail } from "@/app/types";
+import type { JobSummary, MetricType, NodeDetail } from "@/app/types";
 import { useRouter } from "next/navigation";
 import Card from "@/components/Card";
 import Sparkline from "@/components/Sparkline";
 import { generateMetricSeries } from "@/lib/metrics";
+import { COLOR_PREFILL, COLOR_DECODE } from "@/lib/schedulingColors";
 import { useTime } from "@/lib/TimeContext";
 
 const TYPE_LABELS: Record<string, string> = {
@@ -24,7 +26,7 @@ const SECTION_LABEL: React.CSSProperties = {
   textTransform: "uppercase",
   color: "var(--sub)",
   marginBottom: 12,
-  fontFamily: "'IBM Plex Mono', monospace",
+  fontFamily: "'Pretendard', monospace",
 };
 
 const METRIC_LABELS: Record<string, string> = {
@@ -33,7 +35,29 @@ const METRIC_LABELS: Record<string, string> = {
   mem: "메모리 (%)",
   temp: "온도 (°C)",
   power: "전력 (W)",
+  prefill_backlog: "Prefill Backlog (%)",
+  decode_backlog: "Decode Backlog (%)",
 };
+
+/** Prefill/Decode Backlog는 색을 타임라인 차트(범례)와 맞춘다 - 나머지는
+ *  Sparkline 기본색(var(--accent)) 그대로. */
+const METRIC_COLORS: Partial<Record<MetricType, string>> = {
+  prefill_backlog: COLOR_PREFILL,
+  decode_backlog: COLOR_DECODE,
+};
+
+/** KV캐시/모델가중치 메모리 지표(추론 노드 전용)는 이 스파크라인 그리드가 아니라
+ *  NodeSchedulingPanel의 타임라인 차트로만 보여준다 - 여기 그대로 두면 라벨 없는
+ *  원시 metric_type 문자열로 중복 표시된다. Prefill/Decode Backlog는 반대로
+ *  여기 다른 지표들과 한 줄로 같이 나가야 하므로 제외 목록에서 뺐다. */
+const SCHEDULING_METRIC_TYPES = new Set<MetricType>([
+  "kv_vram",
+  "model_vram",
+  "kv_dram",
+  "model_dram",
+  "kv_disk",
+  "model_disk",
+]);
 
 export default function NodePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -52,8 +76,8 @@ export default function NodePage({ params }: { params: Promise<{ id: string }> }
         setNode(n);
         const [assignments, jobs] = await Promise.all([
           fetchClusterAssignments(n.cluster_id),
-          // 필러 작업도 노드를 실제로 점유하므로 포함해야 "유휴" 판정이 맞는다
-          fetchJobs({ includeFillers: true }),]);
+          fetchJobs(),
+        ]);
         setJob(mapNodeJobs(assignments, jobs)[n.id]);
         const c = await fetchClusterDetail(n.cluster_id).catch(() => null);
         setClusterName(c?.name ?? `클러스터 ${n.cluster_id}`);
@@ -65,12 +89,13 @@ export default function NodePage({ params }: { params: Promise<{ id: string }> }
   if (!node) return <main style={{ padding: 24 }}>불러오는 중…</main>;
 
   const isIdle = !job;
+  const baseMetricProfiles = node.metric_profiles.filter((m) => !SCHEDULING_METRIC_TYPES.has(m.metric_type));
 
   return (
     <main style={{ padding: "24px 28px" }}>
       <Breadcrumb
         segments={[
-          { label: "지도", onClick: () => router.push("/csp") },
+          { label: "가용영역", onClick: () => router.push("/csp") },
           {
             label: clusterName || `클러스터 ${node.cluster_id}`,
             onClick: () => router.push(`/csp/clusters/${node.cluster_id}`),
@@ -89,25 +114,33 @@ export default function NodePage({ params }: { params: Promise<{ id: string }> }
       </div>
 
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 20 }}>
+        <StatCard label="용도" value={TYPE_LABELS[node.purpose] ?? node.purpose} />
         <StatCard label="상태" value={isIdle ? "유휴" : "가동중"} />
         <StatCard label="가속기" value={node.accelerators.reduce((n, a) => n + a.count, 0)} unit="개" />
       </div>
 
-      {nowSec !== null && node.metric_profiles.length > 0 && (
+      {nowSec !== null && baseMetricProfiles.length > 0 && (
         <>
           <div style={SECTION_LABEL}>실시간 모니터링</div>
           <div style={{ marginBottom: 24 }}>
             <Card>
               <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
-                {node.metric_profiles.map((m) => (
+                {baseMetricProfiles.map((m) => (
                   <Sparkline
                     key={m.metric_type}
                     label={METRIC_LABELS[m.metric_type] ?? m.metric_type}
                     values={generateMetricSeries(m, nowSec, 90, 14)}
+                    color={METRIC_COLORS[m.metric_type]}
                   />
                 ))}
               </div>
             </Card>
+
+            {node.purpose === "infer" && (
+              <div style={{ marginTop: 16 }}>
+                <NodeSchedulingPanel node={node} />
+              </div>
+            )}
           </div>
         </>
       )}
@@ -186,7 +219,7 @@ export default function NodePage({ params }: { params: Promise<{ id: string }> }
             <KindGlyph kind={acc.kind} size={14} />
             <span style={{ fontWeight: 700, fontSize: 19 }}>{acc.model_name}</span>
             <span
-              style={{ fontSize: 15, color: "var(--sub)", fontFamily: "'IBM Plex Mono', monospace" }}
+              style={{ fontSize: 15, color: "var(--sub)", fontFamily: "'Pretendard', monospace" }}
             >
               ×{acc.count}
             </span>
@@ -195,7 +228,7 @@ export default function NodePage({ params }: { params: Promise<{ id: string }> }
                 marginLeft: "auto",
                 fontSize: 15,
                 color: "var(--sub)",
-                fontFamily: "'IBM Plex Mono', monospace",
+                fontFamily: "'Pretendard', monospace",
               }}
             >
               {acc.tflops} TFLOPS · {acc.memory_gb}GB {acc.memory_type ?? ""} · {acc.tdp_w}W

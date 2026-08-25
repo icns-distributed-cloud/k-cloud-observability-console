@@ -167,6 +167,9 @@ class Model(Base):
     jobs: Mapped[list["Job"]] = relationship(back_populates="model")
     layers: Mapped[list["ModelLayer"]] = relationship(back_populates="model")
     datasets: Mapped[list["Dataset"]] = relationship(back_populates="model")
+    memory_profile: Mapped[Optional["ModelMemoryProfile"]] = relationship(
+        back_populates="model", uselist=False
+    )
 
 
 class Dataset(Base):
@@ -239,6 +242,11 @@ class Job(Base):
     # never auto-finishes a real infer job, matching how inference serving doesn't
     # naturally end; only a future explicit stop endpoint will.
     duration_sec: Mapped[Optional[int]]
+    # when sweep_and_backfill should next auto-advance this job's status
+    # (queued->provisioning->running->finalizing->done). NULL means no pending
+    # auto-transition - either the job hasn't been admitted yet (still queued) or
+    # it's a real infer job sitting in "running" with no natural end.
+    phase_deadline: Mapped[Optional[datetime]]
 
     model: Mapped["Model"] = relationship(back_populates="jobs")
     user: Mapped["User"] = relationship(back_populates="jobs")
@@ -311,6 +319,9 @@ class JobMetricProfile(Base):
     curve_shape: Mapped[Optional[str]]
     total_count: Mapped[Optional[int]]
     featured: Mapped[bool]
+    # 개요 탭(진행 상황 요약)과 프로파일링 탭(연구용 성능 측정치)이 같은
+    # job_metric_profile 테이블을 나눠 쓴다 - false면 개요, true면 프로파일링.
+    profiling: Mapped[bool] = mapped_column(server_default="false")
 
     job: Mapped["Job"] = relationship(back_populates="metric_profiles")
 
@@ -399,6 +410,21 @@ class JobNegotiationItem(Base):
     text: Mapped[str]
 
     job: Mapped["Job"] = relationship(back_populates="negotiation_items")
+
+
+class ModelMemoryProfile(Base):
+    """모델 구조만 보고 뽑은 GPU 메모리 사용량 예측치 (PyTorch Profiler Memory View
+    참고) - 실행 로그가 아니라 모델당 정적인 값이라 job이 아니라 model에 붙는다.
+    학습 job 상세의 프로파일링 탭에서만 쓴다(추론은 이 그래프가 없음)."""
+
+    __tablename__ = "model_memory_profile"
+
+    model_id: Mapped[int] = mapped_column(ForeignKey("model.id"), primary_key=True)
+    peak_mb: Mapped[Decimal]
+    trough_mb: Mapped[Decimal]
+    reserved_mb: Mapped[Decimal]
+
+    model: Mapped["Model"] = relationship(back_populates="memory_profile")
 
 
 class ModelLayer(Base):

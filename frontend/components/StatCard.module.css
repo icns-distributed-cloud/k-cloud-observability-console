@@ -7,12 +7,30 @@
   padding: 14px 16px;
 }
 
+.compact {
+  min-width: 100px;
+  padding: 8px 12px;
+}
+
+.compact .label {
+  font-size: 11px;
+  margin-bottom: 3px;
+}
+
+.compact .value {
+  font-size: 20px;
+}
+
+.compact .unit {
+  font-size: 12px;
+}
+
 .label {
   font-size: 14px;
   font-weight: 700;
   color: var(--sub);
   margin-bottom: 6px;
-  font-family: 'IBM Plex Mono', monospace;
+  /* font-family: 'Pretendard', monospace; */
   letter-spacing: 0.04em;
 }
 
@@ -25,7 +43,7 @@
 .value {
   font-size: 32px;
   font-weight: 700;
-  font-family: 'IBM Plex Mono', monospace;
+  /* font-family: 'Pretendard', monospace; */
 }
 
 .unit {

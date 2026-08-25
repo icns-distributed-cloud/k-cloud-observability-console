@@ -5,6 +5,7 @@ import Breadcrumb from "@/components/Breadcrumb";
 import StatCard from "@/components/StatCard";
 import { fetchProviders } from "@/lib/api";
 import type { ProviderTree } from "@/app/types";
+import styles from "./page.module.css";
 
 const PROVIDER_KIND_LABELS: Record<string, string> = {
   onprem: "온프레미스",
@@ -38,7 +39,7 @@ export default function InfraPage() {
     <main style={{ padding: "24px 28px" }}>
       <Breadcrumb
         segments={[
-          { label: "지도", onClick: () => router.push("/csp") },
+          { label: "가용영역", onClick: () => router.push("/csp") },
           { label: "클러스터 현황" },
         ]}
       />
@@ -76,6 +77,7 @@ export default function InfraPage() {
               <Th align="right">활용률</Th>
               <Th align="right">시간당 비용</Th>
               <Th align="center">상태</Th>
+              <Th align="center">상세</Th>
             </tr>
           </thead>
           <tbody>
@@ -84,6 +86,7 @@ export default function InfraPage() {
                 r.clusters.map((c) => (
                   <tr
                     key={c.id}
+                    className={styles.row}
                     onClick={() => router.push(`/csp/clusters/${c.id}`)}
                     style={{ borderTop: "1px solid var(--line)", cursor: "pointer" }}
                   >
@@ -138,6 +141,20 @@ export default function InfraPage() {
                         {STATUS_LABELS[c.status] ?? c.status}
                       </span>
                     </Td>
+                    <Td align="center">
+                      {/* 행 전체가 이미 클릭 가능하지만 처음 보는 사람은 그걸 모른다 -
+                          눈에 띄는 버튼을 따로 둬서 진입점을 명시한다. 행 onClick과
+                          중복 실행되지 않게 stopPropagation. */}
+                      <span
+                        className={styles.detailBtn}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          router.push(`/csp/clusters/${c.id}`);
+                        }}
+                      >
+                        상세 →
+                      </span>
+                    </Td>
                   </tr>
                 ))
               )
@@ -167,12 +184,12 @@ function Th({
       style={{
         textAlign: align,
         padding: "11px 16px",
-        fontSize: 10.5,
+        fontSize: 13,
         fontWeight: 700,
         letterSpacing: "0.06em",
         textTransform: "uppercase",
         color: "var(--sub)",
-        fontFamily: "'IBM Plex Mono', monospace",
+        fontFamily: "'Pretendard', monospace",
       }}
     >
       {children}
@@ -197,7 +214,7 @@ function Td({
         textAlign: align,
         padding: "12px 16px",
         color: muted ? "var(--sub)" : "var(--ink)",
-        fontFamily: mono ? "'IBM Plex Mono', monospace" : "inherit",
+        fontFamily: mono ? "'Pretendard', monospace" : "inherit",
       }}
     >
       {children}

@@ -1,0 +1,27 @@
+.row:hover {
+  background: var(--panel-2);
+}
+
+/* 전체 톤이 초록 계열이라 --accent를 옅게 깐 배경이 배경(--panel)과 구분되면서도
+   튀지 않는다. --job-status-queued(#BEF0D4)가 이미 비슷한 연초록이라 그걸 써도
+   되지만, 그건 "대기중 상태"라는 의미가 붙은 변수라 여기선 안 쓴다. */
+.detailBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+  color: var(--accent);
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.detailBtn:hover {
+  background: color-mix(in srgb, var(--accent) 22%, var(--panel));
+  border-color: var(--accent);
+}

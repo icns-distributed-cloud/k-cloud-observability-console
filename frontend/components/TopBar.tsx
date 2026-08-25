@@ -1,5 +1,8 @@
 "use client";
+import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
+import { CURRENT_USER_ID } from "@/lib/auth";
+import AlertBell from "@/components/AlertBell";
 
 export default function TopBar() {
   const router = useRouter();
@@ -25,28 +28,26 @@ export default function TopBar() {
         onClick={() => router.push(isCsc ? "/csc/jobs" : "/csp")}
         style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}
       >
-        <span
-          style={{
-            width: 18,
-            height: 18,
-            borderRadius: 5,
-            background: "var(--accent)",
-            flexShrink: 0,
-          }}
+        <Image
+          src="/logo.png"
+          alt="K-Cloud Insight"
+          width={66}
+          height={34}
+          style={{ flexShrink: 0, objectFit: "contain" }}
         />
         <div>
           <div style={{ fontSize: 19, fontWeight: 700, letterSpacing: "-0.01em" }}>
-            K-Cloud 연구 클러스터
+            K-Cloud Insight
           </div>
           <div
             style={{
               fontSize: 14,
               color: "var(--sub)",
-              fontFamily: "'IBM Plex Mono', monospace",
+              fontFamily: "'Pretendard', monospace",
               letterSpacing: "0.04em",
             }}
           >
-            경희대 ICNS
+            경희대 ICNS Lab
           </div>
         </div>
       </div>
@@ -61,7 +62,7 @@ export default function TopBar() {
           />
         ) : (
           <>
-            <NavLink label="지도" href="/csp" active={pathname === "/csp"} onClick={router.push} />
+            <NavLink label="가용영역" href="/csp" active={pathname === "/csp"} onClick={router.push} />
             <NavLink
               label="클러스터 현황"
               href="/csp/infra"
@@ -83,6 +84,21 @@ export default function TopBar() {
           </>
         )}
       </nav>
+
+      {isCsc && (
+        <div
+          style={{
+            marginLeft: "auto",
+            fontSize: 12.5,
+            color: "var(--sub)",
+            fontFamily: "'Pretendard', monospace",
+          }}
+        >
+          U-{CURRENT_USER_ID}
+        </div>
+      )}
+
+      {!isCsc && <AlertBell />}
     </header>
   );
 }

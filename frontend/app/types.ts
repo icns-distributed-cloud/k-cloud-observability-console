@@ -4,13 +4,14 @@ export type ClusterStatus = 'active' | 'standby'
 export type AcceleratorKind = 'GPU' | 'NPU' | 'PIM'
 export type AlertSeverity = 'physical' | 'sla'
 export type JobType = 'train' | 'infer'
-export type JobStatus = 'queued' | 'running' | 'done'
+export type JobStatus = 'queued' | 'provisioning' | 'running' | 'finalizing' | 'paused' | 'done'
 export type NodePurpose = 'train' | 'infer'
 export type PriorityPref = 'time' | 'cost' | 'balanced'
 export type CurveShape = 'exp_approach' | 'flat'
 export type LayerCharacteristic = 'compute_bound' | 'memory_bound' | 'balanced'
-export type EventType = 'ARRIVAL' | 'START' | 'BACKFILL' | 'FINISH'
+export type EventType = 'ARRIVAL' | 'QUEUE' | 'START' | 'BACKFILL' | 'PAUSE' | 'RESUME' | 'TERMINATE' | 'FINISH'
 export type CacheTierName = 'VRAM' | 'DRAM' | 'SSD'
+
 export interface ModelItem {
     id: number
     name: string
@@ -24,10 +25,18 @@ export interface DistributedLinkItem {
     cluster_b_id: number
     active: boolean
 }
-/** 테이블마다 허용값이 다름 (cluster: power/utilization/sla, node: util/cpu/mem/temp, accelerator: util/mem/power) */
+/** 테이블마다 허용값이 다름 (cluster: power/utilization/sla + 학습/추론 전용 지표,
+ *  node: util/cpu/mem/temp, accelerator: util/mem/power) */
 export type MetricType =
     | 'power' | 'utilization' | 'sla'
     | 'util' | 'cpu' | 'mem' | 'temp'
+    | 'throughput' | 'jct' | 'goodput'
+    | 'ttft' | 'tpot' | 'slo_violation'
+    // 로컬 스케줄링 탭 전용 (추론 노드만) - 워크로드 백로그 + 메모리 계층별 KV캐시/모델가중치
+    | 'prefill_backlog' | 'decode_backlog'
+    | 'kv_vram' | 'model_vram'
+    | 'kv_dram' | 'model_dram'
+    | 'kv_disk' | 'model_disk'
 
 
 // ========== Infra ==========
@@ -175,6 +184,14 @@ export interface JobSummary {
     dataset_name: string | null
     selected_tier: SelectedTierSummary | null
     assigned_nodes: AssignedNodeItem[]
+    /** 0~1, 현재 단계(provisioning/finalizing/running) 진행률 (요청 시점 스냅샷).
+     *  queued/done이거나 추론 running이면 null (실제 제출은 무기한 실행, 필러도
+     *  일관성을 위해 뺌) */
+    phase_progress: number | null
+    /** 현재 단계의 시작/종료 시각. null 여부는 phase_progress와 같이 간다 - 프론트에서
+     *  폴링 간격과 무관하게 지금 시각 기준으로 진행률을 직접 보간할 때 쓴다. */
+    phase_started_at: string | null
+    phase_ends_at: string | null
 }
 
 export interface JobDetail extends JobSummary {
@@ -194,6 +211,8 @@ export interface JobMetricProfileItem {
     curve_shape: CurveShape | null
     total_count: number | null
     featured: boolean
+    /** false=개요 탭(진행 상황 요약), true=프로파일링 탭(연구용 성능 측정치) */
+    profiling: boolean
 }
 
 export interface JobCacheSummary {
@@ -269,9 +288,18 @@ export interface ModelLayerEdgeItem {
     to_layer_id: number
 }
 
+/** PyTorch Profiler Memory View 참고한 GPU 메모리 사용량 예측치 - 모델 구조 기반
+ *  정적 값(실행 로그 아님), 학습 job 프로파일링 탭 전용 */
+export interface ModelMemoryProfile {
+    peak_mb: string
+    trough_mb: string
+    reserved_mb: string
+}
+
 export interface ModelLayersResponse {
     layers: ModelLayerItem[]
     edges: ModelLayerEdgeItem[]
+    memory_profile: ModelMemoryProfile | null
 }
 
 export interface DatasetItem {
@@ -298,3 +326,4 @@ export interface EventItem {
     payload: Record<string, unknown> | null
     occurred_at: string
 }
+

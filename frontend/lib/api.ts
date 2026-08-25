@@ -1,6 +1,7 @@
 import type {
   AssignmentItem,
   ClusterDetail,
+  EventItem,
   HyperparamAdjustmentItem,
   JobDetail,
   JobKqvBenchmarkResponse,
@@ -56,13 +57,17 @@ export function fetchClusterAssignments(clusterId: number) {
 export function fetchJobs(params?: {
   status?: string
   userId?: number
-  /** 스케줄러 타임라인용 데모 필러 작업까지 포함할지. 기본은 제외 */
-  includeFillers?: boolean
+  /** 주면 커서 기반 페이지네이션 모드 - beforeId보다 오래된(id가 작은) 것들 중
+   *  limit+1개를 받는다 (마지막 한 개는 "다음 페이지 있음" 판단용, 응답 형태는
+   *  그대로 JobSummary[]라 페이지네이션 안 쓰는 호출과 스키마가 동일하다). */
+  limit?: number
+  beforeId?: number
 }) {
   const q = new URLSearchParams()
   if (params?.status) q.set('status', params.status)
   if (params?.userId !== undefined) q.set('user_id', String(params.userId))
-  if (params?.includeFillers) q.set('include_fillers', 'true')
+  if (params?.limit !== undefined) q.set('limit', String(params.limit))
+  if (params?.beforeId !== undefined) q.set('before_id', String(params.beforeId))
   const query = q.toString()
   return get<JobSummary[]>(`/jobs${query ? `?${query}` : ''}`)
 }
@@ -99,6 +104,12 @@ export function fetchReallocations(jobId: number) {
   return get<ReallocationItem[]>(`/jobs/${jobId}/reallocations`)
 }
 
+/** 작업 상세 "프로파일링" 탭의 이벤트 타임라인용 - job_id로 걸러서 이 작업의
+ *  ARRIVAL/QUEUE/BACKFILL(또는 START)/FINISH만 받는다 (since 없이도 전체 이력 조회). */
+export function fetchEvents(jobId: number) {
+  return get<EventItem[]>(`/events?job_id=${jobId}`)
+}
+
 export function fetchModelLayers(modelId: number) {
   return get<ModelLayersResponse>(`/models/${modelId}/layers`)
 }
@@ -119,10 +130,22 @@ export function submitInferJob(body: InferJobRequest) {
   return post<JobSummary>('/jobs/infer', body)
 }
 
-/** 추론 작업 중단. 응답으로 done 상태가 된 작업이 돌아온다.
- *  infer가 아니거나 running이 아니면 400 */
-export function stopJob(jobId: number) {
-  return post<JobSummary>(`/jobs/${jobId}/stop`, {})
+/** 실행 중인 작업 일시중지. 노드는 즉시 반납되어 다른 작업이 쓸 수 있게 된다.
+ *  running이 아니면 400 */
+export function pauseJob(jobId: number) {
+  return post<JobSummary>(`/jobs/${jobId}/pause`, {})
+}
+
+/** 일시중지된 작업 재개. 빈 자리가 있으면 running, 없으면 queued로 돌아온다.
+ *  paused가 아니면 400 */
+export function resumeJob(jobId: number) {
+  return post<JobSummary>(`/jobs/${jobId}/resume`, {})
+}
+
+/** 작업 종료. running이면 finalizing을 거쳐 다음 sweep에서 done이 되고,
+ *  그 외(queued/provisioning/paused)는 바로 done. 이미 done이면 400 */
+export function terminateJob(jobId: number) {
+  return post<JobSummary>(`/jobs/${jobId}/terminate`, {})
 }
 
 export function fetchModels() {

@@ -13,8 +13,9 @@ router = APIRouter(tags=["events"])
 
 @router.get("/events", response_model=list[schemas.EventItem])
 def list_events(
-    since: datetime,
+    since: datetime | None = None,
+    job_id: int | None = None,
     db: Session = Depends(get_db),
     _: None = Depends(jobs_service.sweep_dependency),
 ) -> list[schemas.EventItem]:
-    return events_service.list_events(db, since=since)
+    return events_service.list_events(db, since=since, job_id=job_id)

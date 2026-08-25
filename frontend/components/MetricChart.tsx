@@ -17,7 +17,7 @@ interface MetricChartProps {
     xLabel?: string
 }
 
-const MONO = "'IBM Plex Mono', monospace"
+const MONO = "'Pretendard', monospace"
 const PLOT_H = 200
 const GUTTER = 44
 
@@ -155,15 +155,14 @@ export default function MetricChart({
                 style={{
                     display: 'flex',
                     justifyContent: 'space-between',
+                    alignItems: 'center',
                     marginTop: 12,
                     paddingLeft: GUTTER,
-                    fontSize: 14,
-                    color: 'var(--sub)',
                     fontFamily: MONO,
                 }}
             >
-                <span>{footerLeft}</span>
-                <span>{xLabel}</span>
+                <span style={{ fontSize: 17, fontWeight: 700, color: 'var(--ink)' }}>{footerLeft}</span>
+                <span style={{ fontSize: 14, color: 'var(--sub)' }}>{xLabel}</span>
             </div>
         </div>
     )

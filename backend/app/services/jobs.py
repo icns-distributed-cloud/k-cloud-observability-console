@@ -1,21 +1,33 @@
 import random
+import time
 from datetime import datetime, timedelta
 from decimal import Decimal
 
 from fastapi import Depends, HTTPException
-from sqlalchemy import or_, text
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import case, desc, or_, text
+from sqlalchemy.orm import Query, Session, selectinload
 
 from app import clock, models, schemas
 from app.database import get_db
+from app.services.infra import _evaluate
 
 DURATION_SEC = {"train": 40, "infer": 15}
+# real job lifecycle either side of "running": nodes are assigned (and stay
+# occupied - see _occupied_node_ids, which only looks at Assignment rows and
+# doesn't care about status) before compute actually starts (container/model
+# load) and after compute ends (checkpoint/result save) before they're freed.
+# Kept comfortably longer than the job status board's poll interval (frontend
+# JobStatusBoard.tsx, POLL_MS) so the phase reliably shows up in at least one
+# poll instead of being skipped between two fetches.
+PROVISIONING_SEC = {"train": 10, "infer": 8}
+FINALIZING_SEC = {"train": 8, "infer": 6}
 
 # Arbitrary constant key for a Postgres advisory lock guarding every
 # read-then-write job/assignment state change (submit_job's immediate admit,
-# sweep_and_backfill's backfill/finish loops, filler creation, stop_job).
-# Without it, concurrent requests (polling from multiple tabs, two submits at
-# once, a double-clicked stop) can each read the same pre-commit snapshot and
+# sweep_and_backfill's backfill/finish loops, filler creation, pause/resume/
+# terminate_job). Without it, concurrent requests (polling from multiple tabs,
+# two submits at once, a double-clicked stop) can each read the same pre-commit
+# snapshot and
 # double-admit the same job, double-book the same node, or double-log a
 # FINISH. Held for the rest of the transaction (pg_advisory_xact_lock),
 # released on commit/rollback - callers should acquire it before reading any
@@ -35,13 +47,26 @@ def _lock_admission(db: Session) -> None:
 # so it can never be admitted and would just pile up in the queue forever.
 FILLER_USER_NAME = "csc-demo-filler"
 FILLER_EXCLUDED_TIER_IDS = {2, 4, 8}
-FILLER_TARGET_PER_TYPE = 3
+# infer's GPU pool (tier 7) is now 4 nodes deep vs train's single-node-per-tier caps,
+# so a shared target undersold how much concurrency infer can actually show - split
+# per type instead of bumping the shared value and over-filling train.
+FILLER_TARGET_PER_TYPE = {"train": 4, "infer": 6}
 # randomized per filler job (via job.duration_sec) instead of the fixed DURATION_SEC,
-# so the scheduler timeline doesn't show every bar at an identical length
-FILLER_DURATION_RANGE_SEC = {"train": (25, 70), "infer": (8, 30)}
+# so the scheduler timeline doesn't show every bar at an identical length. Kept short
+# so fillers cycle through provisioning->running->finalizing->done quickly - more
+# visible turnover in the job list/timeline, and any filler holding a node only
+# blocks a real job for a short window.
+FILLER_DURATION_RANGE_SEC = {"train": (15, 30), "infer": (5, 15)}
 
 # one metric-card template set per job.type, copied verbatim into job_metric_profile on submission
 METRIC_TEMPLATES: dict[str, list[dict]] = {
+    # profiling=False인 것들은 개요 탭(대표 그래프 하나 + 진행 상황) 몫, True는
+    # 프로파일링 탭(연구용 성능 측정치) 몫이다 - 학습은 원래 정확도/에포크만 있던
+    # 자리에 그대로 두고, 시스템 성능 지표(처리량/GPU 메모리/스텝 시간/누적 샘플)를
+    # 새로 추가해 프로파일링 탭에 채운다. 추론은 원래도 진행률 개념이 없어 개요에
+    # 있던 지표 전부가 사실 실측치였지만, 개요의 대표 그래프 자리는 비워두지 않고
+    # 처리량 하나만 남긴다(featured=True인 것 그대로) - 나머지 일곱 개만
+    # profiling=True로 옮긴다.
     "train": [
         {
             "seq": 1,
@@ -52,6 +77,7 @@ METRIC_TEMPLATES: dict[str, list[dict]] = {
             "curve_shape": "exp_approach",
             "total_count": None,
             "featured": True,
+            "profiling": False,
         },
         {
             "seq": 2,
@@ -62,6 +88,51 @@ METRIC_TEMPLATES: dict[str, list[dict]] = {
             "curve_shape": None,
             "total_count": 100,
             "featured": False,
+            "profiling": False,
+        },
+        {
+            "seq": 3,
+            "label": "처리량",
+            "unit": "samples/s",
+            "start_value": Decimal("180"),
+            "target_value": Decimal("420"),
+            "curve_shape": "exp_approach",
+            "total_count": None,
+            "featured": True,
+            "profiling": True,
+        },
+        {
+            "seq": 4,
+            "label": "GPU 메모리 사용률",
+            "unit": "%",
+            "start_value": None,
+            "target_value": Decimal("78"),
+            "curve_shape": None,
+            "total_count": None,
+            "featured": False,
+            "profiling": True,
+        },
+        {
+            "seq": 5,
+            "label": "스텝당 소요시간",
+            "unit": "ms",
+            "start_value": None,
+            "target_value": Decimal("340"),
+            "curve_shape": None,
+            "total_count": None,
+            "featured": False,
+            "profiling": True,
+        },
+        {
+            "seq": 6,
+            "label": "누적 처리 샘플 수",
+            "unit": None,
+            "start_value": None,
+            "target_value": None,
+            "curve_shape": None,
+            "total_count": 48000,
+            "featured": False,
+            "profiling": True,
         },
     ],
     "infer": [
@@ -74,6 +145,8 @@ METRIC_TEMPLATES: dict[str, list[dict]] = {
             "curve_shape": "exp_approach",
             "total_count": None,
             "featured": True,
+            # 개요의 대표 그래프("추론 현황") 몫 - 프로파일링과 안 겹치게 여기만.
+            "profiling": False,
         },
         {
             "seq": 2,
@@ -84,6 +157,7 @@ METRIC_TEMPLATES: dict[str, list[dict]] = {
             "curve_shape": None,
             "total_count": None,
             "featured": False,
+            "profiling": True,
         },
         {
             "seq": 3,
@@ -94,6 +168,7 @@ METRIC_TEMPLATES: dict[str, list[dict]] = {
             "curve_shape": None,
             "total_count": None,
             "featured": False,
+            "profiling": True,
         },
         {
             "seq": 4,
@@ -104,6 +179,7 @@ METRIC_TEMPLATES: dict[str, list[dict]] = {
             "curve_shape": None,
             "total_count": 12000,
             "featured": False,
+            "profiling": True,
         },
         {
             "seq": 5,
@@ -114,6 +190,7 @@ METRIC_TEMPLATES: dict[str, list[dict]] = {
             "curve_shape": "exp_approach",
             "total_count": None,
             "featured": False,
+            "profiling": True,
         },
         {
             "seq": 6,
@@ -124,6 +201,7 @@ METRIC_TEMPLATES: dict[str, list[dict]] = {
             "curve_shape": None,
             "total_count": None,
             "featured": False,
+            "profiling": True,
         },
         {
             "seq": 7,
@@ -134,6 +212,7 @@ METRIC_TEMPLATES: dict[str, list[dict]] = {
             "curve_shape": None,
             "total_count": None,
             "featured": False,
+            "profiling": True,
         },
         {
             "seq": 8,
@@ -144,6 +223,7 @@ METRIC_TEMPLATES: dict[str, list[dict]] = {
             "curve_shape": None,
             "total_count": None,
             "featured": False,
+            "profiling": True,
         },
     ],
 }
@@ -167,7 +247,56 @@ def _to_selected_tier(tier: models.ResourceTier | None) -> schemas.SelectedTierS
     )
 
 
+def _phase_window(job: models.Job) -> tuple[datetime, datetime] | None:
+    """(현재 단계 시작 시각, 종료 시각). phase_deadline은 "이 단계가 언제 끝나는지"만
+    들고 있으니, 단계별 고정 길이를 빼면 시작 시각이 나온다. queued/done이면 None.
+    추론의 running도 전부 None - 실제 제출된 추론은 무기한 실행이라 애초에
+    phase_deadline이 없고, 필러 추론은 고정 duration이 있어 값을 낼 수는 있지만
+    그러면 "이 추론은 왜 진행률이 있고 저건 없지"처럼 일관성이 깨진다."""
+    if job.phase_deadline is None:
+        return None
+    if job.type == "infer" and job.status == "running":
+        return None
+    if job.status == "provisioning":
+        duration = PROVISIONING_SEC[job.type]
+    elif job.status == "finalizing":
+        duration = FINALIZING_SEC[job.type]
+    elif job.status == "running":
+        duration = job.duration_sec if job.duration_sec is not None else DURATION_SEC[job.type]
+    else:
+        return None
+
+    return job.phase_deadline - timedelta(seconds=duration), job.phase_deadline
+
+
+def _phase_progress(job: models.Job, window: tuple[datetime, datetime] | None) -> float | None:
+    """0~1, 현재 단계 안에서 얼마나 지났는지 (요청 시점 스냅샷). window가 None이면 None."""
+    if window is None:
+        return None
+    phase_start, phase_end = window
+    elapsed = (clock.now() - phase_start).total_seconds()
+    duration = (phase_end - phase_start).total_seconds()
+    return max(0.0, min(1.0, elapsed / duration))
+
+
+def _current_assignments(job: models.Job) -> list[models.Assignment]:
+    """job.assignments 중 "지금 배정" 배치만 골라낸다. 한 job은 보통 평생 admission을
+    한 번만 거치지만, resume은 같은 job을 다시 _admit해서 새 배치(새 from_t)를 만들고
+    이전 배치는 닫아만 둘 뿐 지우진 않는다(비용 계산 등에 이력이 필요) - 그래서 그냥
+    job.assignments를 다 돌면 pause 전 노드와 resume 후 노드가 같이 잡힌다. 한 _admit
+    호출 안에서는 여러 노드라도 from_t가 전부 같으므로, 가장 최근 from_t를 가진
+    배치만 남기면 배치 경계가 정확히 갈린다.
+    paused는 예외 - pause가 노드를 반납해도 그 배치 자체는(이력 보존을 위해) 안
+    지우니 "가장 최근 배치" 규칙만 따르면 이미 반납한 노드가 여전히 assigned로
+    보인다. 지금 진짜 아무것도 안 붙잡고 있으니 명시적으로 빈 목록을 준다."""
+    if job.status == "paused" or not job.assignments:
+        return []
+    latest_from_t = max(a.from_t for a in job.assignments)
+    return [a for a in job.assignments if a.from_t == latest_from_t]
+
+
 def _to_job_summary(job: models.Job) -> schemas.JobSummary:
+    phase_window = _phase_window(job)
     return schemas.JobSummary(
         id=job.id,
         model_id=job.model_id,
@@ -190,8 +319,11 @@ def _to_job_summary(job: models.Job) -> schemas.JobSummary:
                 cluster_id=a.node.cluster.id,
                 cluster_name=a.node.cluster.name,
             )
-            for a in job.assignments
+            for a in _current_assignments(job)
         ],
+        phase_progress=_phase_progress(job, phase_window),
+        phase_started_at=phase_window[0] if phase_window else None,
+        phase_ends_at=phase_window[1] if phase_window else None,
     )
 
 
@@ -201,10 +333,36 @@ def _load_live_cluster(db: Session) -> models.Cluster | None:
         .options(
             selectinload(models.Cluster.nodes).selectinload(models.Node.accelerators),
             selectinload(models.Cluster.nodes).selectinload(models.Node.assignments),
+            selectinload(models.Cluster.nodes).selectinload(models.Node.metric_profiles),
         )
         .filter(models.Cluster.is_live.is_(True))
         .first()
     )
+
+
+# 스케줄러 페이지의 "예측 기반 배치" 패널(frontend PREDICTION_LOOKAHEAD_SEC)과 맞춘
+# 값 - 둘이 어긋나면 화면에 뜬 1순위 후보와 실제로 배정되는 노드가 달라진다.
+_PREDICTION_LOOKAHEAD_SEC = 30
+
+
+def _predicted_util(node: models.Node) -> float:
+    # infra.py의 _evaluate(같은 baseline+amplitude*sin(...) 공식)를 그대로 재사용 -
+    # 프론트의 예측 패널도 같은 원리(실측 파형을 미래 시점에서 한 번 더 평가)로
+    # "예측 활용률"을 뽑는다. 노드에 util 프로파일이 없으면(있어야 정상) 0으로 다뤄
+    # 그 노드가 오히려 앞순위로 밀리지 않게 큰 값을 대신 준다.
+    predict_at = time.time() + _PREDICTION_LOOKAHEAD_SEC
+    for p in node.metric_profiles:
+        if p.metric_type == "util":
+            return _evaluate(p.baseline, p.amplitude, p.period_sec, now=predict_at)
+    return float("inf")
+
+
+def _predicted_power(node: models.Node) -> float:
+    predict_at = time.time() + _PREDICTION_LOOKAHEAD_SEC
+    for p in node.metric_profiles:
+        if p.metric_type == "power":
+            return _evaluate(p.baseline, p.amplitude, p.period_sec, now=predict_at)
+    return float("inf")
 
 
 def _occupied_node_ids(live_cluster: models.Cluster, now: datetime) -> set[int]:
@@ -252,10 +410,13 @@ def _pick_free_nodes_for_tier(
         )
         if len(candidates) < req.node_count:
             return None
-        # shuffled so which nodes get picked varies run to run instead of always the
-        # same first-N-by-id - purely cosmetic, doesn't change whether the tier can
-        # be satisfied (still gated by len(candidates) >= req.node_count above)
-        random.shuffle(candidates)
+        # 예측 활용률이 낮은(=여유 있는) 노드부터, 동률이면 예측 전력이 낮은 순 - 스케줄러
+        # 페이지의 "예측 기반 배치" 패널이 보여주는 순위와 같은 규칙이다. 예전엔
+        # random.shuffle로 아무 노드나 골랐는데, 그러면 화면에 뜬 1순위 후보가 실제
+        # 배정 노드와 종종 달라 보여서(순전히 장식이라는 문구를 달아야 했다) 둘을
+        # 맞췄다. 여전히 어느 노드를 고르든 tier 충족 여부는 안 바뀐다(위의 node_count
+        # 체크로 이미 결정됨) - 순서만 예측과 일치시키는 것뿐이다.
+        candidates.sort(key=lambda n: (_predicted_util(n), _predicted_power(n)))
         for node in candidates[: req.node_count]:
             picked.append(node)
             picked_ids.add(node.id)
@@ -349,41 +510,68 @@ def _seed_metric_profiles(db: Session, job: models.Job) -> None:
         db.add(models.JobMetricProfile(job_id=job.id, **template))
 
 
-def _seed_optimization_data(db: Session, job: models.Job) -> None:
-    # Only called from submit_job, not from the filler-job path - fillers are hidden
-    # from the default job list anyway, so nobody ever opens their 최적화 tab.
+def _seed_optimization_data(db: Session, job: models.Job, tier: models.ResourceTier) -> None:
+    # 필러/실제 제출 양쪽에서 호출한다 (예전엔 필러는 빠졌었는데, 필러도 최적화 탭이
+    # 있는 이상 항상 비어있는 게 더 이상해서 넣었다 - 객체 몇 개 db.add()하는 정도라
+    # 어차피 매 sweep 나가는 commit()에 얹히니 성능엔 안 보이는 수준).
     if job.type == "train":
-        duration = DURATION_SEC["train"]
-        db.add(
-            models.HyperparamAdjustment(
-                job_id=job.id,
-                seq=1,
-                t_offset_sec=int(duration * 0.3),
-                param_name="배치 크기",
-                from_value="512",
-                to_value="640",
-                reward="+0.021",
+        duration = job.duration_sec if job.duration_sec is not None else DURATION_SEC["train"]
+        # DART가 보상 신호를 보고 실행 중 계속 조정하는 4개 하이퍼파라미터의 변화
+        # 이력을 "a -> b -> c -> ..." 체인으로 미리 시드해둔다 - 다른 그래프들과
+        # 같은 원칙으로 job 생성 시점에 한 번에 확정하는 더미 데이터지만,
+        # visibleAdjustments(프론트)가 job.started_at 기준 경과 시간과
+        # t_offset_sec을 비교해 아직 안 지난 항목은 숨기므로, 페이지를 열어두면
+        # 이 체인이 실제로 하나씩 나타나는 것처럼 보인다.
+        #
+        # 배치 크기는 실제 DART 논문처럼 "클수록 좋다"는 신호가 강해서 초반에 한
+        # 번 크게 올린 뒤로는 거의 안 바뀐다. 러닝레이트는 반대로 탐색-활용을
+        # 오가며 자주, 값이 오르내리는 방향까지 바뀐다. 데이터 shard 길이/데이터
+        # 로더 워커 수는 그 중간 정도로 가끔 조정된다.
+        #
+        # t_offset_sec = PROVISIONING_SEC + duration(=running 단계 길이)의 비율.
+        # started_at은 provisioning 진입 시각이라, provisioning 길이를 안 더하면
+        # 초반 이벤트(예: 5% 지점)가 아직 학습 시작 전(준비 중)에 일어난 것처럼
+        # 보일 수 있다 - 전부 실제 running 구간 안에 들어오게 오프셋을 더한다.
+        provisioning = PROVISIONING_SEC["train"]
+        chain = [
+            (0.05, "배치 크기", "64", "128", "+0.027"),
+            (0.10, "러닝레이트", "1e-3", "6e-4", "+0.015"),
+            (0.17, "데이터 로더 워커 수", "4", "8", "+0.009"),
+            (0.23, "러닝레이트", "6e-4", "8e-4", "+0.006"),
+            (0.32, "데이터 shard 길이", "4-way", "6-way", "+0.014"),
+            (0.40, "러닝레이트", "8e-4", "4e-4", "+0.021"),
+            (0.47, "데이터 로더 워커 수", "8", "6", "+0.004"),
+            (0.55, "러닝레이트", "4e-4", "5e-4", "+0.003"),
+            (0.63, "데이터 shard 길이", "6-way", "8-way", "+0.008"),
+            (0.70, "러닝레이트", "5e-4", "3e-4", "+0.019"),
+            (0.80, "데이터 로더 워커 수", "6", "8", "+0.005"),
+            (0.90, "러닝레이트", "3e-4", "4e-4", "+0.002"),
+        ]
+        for seq, (frac, name, from_v, to_v, reward) in enumerate(chain, start=1):
+            db.add(
+                models.HyperparamAdjustment(
+                    job_id=job.id,
+                    seq=seq,
+                    t_offset_sec=provisioning + round(frac * duration),
+                    param_name=name,
+                    from_value=from_v,
+                    to_value=to_v,
+                    reward=reward,
+                )
             )
-        )
-        db.add(
-            models.HyperparamAdjustment(
-                job_id=job.id,
-                seq=2,
-                t_offset_sec=int(duration * 0.7),
-                param_name="데이터 shard",
-                from_value="4-way",
-                to_value="6-way",
-                reward="+0.014",
+        # KQV(노드 성능비 기반 shard 배분)는 분산 학습(노드 여러 대에 걸친 tier)에서만
+        # 말이 되는 개념이다 - 단일 노드 tier(A100×1, A6000×1)는 배분할 노드가 하나뿐이라
+        # "균등 분배 대비 KQV 최적화"라는 비교 자체가 성립하지 않는다.
+        is_distributed = sum(r.node_count for r in tier.requirements) > 1
+        if is_distributed:
+            db.add(
+                models.JobKqvBenchmark(
+                    job_id=job.id,
+                    kqv_gain_pct=Decimal("21.5"),
+                    kqv_even_makespan_sec=Decimal("77040"),
+                    kqv_opt_makespan_sec=Decimal("60480"),
+                )
             )
-        )
-        db.add(
-            models.JobKqvBenchmark(
-                job_id=job.id,
-                kqv_gain_pct=Decimal("21.5"),
-                kqv_even_makespan_sec=Decimal("77040"),
-                kqv_opt_makespan_sec=Decimal("60480"),
-            )
-        )
     elif job.type == "infer":
         db.add(models.JobCacheProfile(job_id=job.id, latency_reduction_pct=Decimal("33.0")))
         db.add(
@@ -406,8 +594,12 @@ def _seed_optimization_data(db: Session, job: models.Job) -> None:
 def _admit(
     db: Session, job: models.Job, nodes: list[models.Node], start_time: datetime, event_type: str
 ) -> None:
-    job.status = "running"
+    # node(s) are held from here (Assignment.from_t=start_time) through
+    # provisioning -> running -> finalizing, all the way to done - only the
+    # job's own status label cycles in between, admission itself doesn't care.
+    job.status = "provisioning"
     job.started_at = start_time
+    job.phase_deadline = start_time + timedelta(seconds=PROVISIONING_SEC[job.type])
     for node in nodes:
         db.add(models.Assignment(job_id=job.id, node_id=node.id, from_t=start_time, to_t=None))
         _log_event(
@@ -415,14 +607,41 @@ def _admit(
         )
 
 
-def _maintain_filler_jobs(db: Session, now: datetime) -> None:
+def _filler_user_id(db: Session) -> int | None:
     filler_user = db.query(models.User).filter(models.User.name == FILLER_USER_NAME).first()
-    if filler_user is None:
+    return filler_user.id if filler_user is not None else None
+
+
+def _tier_capacity_weight(live_cluster: models.Cluster, tier: models.ResourceTier) -> int:
+    """how many instances of this tier the live cluster's node inventory can even run
+    at once, e.g. infer tier 7 (GPU x1) has 4 matching nodes -> weight 4, while tier 6
+    (NPU x1) has only 1 -> weight 1. Bottlenecked by the scarcest requirement, same as
+    _pick_free_nodes_for_tier's admission check but against ALL matching nodes, not
+    just currently-free ones. Used to weight random tier choice below - without this,
+    a scarce tier (1 node) and a plentiful one (4 nodes) were picked equally often,
+    so fillers piled up queued jobs on the scarce tier while the plentiful one sat idle."""
+    weight = None
+    for req in tier.requirements:
+        total = sum(
+            1
+            for node in live_cluster.nodes
+            if node.purpose == tier.job_type and _node_matches_requirement(node, req.kind, req.accelerator_model_id)
+        )
+        cap = total // req.node_count
+        weight = cap if weight is None else min(weight, cap)
+    return max(weight or 0, 1)
+
+
+def _maintain_filler_jobs(db: Session, now: datetime) -> None:
+    filler_user_id = _filler_user_id(db)
+    if filler_user_id is None:
         return  # seed hasn't created the demo-filler user - feature quietly does nothing
 
     model_ids = [m.id for m in db.query(models.Model.id).all()]
     if not model_ids:
         return
+
+    live_cluster = _load_live_cluster(db)
 
     tiers = (
         db.query(models.ResourceTier)
@@ -439,19 +658,23 @@ def _maintain_filler_jobs(db: Session, now: datetime) -> None:
         active_count = (
             db.query(models.Job)
             .filter(
-                models.Job.user_id == filler_user.id,
+                models.Job.user_id == filler_user_id,
                 models.Job.type == job_type,
-                models.Job.status.in_(["running", "queued"]),
+                models.Job.status.in_(["queued", "provisioning", "running", "finalizing"]),
             )
             .count()
         )
         # at most one per sweep per type, even if further below target - staggers
         # starts across polls instead of bursting several nodes on at once
-        if active_count < FILLER_TARGET_PER_TYPE:
-            tier = random.choice(type_tiers)
+        if active_count < FILLER_TARGET_PER_TYPE[job_type]:
+            if live_cluster is not None:
+                weights = [_tier_capacity_weight(live_cluster, t) for t in type_tiers]
+                tier = random.choices(type_tiers, weights=weights, k=1)[0]
+            else:
+                tier = random.choice(type_tiers)
             job = models.Job(
                 model_id=random.choice(model_ids),
-                user_id=filler_user.id,
+                user_id=filler_user_id,
                 type=job_type,
                 status="queued",
                 batch=16,
@@ -463,6 +686,7 @@ def _maintain_filler_jobs(db: Session, now: datetime) -> None:
             db.add(job)
             db.flush()
             _seed_metric_profiles(db, job)
+            _seed_optimization_data(db, job, tier)
             _log_event(db, type="ARRIVAL", now=now, job_id=job.id)
 
 
@@ -471,48 +695,93 @@ def sweep_and_backfill(db: Session) -> None:
     now = clock.now()
     _maintain_filler_jobs(db, now)
 
+    # Phase-advance every job whose current status has a pending auto-transition
+    # (phase_deadline set and passed). Node occupancy (Assignment.from_t/to_t) is
+    # untouched by provisioning->running and running->finalizing - _occupied_node_ids
+    # only looks at assignments, not job.status, so admission is unaffected. Only
+    # finalizing->done actually frees the node.
+    provisioning_jobs = (
+        db.query(models.Job)
+        .filter(models.Job.status == "provisioning", models.Job.phase_deadline <= now)
+        .all()
+    )
+    for job in provisioning_jobs:
+        job.status = "running"
+        if job.duration_sec is not None:
+            duration = job.duration_sec
+        elif job.type == "infer":
+            # a real (non-filler) infer job - runs indefinitely, like a persistent
+            # serving workload, until paused/terminated through the explicit
+            # endpoints. Fillers always carry an explicit duration_sec, so they're
+            # unaffected and keep cycling normally.
+            duration = None
+        else:
+            duration = DURATION_SEC[job.type]
+        job.phase_deadline = now + timedelta(seconds=duration) if duration is not None else None
+
     running_jobs = (
         db.query(models.Job)
-        .filter(models.Job.status == "running")
+        .filter(
+            models.Job.status == "running",
+            models.Job.phase_deadline.is_not(None),
+            models.Job.phase_deadline <= now,
+        )
+        .all()
+    )
+    for job in running_jobs:
+        job.status = "finalizing"
+        job.phase_deadline = now + timedelta(seconds=FINALIZING_SEC[job.type])
+
+    finalizing_jobs = (
+        db.query(models.Job)
+        .filter(models.Job.status == "finalizing", models.Job.phase_deadline <= now)
         .options(selectinload(models.Job.assignments).selectinload(models.Assignment.node))
         .all()
     )
     # node_id -> the correct instant it was vacated (its ex-occupant's deadline),
-    # not whenever this sweep happened to notice
+    # not whenever this sweep happened to notice. freed_by keeps the actual job object
+    # (not just its id) so the backfill loop below can read its started_at directly,
+    # without another query, when logging a reallocation.
     freed_at: dict[int, datetime] = {}
-    for job in running_jobs:
-        if job.type == "infer" and job.duration_sec is None:
-            # a real (non-filler) infer job - runs indefinitely, like a persistent
-            # serving workload, until stopped through a future explicit stop
-            # endpoint. Fillers always carry an explicit duration_sec, so they're
-            # unaffected and keep cycling normally.
-            continue
-        duration = job.duration_sec if job.duration_sec is not None else DURATION_SEC[job.type]
-        deadline = job.started_at + timedelta(seconds=duration)
-        if deadline <= now:
-            job.status = "done"
-            job.finished_at = deadline
-            for assignment in job.assignments:
-                if assignment.to_t is None:
-                    assignment.to_t = deadline
-                    freed_at[assignment.node_id] = deadline
-                    _log_event(
-                        db,
-                        type="FINISH",
-                        now=deadline,
-                        job_id=job.id,
-                        node_id=assignment.node_id,
-                        cluster_id=assignment.node.cluster_id,
-                    )
+    freed_by: dict[int, models.Job] = {}
+    for job in finalizing_jobs:
+        deadline = job.phase_deadline
+        job.status = "done"
+        job.finished_at = deadline
+        job.phase_deadline = None
+        for assignment in job.assignments:
+            if assignment.to_t is None:
+                assignment.to_t = deadline
+                freed_at[assignment.node_id] = deadline
+                freed_by[assignment.node_id] = job
+                _log_event(
+                    db,
+                    type="FINISH",
+                    now=deadline,
+                    job_id=job.id,
+                    node_id=assignment.node_id,
+                    cluster_id=assignment.node.cluster_id,
+                )
 
     live_cluster = _load_live_cluster(db)
     if live_cluster is not None:
         occupied = _occupied_node_ids(live_cluster, now)
+        filler_user_id = _filler_user_id(db)
+        # Real jobs get first crack at freed capacity every sweep; fillers only
+        # backfill into whatever real jobs don't need. Within each group it's
+        # still submitted_at order, so backfill among real jobs (or among
+        # fillers) behaves exactly as before - fillers are demo-only dressing
+        # and shouldn't make an actual user wait behind them.
+        order_cols = (
+            [case((models.Job.user_id == filler_user_id, 1), else_=0), models.Job.submitted_at]
+            if filler_user_id is not None
+            else [models.Job.submitted_at]
+        )
         queued_jobs = (
             db.query(models.Job)
             .filter(models.Job.status == "queued")
             .options(selectinload(models.Job.selected_tier).selectinload(models.ResourceTier.requirements).selectinload(models.ResourceTierRequirement.accelerator_model))
-            .order_by(models.Job.submitted_at)
+            .order_by(*order_cols)
             .all()
         )
         for job in queued_jobs:
@@ -525,6 +794,31 @@ def sweep_and_backfill(db: Session) -> None:
                 )
                 _admit(db, job, nodes, start_time, event_type="BACKFILL")
                 occupied.update(n.id for n in nodes)
+                # 무중단 재할당(최적화 탭) - 이 job이 받은 노드 중 "이번 sweep에" 다른
+                # job이 막 끝내며 넘겨준 노드가 있으면 그 실제 핸드오프를 기록으로
+                # 남긴다. donor/node/시점은 실제 데이터를 쓰지만, "무중단" 재할당이라는
+                # 이름 그대로 중단 시간은 0이어야 맞다(전엔 실수로 0~2초 랜덤을 줬었다) -
+                # 재개 지연도 정확히 잴 방법이 없고 시연에서 값 자체가 중요한 게 아니라
+                # 그냥 0으로 둔다.
+                for node in nodes:
+                    donor = freed_by.get(node.id)
+                    if donor is None:
+                        continue
+                    donor_offset = (
+                        int((freed_at[node.id] - donor.started_at).total_seconds())
+                        if donor.started_at is not None
+                        else 0
+                    )
+                    db.add(
+                        models.Reallocation(
+                            donor_job_id=donor.id,
+                            receiver_job_id=job.id,
+                            node_id=node.id,
+                            at_t_offset_sec=max(donor_offset, 0),
+                            downtime_sec=Decimal("0"),
+                            resume_delay_sec=Decimal("0"),
+                        )
+                    )
 
     db.commit()
 
@@ -533,32 +827,88 @@ def sweep_dependency(db: Session = Depends(get_db)) -> None:
     sweep_and_backfill(db)
 
 
+JOB_LIST_LIMIT = 30
+# infer fillers cycle much faster than train ones (FILLER_DURATION_RANGE_SEC infer
+# 5-15s vs train 15-30s, and infer's own filler target is higher too) - a shared
+# "top 30 most-recently-done" cap meant a burst of infer fillers finishing could push
+# every recently-done TRAIN job out of the window within well under a minute. That's
+# short enough to matter: the scheduler timeline shows ~2 minutes of history
+# (AllocationTimeline WINDOW_MS on the frontend), and a train bar whose Job fell out of
+# this list renders as an unlabeled gray "J{id}" bar instead of its model name/color -
+# looked like a bug because it visually was one. Capping per job_type instead of
+# sharing one bucket stops the faster type from crowding out the other.
+DASHBOARD_DONE_LIMIT_PER_TYPE = 30
+
+
 def list_jobs(
     db: Session,
     status: str | None = None,
     user_id: int | None = None,
-    include_fillers: bool = False,
+    limit: int | None = None,
+    before_id: int | None = None,
 ) -> list[schemas.JobSummary]:
-    query = db.query(models.Job).options(
-        selectinload(models.Job.model),
-        selectinload(models.Job.dataset),
-        selectinload(models.Job.selected_tier).selectinload(models.ResourceTier.requirements).selectinload(models.ResourceTierRequirement.accelerator_model),
-        selectinload(models.Job.assignments).selectinload(models.Assignment.node).selectinload(models.Node.cluster),
-    )
+    # Fillers show up here now too (demo timeline should look busy in the list, not
+    # just the scheduler) - safe now that the list is actually capped instead of
+    # growing unbounded for as long as the server's been up.
+    def base_query() -> Query:
+        q = db.query(models.Job).options(
+            selectinload(models.Job.model),
+            selectinload(models.Job.dataset),
+            selectinload(models.Job.selected_tier).selectinload(models.ResourceTier.requirements).selectinload(models.ResourceTierRequirement.accelerator_model),
+            selectinload(models.Job.assignments).selectinload(models.Assignment.node).selectinload(models.Node.cluster),
+        )
+        if user_id is not None:
+            q = q.filter(models.Job.user_id == user_id)
+        return q
+
+    # id as a tiebreaker: two fillers created in the same sweep share the exact same
+    # submitted_at (clock.now() called once, reused for both), and without a tiebreaker
+    # Postgres doesn't guarantee a stable order among ties - same list, reshuffled
+    # between polls.
+    order = (desc(models.Job.submitted_at), desc(models.Job.id))
+
+    if limit is not None:
+        # Paginated browsing (job list page below the live board) - separate access
+        # pattern from the dashboard calls below, so it ignores the active/done split
+        # and JOB_LIST_LIMIT entirely and just pages through whatever `status`/`user_id`
+        # matches, oldest-first cut by id. id alone is enough of an order (it's assigned
+        # in submission order here) and sidesteps the submitted_at-tie issue above.
+        # Fetch one extra row so the caller can tell whether another page exists
+        # without changing the response shape (still a plain list[JobSummary]).
+        query = base_query()
+        if status is not None:
+            query = query.filter(models.Job.status == status)
+        if before_id is not None:
+            query = query.filter(models.Job.id < before_id)
+        jobs = query.order_by(desc(models.Job.id)).limit(limit + 1).all()
+        return [_to_job_summary(job) for job in jobs]
+
     if status is not None:
-        query = query.filter(models.Job.status == status)
-    if user_id is not None:
-        query = query.filter(models.Job.user_id == user_id)
-    elif not include_fillers:
-        # no explicit user filter means "show everything" (CSP's job list) - demo
-        # filler jobs are noise there, not something a real viewer asked to see.
-        # An explicit ?user_id=<filler id> still works, this only affects the default.
-        # include_fillers=true opts back in (e.g. cluster detail's node-occupancy card,
-        # which needs the real job behind every active assignment, filler or not).
-        filler_user = db.query(models.User).filter(models.User.name == FILLER_USER_NAME).first()
-        if filler_user is not None:
-            query = query.filter(models.Job.user_id != filler_user.id)
-    return [_to_job_summary(job) for job in query.all()]
+        query = base_query().filter(models.Job.status == status).order_by(*order)
+        if status == "done":
+            query = query.limit(JOB_LIST_LIMIT)
+        jobs = query.all()
+    else:
+        # Cap only the done bucket - it's the one that grows without bound for as long
+        # as the server's up. Active jobs (queued/provisioning/running/finalizing/paused)
+        # are naturally bounded by real cluster capacity and must never be capped by age:
+        # a real infer job now runs indefinitely, so a plain submitted_at-based limit
+        # would eventually push a still-running job out of the window just because
+        # enough fillers were created after it.
+        # Capped per job_type (not one shared bucket) - see DASHBOARD_DONE_LIMIT_PER_TYPE.
+        active = base_query().filter(models.Job.status != "done").order_by(*order).all()
+        done = [
+            job
+            for job_type in ("train", "infer")
+            for job in base_query()
+            .filter(models.Job.status == "done", models.Job.type == job_type)
+            .order_by(*order)
+            .limit(DASHBOARD_DONE_LIMIT_PER_TYPE)
+            .all()
+        ]
+        jobs = sorted(active + done, key=lambda j: (j.submitted_at, j.id), reverse=True)
+
+    return [_to_job_summary(job) for job in jobs]
 
 
 def get_job_detail(db: Session, job_id: int) -> schemas.JobDetail | None:
@@ -592,6 +942,7 @@ def get_job_detail(db: Session, job_id: int) -> schemas.JobDetail | None:
             curve_shape=m.curve_shape,
             total_count=m.total_count,
             featured=m.featured,
+            profiling=m.profiling,
         )
         for m in sorted(job.metric_profiles, key=lambda m: m.seq)
     ]
@@ -769,7 +1120,7 @@ def submit_job(
     db.add(job)
     db.flush()
     _seed_metric_profiles(db, job)
-    _seed_optimization_data(db, job)
+    _seed_optimization_data(db, job, tier)
     _log_event(db, type="ARRIVAL", now=now, job_id=job.id)
 
     _lock_admission(db)
@@ -789,7 +1140,9 @@ def submit_job(
     return _to_job_summary(job)
 
 
-def stop_job(db: Session, job_id: int) -> schemas.JobSummary | None:
+def pause_job(db: Session, job_id: int) -> schemas.JobSummary | None:
+    """running -> paused. 노드는 즉시 반납한다(다음 sweep의 backfill이 바로 채울 수
+    있도록) - resume 때 다시 admission을 태우면 되니 붙잡고 있을 이유가 없다."""
     _lock_admission(db)
     job = (
         db.query(models.Job)
@@ -799,14 +1152,98 @@ def stop_job(db: Session, job_id: int) -> schemas.JobSummary | None:
     )
     if job is None:
         return None
-    if job.type != "infer":
-        raise HTTPException(status_code=400, detail="only infer jobs can be stopped")
     if job.status != "running":
         raise HTTPException(status_code=400, detail="job is not running")
 
     now = clock.now()
-    job.status = "done"
-    job.finished_at = now
+    for assignment in job.assignments:
+        if assignment.to_t is None:
+            assignment.to_t = now
+            _log_event(
+                db,
+                type="PAUSE",
+                now=now,
+                job_id=job.id,
+                node_id=assignment.node_id,
+                cluster_id=assignment.node.cluster_id,
+            )
+    job.status = "paused"
+    job.phase_deadline = None
+
+    db.commit()
+    db.refresh(job)
+    return _to_job_summary(job)
+
+
+def resume_job(db: Session, job_id: int) -> schemas.JobSummary | None:
+    """paused -> running(바로 자리가 있으면) 또는 queued(없으면, 다음 backfill을
+    기다림 - submit_job의 즉시-admission-시도 패턴과 동일). fillers는
+    sweep_and_backfill에서 항상 real job 뒤로 밀리므로(FILLER_TARGET_PER_TYPE 주변
+    주석 참고) queued로 내려가도 filler 때문에 무한정 밀리진 않는다."""
+    _lock_admission(db)
+    job = (
+        db.query(models.Job)
+        .options(
+            selectinload(models.Job.selected_tier)
+            .selectinload(models.ResourceTier.requirements)
+            .selectinload(models.ResourceTierRequirement.accelerator_model)
+        )
+        .filter(models.Job.id == job_id)
+        .first()
+    )
+    if job is None:
+        return None
+    if job.status != "paused":
+        raise HTTPException(status_code=400, detail="job is not paused")
+
+    now = clock.now()
+    _log_event(db, type="RESUME", now=now, job_id=job.id)
+
+    live_cluster = _load_live_cluster(db)
+    nodes = None
+    if live_cluster is not None and job.selected_tier is not None:
+        occupied = _occupied_node_ids(live_cluster, now)
+        nodes = _pick_free_nodes_for_tier(live_cluster, job.selected_tier, occupied)
+        if nodes is not None:
+            _admit(db, job, nodes, now, event_type="START")
+
+    if nodes is None:
+        job.status = "queued"
+        _log_event(db, type="QUEUE", now=now, job_id=job.id)
+
+    db.commit()
+    db.refresh(job)
+    return _to_job_summary(job)
+
+
+def terminate_job(db: Session, job_id: int) -> schemas.JobSummary | None:
+    """어느 상태에서든 즉시 종료(=삭제 취급) - running만 예외로, 실제 중지처럼
+    노드를 정리할 잠깐의 시간을 준다(기존 finalizing 경로 그대로 재사용, 다음
+    sweep이 done으로 넘기고 FINISH를 남긴다). 그 외(queued/provisioning/paused)는
+    당장 정리할 상태가 없거나 있어도 감쌀 이유가 없으니 바로 done."""
+    _lock_admission(db)
+    job = (
+        db.query(models.Job)
+        .options(selectinload(models.Job.assignments).selectinload(models.Assignment.node))
+        .filter(models.Job.id == job_id)
+        .first()
+    )
+    if job is None:
+        return None
+    if job.status == "done":
+        raise HTTPException(status_code=400, detail="job is already done")
+
+    now = clock.now()
+
+    if job.status == "running":
+        _log_event(db, type="TERMINATE", now=now, job_id=job.id)
+        job.status = "finalizing"
+        job.phase_deadline = now + timedelta(seconds=FINALIZING_SEC[job.type])
+        db.commit()
+        db.refresh(job)
+        return _to_job_summary(job)
+
+    _log_event(db, type="TERMINATE", now=now, job_id=job.id)
     for assignment in job.assignments:
         if assignment.to_t is None:
             assignment.to_t = now
@@ -818,6 +1255,9 @@ def stop_job(db: Session, job_id: int) -> schemas.JobSummary | None:
                 node_id=assignment.node_id,
                 cluster_id=assignment.node.cluster_id,
             )
+    job.status = "done"
+    job.finished_at = now
+    job.phase_deadline = None
 
     db.commit()
     db.refresh(job)

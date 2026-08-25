@@ -1,4 +1,4 @@
-import type { AssignmentItem, JobSummary, JobType, SelectedTierSummary } from '@/app/types'
+import type { AssignmentItem, JobStatus, JobSummary, JobType, SelectedTierSummary } from '@/app/types'
 
 /** 작업 타입별 색상 */
 export const JOB_COLORS: Record<JobType, string> = {
@@ -9,8 +9,37 @@ export const JOB_COLORS: Record<JobType, string> = {
 /** 작업 상태 라벨 */
 export const JOB_STATUS_LABELS: Record<string, string> = {
   queued: '대기중',
+  provisioning: '준비중',
   running: '실행중',
+  finalizing: '마무리중',
+  paused: '일시중지',
   done: '완료',
+}
+
+/** 작업 상태별 색상 - 작업 목록(JobTable)의 상태 배지, 작업 현황판(JobStatusBoard)의
+ *  존 원 둘 다 여기서 가져다 쓴다(같은 상태는 어디서든 같은 색이어야 하므로 공용으로 둠).
+ *  실행중을 기준(초록)으로 대기중은 연하게, 마무리중은 진하게 - 생애주기가 진행될수록
+ *  진해지는 것처럼 보이게 한다. 완료·실패는 생애주기 진행이 아니라 "끝"이라 그대로 둔다. */
+export const JOB_STATUS_COLORS: Record<JobStatus, string> = {
+  queued: 'var(--job-status-queued)',
+  provisioning: 'var(--job-status-provisioning)',
+  running: 'var(--job-status-running)',
+  finalizing: 'var(--job-status-finalizing)',
+  // 일시중지는 생애주기 진행이 아니라 "멈춤"이라 회색 계열 - 완료(진회색)보다 옅게 둬서
+  // 끝난 게 아니라 재개할 수 있는 상태라는 걸 구분한다.
+  paused: '#9CA3AF',
+  done: 'var(--job-status-done)',
+}
+
+/** 배지처럼 상태색을 배경으로 채우고 그 위에 글자를 얹는 곳에서 쓴다. 대기중(옅은
+ *  파스텔)·준비중(노랑)은 밝은 색이라 흰 글자를 쓰면 안 읽힌다 - 어두운 글자로. */
+export const JOB_STATUS_TEXT_COLORS: Record<JobStatus, string> = {
+  queued: 'var(--ink)',
+  provisioning: 'var(--ink)',
+  running: '#FFFFFF',
+  finalizing: '#FFFFFF',
+  paused: '#FFFFFF',
+  done: '#FFFFFF',
 }
 
 /**

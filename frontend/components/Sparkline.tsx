@@ -4,12 +4,16 @@ interface SparklineProps {
   values: number[]
   label: string
   color?: string
+  /** 그래프 대신 큰 숫자만 보여준다 - 값 하나가 특히 더 잘 보여야 할 때(예: SLO 위반
+   *  횟수)도, 같은 줄의 다른 스파크라인 카드와 같은 폭·높이를 유지하려고 이 컴포넌트를
+   *  그대로 쓴다. */
+  numberOnly?: boolean
 }
 
 const W = 100
 const H = 32
 
-export default function Sparkline({ values, label, color = 'var(--accent)' }: SparklineProps) {
+export default function Sparkline({ values, label, color = 'var(--accent)', numberOnly }: SparklineProps) {
   if (values.length === 0) return null
 
   const n = values.length
@@ -36,31 +40,37 @@ export default function Sparkline({ values, label, color = 'var(--accent)' }: Sp
     <div className={styles.wrapper}>
       <div className={styles.header}>
         <span className={styles.label}>{label}</span>
-        <span className={styles.value}>{current.toFixed(1)}</span>
+        {!numberOnly && <span className={styles.value}>{current.toFixed(1)}</span>}
       </div>
 
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        preserveAspectRatio="none"
-        className={styles.svg}
-      >
-        <defs>
-          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity={0.28} />
-            <stop offset="100%" stopColor={color} stopOpacity={0} />
-          </linearGradient>
-        </defs>
-        <path d={area} fill={`url(#${gradientId})`} />
-        <path
-          d={line}
-          fill="none"
-          stroke={color}
-          strokeWidth={1.4}
-          strokeLinejoin="round"
-          strokeLinecap="round"
-          vectorEffect="non-scaling-stroke"
-        />
-      </svg>
+      {numberOnly ? (
+        <div className={styles.bigValue} style={{ color }}>
+          {Number.isInteger(current) ? current : current.toFixed(1)}
+        </div>
+      ) : (
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          preserveAspectRatio="none"
+          className={styles.svg}
+        >
+          <defs>
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={color} stopOpacity={0.28} />
+              <stop offset="100%" stopColor={color} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <path d={area} fill={`url(#${gradientId})`} />
+          <path
+            d={line}
+            fill="none"
+            stroke={color}
+            strokeWidth={1.4}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
+      )}
     </div>
   )
 }

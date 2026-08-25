@@ -20,7 +20,7 @@
 .current {
   border: none;
   background: none;
-  font-family: inherit;
+  /* font-family: inherit; */
   font-size: 17px;
   padding: 0;
   white-space: nowrap;
