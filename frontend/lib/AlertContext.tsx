@@ -59,13 +59,15 @@ function shuffledKindBatch(): AlertKind[] {
  *  "진짜" 이벤트가 아니다 - 새로고침하면 이력이 비워지는 것도 자연스럽다. */
 export function AlertProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const isCsc = pathname?.startsWith("/csc") ?? false;
+  // "/csc가 아니면 CSP"로 보면 안 된다 - 역할 선택 랜딩("/")처럼 CSC도 CSP도
+  // 아닌 경로가 죄다 CSP 취급돼서 거기서도 알림이 떴다. CSP 경로인지 직접 확인한다.
+  const isCsp = pathname?.startsWith("/csp") ?? false;
   const [toasts, setToasts] = useState<AlertItem[]>([]);
   const [history, setHistory] = useState<AlertItem[]>([]);
   const kindQueueRef = useRef<AlertKind[]>([]);
 
   useEffect(() => {
-    if (isCsc) return;
+    if (!isCsp) return;
 
     const interval = setInterval(() => {
       fetchJobs({ status: "running" })
@@ -103,7 +105,7 @@ export function AlertProvider({ children }: { children: ReactNode }) {
     }, 20000);
 
     return () => clearInterval(interval);
-  }, [isCsc]);
+  }, [isCsp]);
 
   const dismissToast = useCallback((id: number) => {
     setToasts((prev) => prev.filter((a) => a.id !== id));
