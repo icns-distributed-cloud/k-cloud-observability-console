@@ -224,9 +224,11 @@ class Job(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     model_id: Mapped[int] = mapped_column(ForeignKey("model.id"))
-    user_id: Mapped[int] = mapped_column(ForeignKey("user.id"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("user.id"), index=True)
     type: Mapped[str]
-    status: Mapped[str]
+    # sweep_and_backfill(jobs.py)이 status로 필터링하는 쿼리를 거의 모든 요청마다
+    # 돌린다(sweep_dependency) - 인덱스 없이는 job 전체를 매번 풀스캔한다.
+    status: Mapped[str] = mapped_column(index=True)
     batch: Mapped[int]
     priority_pref: Mapped[str]
     submitted_at: Mapped[datetime]
@@ -267,7 +269,7 @@ class Assignment(Base):
     __tablename__ = "assignment"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    job_id: Mapped[int] = mapped_column(ForeignKey("job.id"))
+    job_id: Mapped[int] = mapped_column(ForeignKey("job.id"), index=True)
     node_id: Mapped[int] = mapped_column(ForeignKey("node.id"))
     from_t: Mapped[datetime]
     to_t: Mapped[Optional[datetime]]
@@ -293,12 +295,14 @@ class Event(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     type: Mapped[str]
-    job_id: Mapped[Optional[int]] = mapped_column(ForeignKey("job.id"))
+    job_id: Mapped[Optional[int]] = mapped_column(ForeignKey("job.id"), index=True)
     node_id: Mapped[Optional[int]] = mapped_column(ForeignKey("node.id"))
     cluster_id: Mapped[Optional[int]] = mapped_column(ForeignKey("cluster.id"))
     reallocation_id: Mapped[Optional[int]] = mapped_column(ForeignKey("reallocation.id"))
     payload: Mapped[Optional[dict]] = mapped_column(JSON)
-    occurred_at: Mapped[datetime]
+    # list_events가 since로 필터링 + 정렬한다 - 인덱스 없으면 이 테이블도(계속 커지는
+    # 중) 매번 풀스캔+정렬.
+    occurred_at: Mapped[datetime] = mapped_column(index=True)
 
     job: Mapped[Optional["Job"]] = relationship(back_populates="events")
     node: Mapped[Optional["Node"]] = relationship(back_populates="events")
@@ -310,7 +314,7 @@ class JobMetricProfile(Base):
     __tablename__ = "job_metric_profile"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    job_id: Mapped[int] = mapped_column(ForeignKey("job.id"))
+    job_id: Mapped[int] = mapped_column(ForeignKey("job.id"), index=True)
     seq: Mapped[int]
     label: Mapped[str]
     unit: Mapped[Optional[str]]
@@ -339,7 +343,7 @@ class JobCacheTier(Base):
     __tablename__ = "job_cache_tier"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    job_id: Mapped[int] = mapped_column(ForeignKey("job.id"))
+    job_id: Mapped[int] = mapped_column(ForeignKey("job.id"), index=True)
     tier_name: Mapped[str]
     fill_pct: Mapped[Decimal]
     latency_ms: Mapped[Decimal]
@@ -351,7 +355,7 @@ class HyperparamAdjustment(Base):
     __tablename__ = "hyperparam_adjustment"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    job_id: Mapped[int] = mapped_column(ForeignKey("job.id"))
+    job_id: Mapped[int] = mapped_column(ForeignKey("job.id"), index=True)
     seq: Mapped[int]
     t_offset_sec: Mapped[int]
     param_name: Mapped[str]
@@ -377,8 +381,8 @@ class Reallocation(Base):
     __tablename__ = "reallocation"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    donor_job_id: Mapped[int] = mapped_column(ForeignKey("job.id"))
-    receiver_job_id: Mapped[int] = mapped_column(ForeignKey("job.id"))
+    donor_job_id: Mapped[int] = mapped_column(ForeignKey("job.id"), index=True)
+    receiver_job_id: Mapped[int] = mapped_column(ForeignKey("job.id"), index=True)
     node_id: Mapped[int] = mapped_column(ForeignKey("node.id"))
     at_t_offset_sec: Mapped[int]
     downtime_sec: Mapped[Decimal]
@@ -404,7 +408,7 @@ class JobNegotiationItem(Base):
     __tablename__ = "job_negotiation_item"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    job_id: Mapped[int] = mapped_column(ForeignKey("job.id"))
+    job_id: Mapped[int] = mapped_column(ForeignKey("job.id"), index=True)
     side: Mapped[str]
     seq: Mapped[int]
     text: Mapped[str]
