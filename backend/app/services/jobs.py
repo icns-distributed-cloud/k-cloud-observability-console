@@ -57,6 +57,24 @@ FILLER_TARGET_PER_TYPE = {"train": 4, "infer": 6}
 # visible turnover in the job list/timeline, and any filler holding a node only
 # blocks a real job for a short window.
 FILLER_DURATION_RANGE_SEC = {"train": (15, 30), "infer": (5, 15)}
+# 완료된 필러는 화면에서 곧 밀려나는 "배경 트래픽"일 뿐이라 그 이후로는 값어치가
+# 없다 - 안 지우면 job/event/job_metric_profile 등이 서버를 얼마나 오래 켜놨든
+# 끝없이 커지고, sweep_dependency가 거의 모든 요청마다 이 테이블들을 스캔하니
+# (특히 status/job_id에 인덱스가 없던 예전엔 더더욱) 시간이 지날수록 요청이
+# 점점 느려지다 하루 만에 CPU가 튀는 사고로 이어졌다. 화면 표시 상한
+# (DASHBOARD_DONE_LIMIT_PER_TYPE=30)보다 넉넉히 더 남겨서 지워도 화면엔 안 보인다.
+FILLER_RETENTION_PER_TYPE = 40
+
+# sweep_and_backfill은 job/assignment 상태를 바꾸는 유일한 통로라 웬만한 GET
+# 요청마다(sweep_dependency) 걸려있는데, 폴링 탭이 여러 개 열려있거나 폴링 주기가
+# 겹치면 초당 여러 번씩 불릴 수 있다 - 매번 전체를 다시 스윕할 필요는 없으므로
+# (job 단계 길이가 최소 5초대라 1~2초 지연은 화면에 안 보임) 최소 간격을 두고
+# 그 안에 들어온 나머지 요청은 스윕을 건너뛴다. 필러 정리(prune)는 더 무거운
+# 작업이라 그보다 훨씬 드물게만 돈다.
+_SWEEP_MIN_INTERVAL_SEC = 2.0
+_PRUNE_MIN_INTERVAL_SEC = 60.0
+_last_sweep_at: datetime | None = None
+_last_prune_at: datetime | None = None
 
 # one metric-card template set per job.type, copied verbatim into job_metric_profile on submission
 METRIC_TEMPLATES: dict[str, list[dict]] = {
@@ -690,10 +708,89 @@ def _maintain_filler_jobs(db: Session, now: datetime) -> None:
             _log_event(db, type="ARRIVAL", now=now, job_id=job.id)
 
 
+def _prune_old_filler_jobs(db: Session, filler_user_id: int) -> None:
+    """완료된 필러 중 타입별 최근 FILLER_RETENTION_PER_TYPE개만 남기고 나머지를
+    자식 테이블부터 지운다 - FK가 ON DELETE CASCADE가 아니라서(confdeltype='a')
+    순서가 중요하다. 실제 사용자 job은 user_id 조건 때문에 여기서 절대 안 건드인다.
+    reallocation은 필러가 donor/receiver 어느 쪽으로도 걸릴 수 있고, event가
+    reallocation_id로 참조하는 경우가 있어(그 event의 job_id는 상대편 job일 수도
+    있음) reallocation을 지우기 전에 그걸 가리키는 event부터 먼저 정리한다."""
+    for job_type in ("train", "infer"):
+        stale_ids = [
+            row[0]
+            for row in (
+                db.query(models.Job.id)
+                .filter(
+                    models.Job.user_id == filler_user_id,
+                    models.Job.type == job_type,
+                    models.Job.status == "done",
+                )
+                .order_by(models.Job.id.desc())
+                .offset(FILLER_RETENTION_PER_TYPE)
+                .all()
+            )
+        ]
+        if not stale_ids:
+            continue
+
+        stale_realloc_ids = [
+            row[0]
+            for row in (
+                db.query(models.Reallocation.id)
+                .filter(
+                    or_(
+                        models.Reallocation.donor_job_id.in_(stale_ids),
+                        models.Reallocation.receiver_job_id.in_(stale_ids),
+                    )
+                )
+                .all()
+            )
+        ]
+        if stale_realloc_ids:
+            db.query(models.Event).filter(models.Event.reallocation_id.in_(stale_realloc_ids)).delete(
+                synchronize_session=False
+            )
+            db.query(models.Reallocation).filter(models.Reallocation.id.in_(stale_realloc_ids)).delete(
+                synchronize_session=False
+            )
+
+        db.query(models.Event).filter(models.Event.job_id.in_(stale_ids)).delete(synchronize_session=False)
+        db.query(models.Assignment).filter(models.Assignment.job_id.in_(stale_ids)).delete(synchronize_session=False)
+        db.query(models.JobMetricProfile).filter(models.JobMetricProfile.job_id.in_(stale_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(models.JobCacheTier).filter(models.JobCacheTier.job_id.in_(stale_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(models.JobCacheProfile).filter(models.JobCacheProfile.job_id.in_(stale_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(models.HyperparamAdjustment).filter(models.HyperparamAdjustment.job_id.in_(stale_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(models.JobKqvBenchmark).filter(models.JobKqvBenchmark.job_id.in_(stale_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(models.JobNegotiationItem).filter(models.JobNegotiationItem.job_id.in_(stale_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(models.JobNegotiation).filter(models.JobNegotiation.job_id.in_(stale_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(models.Job).filter(models.Job.id.in_(stale_ids)).delete(synchronize_session=False)
+
+
 def sweep_and_backfill(db: Session) -> None:
     _lock_admission(db)
     now = clock.now()
     _maintain_filler_jobs(db, now)
+
+    global _last_prune_at
+    if _last_prune_at is None or (now - _last_prune_at).total_seconds() >= _PRUNE_MIN_INTERVAL_SEC:
+        filler_user_id = _filler_user_id(db)
+        if filler_user_id is not None:
+            _prune_old_filler_jobs(db, filler_user_id)
+        _last_prune_at = now
 
     # Phase-advance every job whose current status has a pending auto-transition
     # (phase_deadline set and passed). Node occupancy (Assignment.from_t/to_t) is
@@ -824,6 +921,15 @@ def sweep_and_backfill(db: Session) -> None:
 
 
 def sweep_dependency(db: Session = Depends(get_db)) -> None:
+    # 이 의존성이 걸린 라우터는(GET /jobs, GET /jobs/{id} 등) 폴링마다 불리므로,
+    # 탭을 여러 개 열어두거나 폴링 주기가 겹치면 초당 여러 번 sweep이 도는 경우가
+    # 생긴다 - job 단계 길이가 최소 5초대라 이 정도 지연은 화면에 안 보이니, 그
+    # 안에 들어온 나머지 요청은 DB에 손 안 대고 그냥 넘어간다.
+    global _last_sweep_at
+    now = clock.now()
+    if _last_sweep_at is not None and (now - _last_sweep_at).total_seconds() < _SWEEP_MIN_INTERVAL_SEC:
+        return
+    _last_sweep_at = now
     sweep_and_backfill(db)
 
 
